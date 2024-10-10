@@ -4,8 +4,8 @@
 This repository contains Dockerfiles for Aquia Base Docker Images.
 ## WiP
 
-2024-09-10
-This repository is a work in progress.  Not all iamges referenced below are currently available.
+[2024-09-10]
+This repository is a work in progress.  Not all images referenced below are currently available.
 
 ## Hardened images
 

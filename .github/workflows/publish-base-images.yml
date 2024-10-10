@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "release/**"
+    branches:
+      - main
   pull_request:
     branches: [ main ]
 env:
@@ -73,7 +75,7 @@ jobs:
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH,MEDIUM"
 
-      - name: Get installed Python/Node.js package versions for Docker tagging
+      - name: Get installed Python/Nodejs/openJDK package versions for Docker tagging
         run: |
           if [[ ${{ steps.parse_tag.outputs.image }} == 'python-base' ]]; then
               docker run --rm ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test cat /tmp/versions.txt > .env.versions
@@ -89,9 +91,9 @@ jobs:
         id: check_env_file
         run: |
           if [ -f .env.versions ]; then
-            echo "::set-output name=exists::true"
+            echo "exists=true" >> $GITHUB_OUTPUT
           else
-            echo "::set-output name=exists::false"
+            echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Read Python/Node.js versions out of env file
@@ -148,7 +150,7 @@ jobs:
             tags="$tags $tag, "
           done <<< "${{ steps.meta.outputs.tags }}"
           tags=${tags%, *}
-          echo "::set-output name=tags::$tags"
+          echo "tags=$tags" >> $GITHUB_OUTPUT
 
       # - name: Send Slack alert for successful build
       #   if: always() && github.event_name == 'push' && github.ref_type == 'tag'
