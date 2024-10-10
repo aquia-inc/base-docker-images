@@ -1,0 +1,66 @@
+### OPENSSL WITH FIPS BUILD ###
+# Using Wolfi-Alpine base image instead of Wolfi because it has better tooling for building OpenSSL
+FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:cdd294c6cf43cb8d5be84bf1c2acc11b86a8dc361d01cdc1e05efd160f0668f4
+
+# Install openssl dependencies
+RUN apk update && apk add --no-cache \
+# build-base \
+linux-headers \
+pcre-dev \
+wget \
+ca-certificates \
+perl \
+libssl3 \
+make \
+gcc \
+libgcc \
+zlib-dev \
+g++
+
+# Set up the build environment
+WORKDIR /usr/src
+# Latest NIST-approved FIPS-enabled OpenSSL version 3.0.9 as of the time of coding this Dockerfile
+# https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4282
+# Download and build OpenSSL 3.0.9 from source
+ENV OPENSSL_MODULES="/usr/local/ssl/lib64/ossl-modules"
+RUN wget -q https://www.openssl.org/source/openssl-3.0.9.tar.gz
+RUN  tar -zxf openssl-3.0.9.tar.gz > /dev/null
+RUN  cd openssl-3.0.9 && \
+  ./Configure enable-fips --prefix=/usr/local/ssl --openssldir=/usr/local/ssl linux-x86_64 no-ssl3 no-legacy no-comp no-idea no-dtls no-dtls1 no-err no-psk no-srp no-ec2m no-weak-ssl-ciphers -DOPENSSL_USE_BUILD_DATE && \
+  make -j$(nproc) && \
+  make -j$(nproc) install_sw && \
+  make -j$(nproc) install_ssldirs && \
+  make -j$(nproc) install_fips
+
+# Ensure that the FIPS module is correctly installed
+RUN /usr/local/ssl/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module /usr/local/ssl/lib64/ossl-modules/fips.so
+
+# Enable FIPS mode in OpenSSL configuration
+RUN echo "openssl_conf = openssl_init" > /usr/local/ssl/openssl.cnf && \
+  echo "[openssl_init]" >> /usr/local/ssl/openssl.cnf && \
+  echo "config = fips_sect" >> /usr/local/ssl/openssl.cnf && \
+  echo "[fips_sect]" >> /usr/local/ssl/openssl.cnf && \
+  echo "fips = fips_mode" >> /usr/local/ssl/openssl.cnf && \
+  echo "[fips_mode]" >> /usr/local/ssl/openssl.cnf && \
+  echo "activate = 1" >> /usr/local/ssl/openssl.cnf
+
+# Mop up
+WORKDIR /usr/src
+RUN rm -rf ./openssl*
+ENV PATH="/usr/local/ssl/bin:$PATH"
+USER nobody
+
+### END OPENSSLL WITH FIPS BUILD ###
+# Copy and uncomment the variables below to your build stages
+# where you need to link/compile against FIPS-enabled OpenSSL libraries
+#
+# ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
+# ENV LDFLAGS="-L/usr/local/lib -L/usr/lib"
+# ENV CPPFLAGS="-I/usr/local/ssl/include/openssl"
+# ENV PKG_CONFIG_PATH="/usr/local/lib/pkgconfig"
+# ENV LD_LIBRARY_PATH="/usr/lib:/lib:/usr/local/lib;/usr/local/lib/engines-3"
+# ENV OPENSSL_INCLUDES="-I/usr/local/include/openssl"
+# ENV PATH="/usr/local/ssl/bin:$PATH"
+
+
+
