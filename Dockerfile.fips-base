@@ -51,7 +51,8 @@ ENV PATH="/usr/local/ssl/bin:$PATH"
 USER nobody
 
 ### END OPENSSLL WITH FIPS BUILD ###
-# Copy and uncomment the variables below to your build stages
+
+# Copy and uncomment the variables below to your build stages,
 # where you need to link/compile against FIPS-enabled OpenSSL libraries
 #
 # ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
