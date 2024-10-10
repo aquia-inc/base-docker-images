@@ -1,0 +1,43 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base",
+    "docker:pinDigests",
+    "default:automergeDigest"
+  ],
+  "pre-commit": {
+    "enabled": true
+  },
+  "assigneesFromCodeOwners": true,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+  "dependencyDashboard": true,
+  "dependencyDashboardAutoclose": true,
+  "transitiveRemediation": true,
+  "schedule": [
+    "after 11pm every weekday",
+    "before 5am every weekday",
+    "every weekend"
+  ],
+  "timezone": "America/New_York",
+  "major": {
+    "automerge": false
+  },
+  "minor": {
+    "automerge": true,
+    "groupName": "minor dependencies",
+    "groupSlug": "all-minor",
+    "stabilityDays": 2
+  },
+  "patch": {
+    "automerge": true,
+    "groupName": "patch dependencies",
+    "groupSlug": "all-patch",
+    "stabilityDays": 1
+  },
+  "docker": {
+    "pinDigests": true
+  },
+  "terraform": {"enabled": false},
+  "labels": ["renovate"]
+}
