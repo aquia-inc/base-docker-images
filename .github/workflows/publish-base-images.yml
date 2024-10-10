@@ -1,0 +1,170 @@
+name: Publish Base Docker images
+
+on:
+  push:
+    tags:
+      - "release/**"
+  pull_request:
+    branches: [ main ]
+env:
+  REGISTRY: ghcr.io
+  # set default test tag value
+  TAG: ${{ (github.event_name == 'pull_request' && 'release/wolfi-base/v0.0.0') || github.ref }}
+
+jobs:
+  publish_image:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      packages: write
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Image and Version from Tag
+        id: parse_tag
+        run: |
+          # Use grep with a regular expression to extract image name and the version
+          # Must be of format: release/<Dockerfile extension>/v0.0.0
+          match=$(echo ${{ env.TAG }} | grep -oP 'release/([^/]+)/v(\d+\.\d+\.\d+)$' | sed 's/release\///')
+
+          # Check if a match was found
+          if [[ $match =~ ^([^/]+)/v(.+)$ ]]; then
+              image="${BASH_REMATCH[1]}"
+              version="${BASH_REMATCH[2]}"
+              echo "image=$image" >> $GITHUB_OUTPUT
+              echo "version=$version" >> $GITHUB_OUTPUT
+          else
+              echo "Image name and version could not be parsed"
+              exit 1
+          fi
+
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          pull: true
+          file: Dockerfile.${{ steps.parse_tag.outputs.image }}
+          load: true
+          tags: |
+            ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test
+          format: "table"
+          exit-code: "1" # change to 1, if you want the build to break
+          ignore-unfixed: false
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH,MEDIUM"
+
+      - name: Get installed Python/Node.js package versions for Docker tagging
+        run: |
+          if [[ ${{ steps.parse_tag.outputs.image }} == 'python-base' ]]; then
+              docker run --rm ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test cat /tmp/versions.txt > .env.versions
+          elif [[ ${{ steps.parse_tag.outputs.image }} == 'nodejs-base' ]]; then
+              docker run --rm ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test cat /tmp/versions.txt > .env.versions
+          elif [[ ${{ steps.parse_tag.outputs.image }} == 'openjdk17-base' ]]; then
+              docker run --rm ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test cat /tmp/versions.txt > .env.versions
+          else
+              touch .env.versions
+          fi
+
+      - name: Check if .env.versions file exists
+        id: check_env_file
+        run: |
+          if [ -f .env.versions ]; then
+            echo "::set-output name=exists::true"
+          else
+            echo "::set-output name=exists::false"
+          fi
+
+      - name: Read Python/Node.js versions out of env file
+        if: steps.check_env_file.outputs.exists == 'true'
+        id: dotenv
+        uses: xom9ikk/dotenv@v2
+        with:
+          mode: versions
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5.5.1
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag.outputs.image }}
+          flavor: |
+            latest=true
+          tags: |
+            ${{ env.python_major_tag }},enable=${{ steps.parse_tag.outputs.image == 'python-base' }}
+            ${{ env.python_minor_tag }},enable=${{ steps.parse_tag.outputs.image == 'python-base' }}
+            ${{ env.node_major_tag }},enable=${{ steps.parse_tag.outputs.image == 'nodejs-base' }}
+            ${{ env.node_minor_tag }},enable=${{ steps.parse_tag.outputs.image == 'nodejs-base' }}
+            ${{ env.java_major_tag }},enable=${{ steps.parse_tag.outputs.image == 'openjdk17-base' }}
+            ${{ env.java_minor_tag }},enable=${{ steps.parse_tag.outputs.image == 'openjdk17-base' }}
+            ${{ steps.parse_tag.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=${{ steps.parse_tag.outputs.image }}
+            org.opencontainers.image.description=Base image for ${{ steps.parse_tag.outputs.image }}
+            org.opencontainers.image.vendor=Aquia Inc
+            org.opencontainers.image.build-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Build and push Docker image
+        id: docker_build
+        uses: docker/build-push-action@v6
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        with:
+          pull: true
+          file: Dockerfile.${{ steps.parse_tag.outputs.image }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Output SHA256 digest
+        run: |
+          echo "SHA256 digest: ${{ steps.docker_build.outputs.Digest }}"
+
+      - name: Extracting tags after colon
+        id: extract_tags
+        run: |
+          tags=""
+          while read -r line; do
+            tag=$(echo "$line" | awk -F ':' '{print $NF}')
+            tags="$tags $tag, "
+          done <<< "${{ steps.meta.outputs.tags }}"
+          tags=${tags%, *}
+          echo "::set-output name=tags::$tags"
+
+      # - name: Send Slack alert for successful build
+      #   if: always() && github.event_name == 'push' && github.ref_type == 'tag'
+      #   uses: 8398a7/action-slack@v3
+      #   with:
+      #     status: custom
+      #     fields: workflow,job,commit,repo,ref
+      #     custom_payload: |
+      #       {
+      #         "text": "${{ job.status == 'success' && ':white_check_mark: Docker image built successfully: ' || ':no_entry: Docker image build failed: ' }}*${{ steps.parse_tag.outputs.image }}*",
+      #         "attachments": [{
+      #           "color": "${{ job.status }} === 'success' ? 'good' : 'danger'",
+      #           "text": " *Image:* ${{ steps.parse_tag.outputs.image }}\n *Version:* ${{ steps.parse_tag.outputs.version }}\n *Published Tags:* ${{ steps.extract_tags.outputs.tags }}\n *SHA Digest:* `${{ steps.docker_build.outputs.Digest }}`\n *Github Package Page URL:* https://github.com/${{ github.repository }}/pkgs/container/base-docker-images%2F${{ steps.parse_tag.outputs.image }}\n *Link to the build URL:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+      #           "mrkdwn_in": ['text']
+      #         }]
+      #       }
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
