@@ -132,7 +132,7 @@ jobs:
           pull: true
           file: Dockerfile.${{ steps.parse_tag.outputs.image }}
           push: true
-          tags: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
