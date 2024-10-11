@@ -54,7 +54,6 @@ USER nobody
 
 # Copy and uncomment the variables below to your build stages,
 # where you need to link/compile against FIPS-enabled OpenSSL libraries
-#
 # ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
 # ENV LDFLAGS="-L/usr/local/lib -L/usr/lib"
 # ENV CPPFLAGS="-I/usr/local/ssl/include/openssl"
