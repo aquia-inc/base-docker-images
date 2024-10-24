@@ -32,8 +32,10 @@ jobs:
           # Must be of format: release/<Dockerfile extension>/v0.0.0
           match=$(echo ${{ env.TAG }} | grep -oP 'release/([^/]+)/v(\d+\.\d+\.\d+)$' | sed 's/release\///')
           echo "match=$match"
+
           # Check if a match was found
           if [[ $match =~ ^([^/]+)/v(.+)$ ]]; then
+              echo "Match found"
               image="${BASH_REMATCH[1]}"
               version="${BASH_REMATCH[2]}"
               echo "image=$image" >> $GITHUB_OUTPUT
@@ -193,3 +195,4 @@ jobs:
       #       }
       #   env:
       #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+

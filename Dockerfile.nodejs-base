@@ -1,25 +1,26 @@
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:8ece91a71d17ae3792056b3bfa64cb80dfbcb01848b320e446dd632ff9672491 AS builder
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:0f1d81605bda6e2388c3c7f731700d8c12e17259d58ffba11f36ddc81d9c0a76 AS builder
 
+# Install Node.js, npm and Yarn
 RUN apk update && apk add --no-cache nodejs yarn npm
 
 # Extract Node.js version and save to file
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 RUN node --version | awk -F'v' '{print $2}' | tr -d '\n' > /tmp/temp_node_version.txt
 
 # Create symbolic link to match the installed Node.js version
 RUN NODE_VERSION=$(cat /tmp/temp_node_version.txt) && \
     mkdir -p /usr/local/nvm/versions/node && \
-    ln -s /usr/local/nvm/versions/node/v${NODE_VERSION}/ /usr/local/nvm/versions/node/current
-
+    ln -s "/usr/local/nvm/versions/node/v${NODE_VERSION}/" /usr/local/nvm/versions/node/current
 
 # Extract minor version
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 RUN node --version | awk -F'v' '{print $2}' | tr -d '\n' | sed 's/\.[0-9]$//' > /tmp/node_minor_version.txt
 
 # Save Node.js version
-RUN echo "node_major_tag=$(node --version | awk -F'v' '{split($2, a, "."); print a[1]}' | tr -d '\n')" > /tmp/versions.txt
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
+RUN echo "node_major_tag=$(node --version | awk -F'v' '{split($2, a, \".\"); print a[1]}' | tr -d '\n')" > /tmp/versions.txt
 RUN echo "node_minor_tag=$(cat /tmp/node_minor_version.txt)" >> /tmp/versions.txt
 RUN echo "node=$(node --version | awk -F'v' '{print $2}' | tr -d '\n')" >> /tmp/versions.txt
 RUN cat /tmp/versions.txt
 
 USER nobody
-
-ENTRYPOINT [ "/bin/ash", "-c" ]
