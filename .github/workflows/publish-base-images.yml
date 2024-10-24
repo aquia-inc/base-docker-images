@@ -31,13 +31,15 @@ jobs:
           # Use grep with a regular expression to extract image name and the version
           # Must be of format: release/<Dockerfile extension>/v0.0.0
           match=$(echo ${{ env.TAG }} | grep -oP 'release/([^/]+)/v(\d+\.\d+\.\d+)$' | sed 's/release\///')
-
+          echo "match=$match"
           # Check if a match was found
           if [[ $match =~ ^([^/]+)/v(.+)$ ]]; then
               image="${BASH_REMATCH[1]}"
               version="${BASH_REMATCH[2]}"
               echo "image=$image" >> $GITHUB_OUTPUT
               echo "version=$version" >> $GITHUB_OUTPUT
+              echo "image=$image"
+              echo "version=$version"
           else
               echo "Image name and version could not be parsed"
               exit 1
@@ -91,9 +93,9 @@ jobs:
         id: check_env_file
         run: |
           if [ -f .env.versions ]; then
-            echo "exists=true" > $GITHUB_OUTPUT
+            echo "exists=true" >> $GITHUB_OUTPUT
           else
-            echo "exists=false" > $GITHUB_OUTPUT
+            echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Read Python/Node.js versions out of env file
@@ -150,7 +152,7 @@ jobs:
             tags="$tags $tag, "
           done <<< "${{ steps.meta.outputs.tags }}"
           tags=${tags%, *}
-          echo "tags=$tags" > $GITHUB_OUTPUT
+          echo "tags=$tags" >> $GITHUB_OUTPUT
 
       # Step to create a GitHub Release and include the Docker image URL
       - name: Create GitHub Release
