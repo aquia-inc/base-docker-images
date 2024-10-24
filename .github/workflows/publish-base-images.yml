@@ -11,7 +11,7 @@ on:
 env:
   REGISTRY: ghcr.io
   # set default test tag value
-  TAG: ${{ (github.event_name == 'pull_request' && 'release/nodejs-base/v0.0.0') || github.ref }}
+  TAG: ${{ (github.event_name == 'pull_request' && 'release/python-base/v0.0.0') || github.ref }}
 
 jobs:
   publish_image:
@@ -103,7 +103,7 @@ jobs:
       - name: Read Python/Node.js versions out of env file
         if: steps.check_env_file.outputs.exists == 'true'
         id: dotenv
-        uses: xom9ikk/dotenv@v2
+        uses: xom9ikk/dotenv@v2.3.0
         with:
           mode: versions
 
@@ -138,8 +138,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ github.repository }}
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}
 
       - name: Output SHA256 digest
         run: |
@@ -158,7 +158,7 @@ jobs:
 
       # Step to create a GitHub Release and include the Docker image URL
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: github.event_name == 'push' && github.ref_type == 'tag'
         with:
           tag_name: ${{ github.ref_name }}               # The tag that triggered the workflow
@@ -170,13 +170,13 @@ jobs:
 
             The Docker image can be pulled with:
             ```bash
-            docker pull ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:${{ github.ref_name }}
+            docker pull ghcr.io/${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:latest
             ```
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          echo "SHA256 digest: ${{ steps.docker_build.outputs.Digest }}"
+          echo "SHA256 digest: ${{ steps.docker_build.outputs.Digest }}"          
 
       # - name: Send Slack alert for successful build
       #   if: always() && github.event_name == 'push' && github.ref_type == 'tag'
@@ -195,4 +195,4 @@ jobs:
       #       }
       #   env:
       #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
+      

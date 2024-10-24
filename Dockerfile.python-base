@@ -9,8 +9,7 @@ ENV POETRY_HOME=/home/nonroot \
     PYTHONPATH=/home/nonroot/.local/lib/python3/site-packages
 
 
-RUN python3 -m pip install --no-cache --upgrade --user -v poetry cryptography
-RUN pip install --upgrade -v requests
+RUN python3 -m pip install --no-cache-dir --upgrade --user -v poetry cryptography
 
 # Poetry sets default max workers to num of cpu-cores + 4, but pip max connection pool
 # is set at 10 and will discard any above that when installing dependencies
@@ -19,7 +18,7 @@ RUN poetry config installer.max-workers 10
 # create symlink for correct PYTHONPATH for poetry
 SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 RUN python3 --version 2>&1 | awk -F' ' '{print $2}' | tr -d '\n' | sed 's/\.[0-9]$//' > /tmp/python_minor_version.txt
-RUN PY_VERSION=$(cat /tmp/python_minor_version.txt) && ln -s /home/nonroot/.local/lib/python${PY_VERSION} /home/nonroot/.local/lib/python3
+RUN PY_VERSION=$(cat /tmp/python_minor_version.txt) && ln -s "/home/nonroot/.local/lib/python${PY_VERSION}" /home/nonroot/.local/lib/python3
 
 # save Python, pip, and Poetry versions
 RUN echo "python_major_tag=$(python3 --version 2>&1 | awk -F' ' '{split($2, a, "."); print a[1]}' | tr -d '\n')" > /tmp/versions.txt
