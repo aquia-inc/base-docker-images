@@ -63,7 +63,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ssh-key: "${{ secrets.SSH_PRIVATE_KEY }}"
+          ssh-key: "${{ secrets.DEPLOY_KEY }}"
           fetch-depth: 0
 
       - name: Find latest tag
@@ -92,7 +92,7 @@ jobs:
       - name: Create tag with next semver patch version
         if: github.event.ref == 'refs/heads/main'
         run: |
-          git config user.email "base-images-bot@users.noreply.github.com"
-          git config user.name "Base Images Bot"
+          git config user.email "cdsp-base-images-bot@users.noreply.github.com"
+          git config user.name "CDSP Base Images Bot"
           git tag -a release/${{ matrix.value }}/v${{ steps.semvers.outputs.patch }} -m "Release ${{ matrix.value }}/v${{ steps.semvers.outputs.patch }}"
           git push origin release/${{ matrix.value }}/v${{ steps.semvers.outputs.patch }}
