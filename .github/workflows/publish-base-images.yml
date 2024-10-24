@@ -61,8 +61,8 @@ jobs:
           load: true
           tags: |
             ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ github.repository }}
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -75,7 +75,7 @@ jobs:
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH,MEDIUM"
 
-      - name: Get installed Python/Nodejs/openJDK package versions for Docker tagging
+      - name: Get installed Python/Node.js package versions for Docker tagging
         run: |
           if [[ ${{ steps.parse_tag.outputs.image }} == 'python-base' ]]; then
               docker run --rm ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test cat /tmp/versions.txt > .env.versions
@@ -91,9 +91,9 @@ jobs:
         id: check_env_file
         run: |
           if [ -f .env.versions ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+            echo exists=true > $GITHUB_OUTPUT
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo exists=false > $GITHUB_OUTPUT"
           fi
 
       - name: Read Python/Node.js versions out of env file
@@ -132,25 +132,48 @@ jobs:
           pull: true
           file: Dockerfile.${{ steps.parse_tag.outputs.image }}
           push: true
-          tags: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Output SHA256 digest
         run: |
+          echo "SHA256 digest: ${{ steps.docker_build.outputs.digest }}"
+
+      - name: Extracting tags after colon
+        id: extract_tags
+        run: |
+          tags=""
+          while read -r line; do
+            tag=$(echo "$line" | awk -F ':' '{print $NF}')
+            tags="$tags $tag, "
+          done <<< "${{ steps.meta.outputs.tags }}"
+          tags=${tags%, *}
+          echo tags=$tags > $GITHUB_OUTPUT
+
+      # Step to create a GitHub Release and include the Docker image URL
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        with:
+          tag_name: ${{ github.ref_name }}               # The tag that triggered the workflow
+          name: "Release ${{ github.ref_name }}"         # Release name
+          body: |
+            Docker image with the following tags has been released:
+            - ${{ steps.extract_tags.outputs.tags }}
+            SHA256 Digest: ${{ steps.docker_build.outputs.digest }}
+
+            The Docker image can be pulled with:
+            ```bash
+            docker pull ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:${{ github.ref_name }}
+            ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           echo "SHA256 digest: ${{ steps.docker_build.outputs.Digest }}"
 
-      # - name: Extracting tags after colon
-      #   id: extract_tags
-      #   run: |
-      #     tags=""
-      #     while read -r line; do
-      #       tag=$(echo "$line" | awk -F ':' '{print $NF}')
-      #       tags="$tags $tag, "
-      #     done <<< "${{ steps.meta.outputs.tags }}"
-      #     tags=${tags%, *}
-      #     echo "tags=$tags" >> $GITHUB_OUTPUT
 
       # - name: Send Slack alert for successful build
       #   if: always() && github.event_name == 'push' && github.ref_type == 'tag'
