@@ -1,0 +1,98 @@
+name: Create Release Tag
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  actions: read
+  contents: write
+  packages: write
+  security-events: write
+
+
+jobs:
+  get_images_to_build:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.diff.outputs.images_to_build }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find changed files using git diff with filename Dockerfile.*
+        id: diff
+        run: |
+          # get changed Dockerfiles from git diff
+          changed_files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | grep ^Dockerfile.*$ | xargs)
+          echo "changed_dockerfiles=$changed_files" >> $GITHUB_OUTPUT
+
+          # get image name from Dockerfile extension
+          images=$(for filename in $changed_files; do echo -n "${filename#Dockerfile.} "; done)
+
+          # create output string (e.g., images_to_build=[\"nodejs-base\", \"wolfi-base\"])
+          image_array=($images)
+          output_string="images_to_build=["
+          for item in "${image_array[@]}"; do
+            output_string+="\"$item\", "
+          done
+          output_string=${output_string%, }"]"
+
+          # set output
+          echo $output_string >> $GITHUB_OUTPUT
+
+      - name: Print output of images to build
+        run: |
+          echo "changed_files=${{ steps.diff.outputs.changed_dockerfiles }}"
+          echo "images_to_build=${{ steps.diff.outputs.images_to_build }}"
+
+  create_release_tags:
+    needs: get_images_to_build
+    if: ${{ needs.get_images_to_build.outputs.matrix != '[]' && needs.get_images_to_build.outputs.matrix != '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        value: ${{ fromJSON(needs.get_images_to_build.outputs.matrix) }}
+    steps:
+      - run: |
+          echo ${{ matrix.value }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ssh-key: "${{ secrets.DEPLOY_KEY }}"
+          fetch-depth: 0
+
+      - name: Find latest tag
+        id: latest-tag
+        run: |
+          latest=$(git for-each-ref --sort='-v:refname' --format '%(refname:short)' refs/tags/release/${{ matrix.value }} | head -n 1)
+          if [ -n "$latest" ]; then
+              semver=$(echo $latest | grep -oP 'v\d+\.\d+\.\d+' | sed 's/v//')
+          else
+              semver=0.0.0
+          fi
+          echo current_semver=$semver >> $GITHUB_OUTPUT
+
+      - name: Get next patch version
+        id: semvers
+        uses: "WyriHaximus/github-action-next-semvers@v1"
+        with:
+          version: ${{ steps.latest-tag.outputs.current_semver }}
+
+      - name: Print output of next semver version
+        run: |
+          echo "Next patch version is ${{ steps.semvers.outputs.patch }}"
+          echo "Next minor version is ${{ steps.semvers.outputs.minor }}"
+          echo "Next major version is ${{ steps.semvers.outputs.major }}"
+
+      - name: Create tag with next semver patch version
+        if: github.event.ref == 'refs/heads/main'
+        run: |
+          git config user.email "cdsp-base-images-bot@users.noreply.github.com"
+          git config user.name "CDSP Base Images Bot"
+          git tag -a release/${{ matrix.value }}/v${{ steps.semvers.outputs.patch }} -m "Release ${{ matrix.value }}/v${{ steps.semvers.outputs.patch }}"
+          git push origin release/${{ matrix.value }}/v${{ steps.semvers.outputs.patch }}
