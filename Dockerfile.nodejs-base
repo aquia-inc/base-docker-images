@@ -21,3 +21,6 @@ SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 RUN echo "node_major_tag=$(node --version | awk -F'v' '{split($2, a, \".\"); print a[1]}' | tr -d '\n')" > /tmp/versions.txt
 RUN echo "node_minor_tag=$(cat /tmp/node_minor_version.txt)" >> /tmp/versions.txt
 RUN echo "node=$(node --version | awk -F'v' '{print $2}' | tr -d '\n')" >> /tmp/versions.txt
+RUN cat /tmp/versions.txt
+
+USER nobody
