@@ -2,7 +2,6 @@ FROM cgr.dev/chainguard/wolfi-base:latest@sha256:8ece91a71d17ae3792056b3bfa64cb8
 
 RUN apk update && apk add --no-cache --upgrade python3 py3-pip
 
-
 # local install to /home/nonroot/.local/bin
 USER nonroot
 ENV POETRY_HOME=/home/nonroot \
