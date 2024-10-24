@@ -1,6 +1,13 @@
 
 # Aquia Base Docker Images
 
+This repository contains Dockerfiles for Aquia Base Docker Images.
+
+## WiP
+
+[2024-10-24]
+This repository is a work in progress.  Not all images referenced below are currently available.
+
 ## Hardened images
 
 Images are considered hardened when they do not contain fixed CVE vulnerabilities of the following severities: CRITICAL, HIGH, MEDIUM. They are based on [wolfi-base](<https://edu.chainguard.dev/open-source/wolfi/overview/>) from Chainguard. We use Renovate to automatically update each of these base images to the most recently published image ([`latest`](https://edu.chainguard.dev/chainguard/chainguard-images/reference/wolfi-base/tags_history/)).
@@ -141,4 +148,5 @@ For example:
 ## Notes
 
 * Any workflows that we want to trigger other workflows [cannot use the default GITHUB_TOKEN](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow), so we are using a Deploy Key for the [Create Release Tag](.github/workflows/create-release-tag.yml#L64) workflow. A Deploy Key is [preferable](https://medium.com/prompt/trigger-another-github-workflow-without-using-a-personal-access-token-f594c21373ef) to a Personal Access Token, since it can be repository-scoped and not tied to a specific user.
+
 * The [Create Release Tag](.github/workflows/create-release-tag.yml#L64) workflow is triggered by the [Create Release Tag](.github/workflows/create-release-tag.yml) workflow.  

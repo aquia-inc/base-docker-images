@@ -1,0 +1,115 @@
+---
+### Global config
+# https://aquasecurity.github.io/trivy/v0.33/docs/references/customization/config-file/
+
+# Same as '--quiet'
+# Default is false
+
+quiet: false
+
+# Same as '--debug'
+# Default is false
+debug: false
+
+# Same as '--insecure'
+# Default is false
+insecure: false
+
+# Same as '--timeout'
+# Default is '5m'
+timeout: 2m
+
+# Same as '--cache-dir'
+# Default is your system cache dir
+cache-dir: $HOME/.cache/trivy
+
+
+### Report options
+
+# Same as '--format'
+# Default is 'table'
+format: table
+
+# Same as '--report' (available with 'trivy k8s')
+# Default is all
+report: all
+
+# Same as '--template'
+# Default is empty
+template:
+
+# Same as '--dependency-tree'
+# Default is false
+dependency-tree: false
+
+# Same as '--list-all-pkgs'
+# Default is false
+list-all-pkgs: false
+
+# Same as '--ignorefile'
+# Default is '.trivyignore'
+ignorefile: .trivyignore
+
+# Same as '--ignore-policy'
+# Default is empty
+ignore-policy:
+
+# Same as '--exit-code'
+# Default is 0
+exit-code: 0
+
+# Same as '--output'
+# Default is empty (stdout)
+output:
+
+# Same as '--severity'
+# Default is all severities
+severity:
+  - MEDIUM
+  - HIGH
+  - CRITICAL
+
+scan:
+  skip-dirs:
+    - "/usr/src/**" # source code certs can be ignored - they are deleted during the build process
+    - "/etc/nginx/ssl/**" # SSL certs are needed for the image to work
+  skip-files:
+
+
+  ### Image options
+
+image:
+  # Same as '--input' (available with 'trivy image')
+  # Default is empty
+  input:
+
+  # Same as '--removed-pkgs'
+  # Default is false
+  removed-pkgs: false
+
+
+  ### Vulnerability options
+
+  vulnerability:
+  # Same as '--vuln-type'
+  # Default is 'os,library'
+  type:
+    - os
+    - library
+
+  # Same as '--ignore-unfixed'
+  # Default is false
+  ignore-unfixed: true
+
+
+
+  ### When using secrets
+
+  secret:
+  # Same as '--secret-config'
+  # Default is 'trivy-secret.yaml'
+  config: trivy-secret.yaml
+
+misconfiguration:
+  terraform:
+    exclude-downloaded-modules: true
