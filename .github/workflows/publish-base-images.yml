@@ -4,13 +4,14 @@ on:
   push:
     tags:
       - "release/**"
+    branches:
+      - main
   pull_request:
     branches: [ main ]
 env:
   REGISTRY: ghcr.io
   # set default test tag value
-  TAG: ${{ (github.event_name == 'pull_request' && 'release/wolfi-base/v0.0.0') || github.ref }}
-  # TAG: ${{ (github.event_name == 'pull_request' && 'release/fips-nginx-wolfi-base-full-build/v0.0.0') || github.ref }}
+  TAG: ${{ (github.event_name == 'pull_request' && 'release/nodejs-base/v0.0.0') || github.ref }}
 
 jobs:
   publish_image:
@@ -41,7 +42,6 @@ jobs:
               echo "Image name and version could not be parsed"
               exit 1
           fi
-
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3.3.0
@@ -120,8 +120,8 @@ jobs:
             ${{ steps.parse_tag.outputs.version }}
           labels: |
             org.opencontainers.image.title=${{ steps.parse_tag.outputs.image }}
-            org.opencontainers.image.description=Base image for CDS ${{ steps.parse_tag.outputs.image }}
-            org.opencontainers.image.vendor=Department of Veterans Affairs
+            org.opencontainers.image.description=Base image for ${{ steps.parse_tag.outputs.image }}
+            org.opencontainers.image.vendor=Aquia Inc
             org.opencontainers.image.build-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       - name: Build and push Docker image
@@ -172,7 +172,7 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          echo "SHA256 digest: ${{ steps.docker_build.outputs.Digest }}"
 
       # - name: Send Slack alert for successful build
       #   if: always() && github.event_name == 'push' && github.ref_type == 'tag'
@@ -185,7 +185,7 @@ jobs:
       #         "text": "${{ job.status == 'success' && ':white_check_mark: Docker image built successfully: ' || ':no_entry: Docker image build failed: ' }}*${{ steps.parse_tag.outputs.image }}*",
       #         "attachments": [{
       #           "color": "${{ job.status }} === 'success' ? 'good' : 'danger'",
-      #           "text": " *Image:* ${{ steps.parse_tag.outputs.image }}\n *Version:* ${{ steps.parse_tag.outputs.version }}\n *Published Tags:* ${{ steps.extract_tags.outputs.tags }}\n *SHA Digest:* `${{ steps.docker_build.outputs.Digest }}`\n *Github Package Page URL:* https://github.com/${{ github.repository }}/pkgs/container/cdsp-base-docker-images%2F${{ steps.parse_tag.outputs.image }}\n *Link to the build URL:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+      #           "text": " *Image:* ${{ steps.parse_tag.outputs.image }}\n *Version:* ${{ steps.parse_tag.outputs.version }}\n *Published Tags:* ${{ steps.extract_tags.outputs.tags }}\n *SHA Digest:* `${{ steps.docker_build.outputs.Digest }}`\n *Github Package Page URL:* https://github.com/${{ github.repository }}/pkgs/container/base-docker-images%2F${{ steps.parse_tag.outputs.image }}\n *Link to the build URL:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
       #           "mrkdwn_in": ['text']
       #         }]
       #       }

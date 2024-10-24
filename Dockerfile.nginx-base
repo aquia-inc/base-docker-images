@@ -1,0 +1,58 @@
+# Using the custom NGINX image from chainguard
+FROM cgr.dev/chainguard/nginx:latest-dev@sha256:c79c3527ff494f9be4d875a58f8cd804251f341c8fccc2cdd0924422d17da11c AS builder
+
+
+# Switching to root user for package installation
+USER root
+
+# Installing required packages for building NGINX
+RUN apk update && apk --no-cache add -u perl wget build-base pcre-dev zlib-dev curl openssl-dev
+
+# Define NGINX and additional compatible module versions
+# https://github.com/openresty/headers-more-nginx-module/?tab=readme-ov-file#compatibility
+ARG NGINX_VERSION=1.27.1
+ARG MORE_HEADERS_VERSION=0.37
+
+WORKDIR /usr/src/
+
+# Download NGINX and headers-more-nginx-module sources
+RUN wget "http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" -O nginx.tar.gz && \
+	wget "https://github.com/openresty/headers-more-nginx-module/archive/v${MORE_HEADERS_VERSION}.tar.gz" -O extra_module.tar.gz
+
+# Make dirs for nginx and extract sources
+RUN mkdir -p /usr/src/nginx /usr/src/extra_module /var/log/nginx /etc/nginx/conf.d /var/cache/nginx /var/lib/nginx/modules && chown -R nginx:nginx /var/lib/nginx/ && \
+	tar -xzf nginx.tar.gz -C /usr/src/nginx --strip-components=1 && \
+	tar -xzf extra_module.tar.gz -C /usr/src/extra_module --strip-components=1
+
+# Compile and install NGINX with additional module
+WORKDIR /usr/src/nginx
+RUN ./configure --prefix=/usr/local/nginx \
+                --with-compat \
+                --add-dynamic-module=/usr/src/extra_module && \
+    make -j$(nproc) modules && \
+    make -j$(nproc) install
+
+# Clean up
+RUN rm -rf nginx nginx.tar.gz extra_module extra_module.tar.gz
+
+# Switch back to non-root user
+USER nginx
+
+# Set the shell for subsequent commands
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
+
+# Start the second stage of the Dockerfile
+FROM cgr.dev/chainguard/nginx:latest@sha256:1d4e818e36a137a5498f135a70a41e12fcee1e782635498b221376ec0284a31a
+
+# Copy compiled modules only if the directory exists
+COPY --from=builder /usr/local/nginx/modules/*.so /var/lib/nginx/modules/
+
+# Health Check
+HEALTHCHECK --interval=30s --timeout=3s \
+CMD nginx -t || exit 1
+
+# Set the user for subsequent commands
+USER nginx
+
+# Copy NGINX configuration
+COPY nginx.conf /etc/nginx/nginx.conf
