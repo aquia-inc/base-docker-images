@@ -165,7 +165,7 @@ jobs:
           name: "Release ${{ github.ref_name }}"         # Release name
           body: |
             Docker image with the following tags has been released:
-            - ${{ steps.extract_tags.outputs.tags }}
+            Tags: ${{ steps.extract_tags.outputs.tags }}
             SHA256 Digest: ${{ steps.docker_build.outputs.digest }}
 
             The Docker image can be pulled with:
