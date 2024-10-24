@@ -95,9 +95,9 @@ jobs:
         id: check_env_file
         run: |
           if [ -f .env.versions ]; then
-            echo "exists=true" > $GITHUB_OUTPUT
+            echo "exists=true" >> $GITHUB_OUTPUT
           else
-            echo "exists=false" > $GITHUB_OUTPUT
+            echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Read Python/Node.js versions out of env file
@@ -154,7 +154,7 @@ jobs:
             tags="$tags $tag, "
           done <<< "${{ steps.meta.outputs.tags }}"
           tags=${tags%, *}
-          echo "tags=$tags" > $GITHUB_OUTPUT
+          echo "tags=$tags" >> $GITHUB_OUTPUT
 
       # Step to create a GitHub Release and include the Docker image URL
       - name: Create GitHub Release
