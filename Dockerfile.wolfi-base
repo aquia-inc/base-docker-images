@@ -1,7 +1,10 @@
-FROM --platform=linux/amd64 cgr.dev/chainguard/wolfi-base:latest@sha256:0f1d81605bda6e2388c3c7f731700d8c12e17259d58ffba11f36ddc81d9c0a76
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:8ece91a71d17ae3792056b3bfa64cb80dfbcb01848b320e446dd632ff9672491
 
-USER root
-RUN apk update && \
-apk del libcurl-openssl4 curl && \
-apk add --upgrade --no-cache libssl3 libcrypto3
+# if you need a quicker turnaround, you can patch the image like the below,
+# before the automated image build picks up the new CVE fixes (24-48 hours, usually)
+
+# USER root
+# RUN apk update && \
+# apk add --upgrade --no-cache libssl3 libcrypto3
+
 USER nonroot

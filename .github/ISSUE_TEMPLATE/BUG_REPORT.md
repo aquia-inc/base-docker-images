@@ -1,7 +1,7 @@
 ---
 name: Bug report
 about: Create bug report.
-title: 'Example: Application breaks when I run validate.'
+title: 'Example: Application breaks when I run version x.x.x'
 labels: 'bug'
 assignees: ''
 ---
