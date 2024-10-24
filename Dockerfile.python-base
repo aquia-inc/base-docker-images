@@ -17,6 +17,7 @@ RUN pip install --upgrade -v requests
 RUN poetry config installer.max-workers 10
 
 # create symlink for correct PYTHONPATH for poetry
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 RUN python3 --version 2>&1 | awk -F' ' '{print $2}' | tr -d '\n' | sed 's/\.[0-9]$//' > /tmp/python_minor_version.txt
 RUN PY_VERSION=$(cat /tmp/python_minor_version.txt) && ln -s /home/nonroot/.local/lib/python${PY_VERSION} /home/nonroot/.local/lib/python3
 
