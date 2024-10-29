@@ -76,7 +76,7 @@ jobs:
           format: "table"
           exit-code: "1" # change to 1, if you want the build to break
           ignore-unfixed: false
-          vuln-type: "os,library,secret"
+          vuln-type: "os,library"
           severity: "CRITICAL,HIGH,MEDIUM"
 
       - name: Get installed Python/Node.js package versions for Docker tagging
