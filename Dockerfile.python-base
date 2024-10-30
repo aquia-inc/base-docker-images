@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 cgr.dev/chainguard/wolfi-base:latest@sha256:8ece91a71d17ae3792056b3bfa64cb80dfbcb01848b320e446dd632ff9672491 AS builder
+FROM --platform=linux/amd64 cgr.dev/chainguard/wolfi-base:latest@sha256:09b9460e4ff828ac2f84df2759adb0a573bb5e0a57e4c6507074a2c112d5607f AS builder
 
 RUN apk update && apk add --no-cache --upgrade python3 py3-pip
 
