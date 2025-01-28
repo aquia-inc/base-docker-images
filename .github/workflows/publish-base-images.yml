@@ -27,7 +27,7 @@ jobs:
       
       - name: Trivy - configure cache
         id: cache-trivy-db
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/trivy
           key: ${{ runner.os }}-trivy-db
