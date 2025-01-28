@@ -24,6 +24,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      
+      - name: Trivy - configure cache
+        id: cache-trivy-db
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-db
+          restore-keys: |
+            ${{ runner.os }}-trivy-db
 
       - name: Extract Image and Version from Tag
         id: parse_tag
