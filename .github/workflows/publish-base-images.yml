@@ -123,6 +123,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag.outputs.image }}
           flavor: |
             latest=true
+            suffix=-${{ matrix.platform }},onlatest=true
           tags: |
             ${{ env.python_major_tag }},enable=${{ steps.parse_tag.outputs.image == 'python-base' }}
             ${{ env.python_minor_tag }},enable=${{ steps.parse_tag.outputs.image == 'python-base' }}
@@ -133,9 +134,10 @@ jobs:
             ${{ steps.parse_tag.outputs.version }}
           labels: |
             org.opencontainers.image.title=${{ steps.parse_tag.outputs.image }}
-            org.opencontainers.image.description=Base image for ${{ steps.parse_tag.outputs.image }}
+            org.opencontainers.image.description=Base image for ${{ steps.parse_tag.outputs.image }} (${{ matrix.platform }})
             org.opencontainers.image.vendor=Aquia Inc
             org.opencontainers.image.build-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            org.opencontainers.image.architecture=${{ matrix.platform }}
 
       - name: Build and push Docker image
         id: docker_build
@@ -204,4 +206,3 @@ jobs:
       #       }
       #   env:
       #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      
