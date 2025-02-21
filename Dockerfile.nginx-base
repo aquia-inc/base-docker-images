@@ -42,7 +42,7 @@ USER nginx
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
 # Start the second stage of the Dockerfile
-FROM cgr.dev/chainguard/nginx:latest@sha256:cebd3e4630ee2355ee1683d884fe7190c8ba7a1aee85e3c4d1b7a33aa8380ccf
+FROM cgr.dev/chainguard/nginx:latest@sha256:cf0d196bacf68158248da9156e0bc884abf31c9d66f9f81ea046a1a0d4253d65
 
 # Copy compiled modules only if the directory exists
 COPY --from=builder /usr/local/nginx/modules/*.so /var/lib/nginx/modules/
