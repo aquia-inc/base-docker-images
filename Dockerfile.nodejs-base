@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:57921b0cac85ef46aab8cfbe223e9376254d4f9456e07a5c6607891897ddad8b AS builder
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:78adc0075d239ee722b5d6ba0ca23e1cd40a30f23aac2e38d48f61a014151277 AS builder
 
 # Install Node.js, npm and Yarn
 RUN apk add --no-cache nodejs yarn npm
