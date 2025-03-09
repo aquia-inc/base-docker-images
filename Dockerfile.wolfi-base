@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:78adc0075d239ee722b5d6ba0ca23e1cd40a30f23aac2e38d48f61a014151277
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:211327e3db292fe34d2f867ff45cc3a1b4b9037acca85f8a88c8522cabfa1348
 
 # if you need a quicker turnaround, you can patch the image like the below,
 # before the automated image build picks up the new CVE fixes (24-48 hours, usually)
