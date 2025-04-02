@@ -1,12 +1,49 @@
 # EditorConfig is awesome: https://EditorConfig.org
-
-# top-most EditorConfig file
 root = true
 
+# General rules for all text-based files
 [*]
+charset = utf-8
+end_of_line = lf
 indent_style = space
 indent_size = 2
-end_of_line = lf
-charset = utf-8
 trim_trailing_whitespace = true
 insert_final_newline = true
+
+# Terraform (both *.tf and *.tfvars)
+[*.{tf,tfvars}]
+indent_style = space
+indent_size = 2
+
+# Dockerfiles
+[Dockerfile.*]
+indent_style = space
+indent_size = 2
+
+# GitHub Actions (YAML syntax)
+[*.yml]
+indent_style = space
+indent_size = 2
+
+# Python (PEP 8 recommends 4 spaces)
+[*.py]
+indent_style = space
+indent_size = 4
+
+# JSON (commonly uses 2 spaces)
+[*.json]
+indent_style = space
+indent_size = 2
+
+# Shell scripts
+[*.sh]
+indent_style = space
+indent_size = 2
+
+# Makefiles
+[Makefile]
+# Make recipes require tabs, not spaces, so ensure tab indentation.
+indent_style = tab
+# Some editors may interpret indent_size with tabs differently.
+# Make doesn't mind the actual width, but you can optionally set it:
+# indent_size = 4
