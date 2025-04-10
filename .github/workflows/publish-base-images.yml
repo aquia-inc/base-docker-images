@@ -152,13 +152,16 @@ jobs:
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
+      - name: Rename versions file to .env (Local Env)
+        if: steps.check_env_file.outputs.exists == 'true'
+        run: mv .env.versions.${{ steps.sanitize_platform.outputs.suffix }} .env
 
       - name: Read package versions for ${{ matrix.platform }} (Local Env)
         if: steps.check_env_file.outputs.exists == 'true'
         id: dotenv_local
         uses: xom9ikk/dotenv@v2.3.0
         with:
-          path: ".env.versions.${{ steps.sanitize_platform.outputs.suffix }}"
+          path: .
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
