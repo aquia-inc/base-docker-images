@@ -422,6 +422,7 @@ jobs:
           name: "Release ${{ steps.parse_tag_release.outputs.image_base_name }} v${{ steps.parse_tag_release.outputs.version }}"
           # Read the raw body directly from the environment variable
           body: ${{ env.BODY_TEXT }}
+
           draft: false
           prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }}
         env:
