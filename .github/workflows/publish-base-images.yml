@@ -108,18 +108,15 @@ jobs:
           echo "Output file: $output_file"
           echo "Test tag: $test_tag"
 
-          if [[ $image_base_name == 'python-base' || $image_base_name == 'nodejs-base' || $image_base_name == 'openjdk17-base' ]]; then
-              echo "Extracting versions from $test_tag for $platform_image_name"
-              if docker run --rm --platform ${{ matrix.platform }} "$test_tag" cat /tmp/versions.txt > "$output_file"; then
-                echo "Versions extracted to $output_file"
-              else
-                echo "Warning: Failed to extract versions from $test_tag. Creating empty file."
-                touch "$output_file"
-              fi
-          else
-              echo "No version extraction needed for $platform_image_name. Creating empty file."
-              touch "$output_file"
-          fi
+          case "${{ steps.parse_tag.outputs.image }}" in 
+            python-base|nodejs-base|openjdk17-base)
+              docker run --rm ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test cat /tmp/versions.txt > .env.versions
+              ;;
+            *)
+              touch .env.versions
+              ;;
+          esac
+
 
       - name: Check if .env.versions file exists
         id: check_env_file
@@ -136,7 +133,6 @@ jobs:
         uses: xom9ikk/dotenv@v2.3.0
         with:
           mode: versions
-          path: .env.versions
 
 
       - name: Extract metadata (tags, labels) for Docker
