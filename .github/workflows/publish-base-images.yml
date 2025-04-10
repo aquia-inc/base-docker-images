@@ -159,7 +159,7 @@ jobs:
             ls -al
 
       - name: Upload versions artifact (from amd64)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         # Only upload if extraction succeeded on the amd64 platform
         if: matrix.platform == 'linux/amd64' && steps.get_versions.outputs.extraction_success == 'true'
         with:
