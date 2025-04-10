@@ -163,8 +163,7 @@ jobs:
         if: matrix.platform == 'linux/amd64' && steps.get_versions.outputs.extraction_success == 'true'
         with:
           name: versions-file-amd64
-          # Use the output path from the get_versions step
-          path: ${{ steps.get_versions.outputs.output_file_path }}
+          path: .env.versions.linux-amd64
           retention-days: 1
           if-no-files-found: error # Fail if the expected file isn't there
 
@@ -277,7 +276,7 @@ jobs:
         if: steps.download_artifact.outcome == 'success'
         run: |
           if [ -f ".env.versions.linux-amd64" ]; then
-            mv .env.versions.linux-amd64 .env
+            cp .env.versions.linux-amd64 .env
             echo "Renamed .env.versions.linux-amd64 to .env"
           else
             echo "Warning: Expected file .env.versions.linux-amd64 not found after download."
