@@ -37,6 +37,10 @@ jobs:
             ${{ runner.os }}-trivy-db-${{ matrix.platform }}
             ${{ runner.os }}-trivy-db-
 
+      - name: Sanitize platform name for tag
+        id: sanitize_platform
+        run: echo "tag_suffix=$(echo ${{ matrix.platform }} | tr '/' '-')" >> $GITHUB_OUTPUT              
+
       - name: Extract Image and Version from Tag
         id: parse_tag
         run: |
@@ -64,10 +68,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Sanitize platform name for tag
-        id: sanitize_platform
-        run: echo "tag_suffix=$(echo ${{ matrix.platform }} | tr '/' '-')" >> $GITHUB_OUTPUT
 
       - name: Build Docker Image for ${{ matrix.platform }} (Test)
         id: build_test
@@ -105,7 +105,9 @@ jobs:
           image_name="${{ steps.parse_tag.outputs.image }}"
           sanitized_platform=$(echo "${{ matrix.platform }}" | tr '/' '-')
           test_tag="${{ github.repository }}/${image_name}:test-${sanitized_platform}"
-          output_file=".env.versions.${{ matrix.platform }}"
+          output_file=".env.versions.${{ sanitized_platform }}"
+          echo "Output file: $output_file"
+          echo "Test tag: $test_tag"
 
           if [[ $image_name == 'python-base' || $image_name == 'nodejs-base' || $image_name == 'openjdk17-base' ]]; then
               echo "Extracting versions from $test_tag for $image_name"
