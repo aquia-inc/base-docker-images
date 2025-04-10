@@ -117,7 +117,7 @@ jobs:
             image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
             platform_image_name="${{ steps.image_name.outputs.platform_image_name }}"
             test_tag="${{ github.repository }}/${platform_image_name}:test"
-            output_file=".env.versions.${{ steps.sanitize_platform.outputs.suffix }}"
+            output_file="env.versions.${{ steps.sanitize_platform.outputs.suffix }}"
             echo "Output file: $output_file"
             echo "Test tag: $test_tag"
             extraction_status="false" # Default to false
@@ -159,19 +159,19 @@ jobs:
             ls -al
 
       - name: Upload versions artifact (from amd64)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         # Only upload if extraction succeeded on the amd64 platform
         if: matrix.platform == 'linux/amd64' && steps.get_versions.outputs.extraction_success == 'true'
         with:
           name: versions-file-amd64
-          path: .env.versions.linux-amd64
+          path: env.versions.linux-amd64
           retention-days: 1
-          if-no-files-found: warn
+          if-no-files-found: error
 
-      - name: Check if .env.versions file exists (Local check before dotenv)
+      - name: Check if env.versions file exists (Local check before dotenv)
         id: check_env_file
         run: |
-          if [ -f ".env.versions.${{ steps.sanitize_platform.outputs.suffix }}" ]; then
+          if [ -f "env.versions.${{ steps.sanitize_platform.outputs.suffix }}" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "Exists"
           else
@@ -181,7 +181,7 @@ jobs:
           fi
       - name: Rename versions file to .env (Local Env)
         if: steps.check_env_file.outputs.exists == 'true'
-        run: mv .env.versions.${{ steps.sanitize_platform.outputs.suffix }} .env
+        run: mv env.versions.${{ steps.sanitize_platform.outputs.suffix }} .env
 
       - name: Read package versions for ${{ matrix.platform }} (Local Env)
         if: steps.check_env_file.outputs.exists == 'true'
@@ -278,11 +278,11 @@ jobs:
         # Only run if the download step succeeded (outcome is 'success')
         if: steps.download_artifact.outcome == 'success'
         run: |
-          if [ -f ".env.versions.linux-amd64" ]; then
-            cp .env.versions.linux-amd64 .env
-            echo "Renamed .env.versions.linux-amd64 to .env"
+          if [ -f "env.versions.linux-amd64" ]; then
+            cp env.versions.linux-amd64 .env
+            echo "Renamed env.versions.linux-amd64 to .env"
           else
-            echo "Warning: Expected file .env.versions.linux-amd64 not found after download."
+            echo "Warning: Expected file env.versions.linux-amd64 not found after download."
             # Decide if this should be an error - exit 1?
           fi
 
