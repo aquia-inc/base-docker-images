@@ -104,7 +104,7 @@ jobs:
         run: |
           image_name="${{ steps.parse_tag.outputs.image }}"
           sanitized_platform=$(echo "${{ matrix.platform }}" | tr '/' '-')
-          test_tag="${{ github.repository }}/${image_name}:test-${sanitized_platform}"
+          test_tag="${{ github.repository }}/${image_name}:test-${{ sanitized_platform }}"
           output_file=".env.versions.${{ sanitized_platform }}"
           echo "Output file: $output_file"
           echo "Test tag: $test_tag"
