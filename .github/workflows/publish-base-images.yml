@@ -1,4 +1,4 @@
-# /Users/matts/work/Aquia/repos/base-docker-images/.github/workflows/publish-base-images.yml
+# .github/workflows/publish-base-images.yml
 name: Publish Base Docker images
 
 on:
@@ -361,7 +361,7 @@ jobs:
           **Node.js Version Tags:**
           *   AMD64: Major=\`${node_major_amd64:-N/A}\`, Minor=\`${node_minor_amd64:-N/A}\`
           *   ARM64: Major=\`${node_major_arm64:-N/A}\`, Minor=\`${node_minor_arm64:-N/A}\`
-          EOF
+          EOF`
               )
             fi
           elif [[ "$image_base_name" == "openjdk17-base" ]]; then
@@ -420,8 +420,10 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: "Release ${{ steps.parse_tag_release.outputs.image_base_name }} v${{ steps.parse_tag_release.outputs.version }}"
-          body: ${{ steps.release_body.outputs.body }}
+          # Read the raw body directly from the environment variable
+          body: ${{ env.BODY_TEXT }}
           draft: false
           prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # BODY_TEXT is automatically available here from the previous step's GITHUB_ENV
