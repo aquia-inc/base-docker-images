@@ -23,6 +23,7 @@ jobs:
       contents: write
       packages: write
       security-events: write
+      actions: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -47,7 +48,7 @@ jobs:
           match=$(echo ${{ env.TAG }} | grep -oP 'release/([^/]+)/v(\d+\.\d+\.\d+)$' | sed 's/release\///')
           echo "match=$match"
           if [[ $match =~ ^([^/]+)/v(.+)$ ]]; then
-              echo "Match found"
+              echo "Match found (Release Tag)"
               image_base_name="${BASH_REMATCH[1]}"
               version="${BASH_REMATCH[2]}"
               echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
@@ -55,8 +56,16 @@ jobs:
               echo "image_base_name=$image_base_name"
               echo "version=$version"
           else
-              echo "Image base name and version could not be parsed from TAG='${{ env.TAG }}'"
-              exit 1
+              # Not a release tag - likely main branch push or PR default
+              echo "Not a release tag build (TAG='${{ env.TAG }}'). Setting default values for test build."
+              # Use 'python-base' as default, similar to PR logic, so test build can find Dockerfile
+              default_image="python-base"
+              default_version="dev"
+              echo "image_base_name=$default_image" >> $GITHUB_OUTPUT
+              echo "version=$default_version" >> $GITHUB_OUTPUT
+              echo "image_base_name=$default_image"
+              echo "version=$default_version"
+              # IMPORTANT: Do not exit 1 here. Allow the workflow to continue for non-release builds.
           fi
 
       - name: Construct Platform-Specific Image Name
@@ -100,40 +109,59 @@ jobs:
           severity: "CRITICAL,HIGH,MEDIUM"
 
       - name: Get installed package versions for ${{ matrix.platform }}
+        id: get_versions
         run: |
           image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
           platform_image_name="${{ steps.image_name.outputs.platform_image_name }}"
           test_tag="${{ github.repository }}/${platform_image_name}:test"
-          output_file=".env.versions"
+          output_file=".env.versions.${{ steps.sanitize_platform.outputs.suffix }}"
           echo "Output file: $output_file"
           echo "Test tag: $test_tag"
 
-          case "${{ steps.parse_tag.outputs.image }}" in 
-            python-base|nodejs-base|openjdk17-base)
-              docker run --rm ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test cat /tmp/versions.txt > .env.versions
-              ;;
-            *)
-              touch .env.versions
-              ;;
-          esac
+          # Check if the image is one that should have a versions file
+          if [[ "$image_base_name" == "python-base" || "$image_base_name" == "nodejs-base" || "$image_base_name" == "openjdk17-base" ]]; then
+              echo "Extracting versions from $test_tag for $platform_image_name"
+              echo "output_file_path=$output_file" >> $GITHUB_OUTPUT
+              if docker run --rm --platform ${{ matrix.platform }} "$test_tag" cat /tmp/versions.txt > "$output_file"; then
+                echo "Versions extracted to $output_file"
+                echo "extraction_success=true" >> $GITHUB_OUTPUT
+              else
+                echo "Warning: Failed to extract versions from $test_tag. Creating empty file."
+                touch "$output_file"
+                echo "extraction_success=false" >> $GITHUB_OUTPUT
+              fi
+          else
+              echo "No version extraction needed for $platform_image_name."
+              echo "output_file_path=" >> $GITHUB_OUTPUT
+              echo "extraction_success=false" >> $GITHUB_OUTPUT
+          fi
 
+      - name: Upload versions artifact (from amd64)
+        uses: actions/upload-artifact@v4
+        if: matrix.platform == 'linux/amd64' && steps.get_versions.outputs.extraction_success == 'true'
+        with:
+          name: versions-file-amd64
+          path: ${{ steps.get_versions.outputs.output_file_path }}
+          retention-days: 1
 
-      - name: Check if .env.versions file exists
+      - name: Check if .env.versions file exists (Local check before dotenv)
         id: check_env_file
         run: |
-          if [ -f ".env.versions" ]; then
+          if [ -f ".env.versions.${{ steps.sanitize_platform.outputs.suffix }}" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Read package versions for ${{ matrix.platform }}
+      - name: Rename versions file to .env (Local Env)
         if: steps.check_env_file.outputs.exists == 'true'
-        id: dotenv
+        run: mv .env.versions.${{ steps.sanitize_platform.outputs.suffix }} .env
+
+      - name: Read package versions for ${{ matrix.platform }} (Local Env)
+        if: steps.check_env_file.outputs.exists == 'true'
+        id: dotenv_local
         uses: xom9ikk/dotenv@v2.3.0
         with:
-          mode: versions
-
+          path: .
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -175,6 +203,7 @@ jobs:
     if: github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success'
     permissions:
       contents: write
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -196,33 +225,118 @@ jobs:
         env:
           TAG: ${{ github.ref }}
 
+      - name: Download versions artifact
+        id: download_artifact
+        # Run if the image base name is one that has versions
+        if: |
+          steps.parse_tag_release.outputs.image_base_name == 'python-base' ||
+          steps.parse_tag_release.outputs.image_base_name == 'nodejs-base' ||
+          steps.parse_tag_release.outputs.image_base_name == 'openjdk17-base'
+        uses: actions/download-artifact@v4
+        with:
+          name: versions-file-amd64
+          path: .
+
+      - name: Rename downloaded artifact to .env
+        if: steps.download_artifact.outcome == 'success'
+        run: mv .env.versions.linux-amd64 .env
+  
+
+      - name: Read downloaded package versions
+        id: dotenv_release
+        if: steps.download_artifact.outcome == 'success'
+        uses: xom9ikk/dotenv@v2.3.0
+        with:
+          path: .
+
+      - name: Create GitHub Release Body
+        id: release_body
+        run: |
+          image_base_name="${{ steps.parse_tag_release.outputs.image_base_name }}"
+          version_tag="${{ steps.parse_tag_release.outputs.version }}"
+          repo_name="${{ github.repository }}"
+          registry="${{ env.REGISTRY }}"
+
+          # Start with the base body
+          body=$(cat <<EOF
+          Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
+
+          **Published Images & Tags:**
+
+          *   **linux/amd64:**
+              *   Image: \`$registry/$repo_name/$image_base_name-linux-amd64\`
+              *   Tag: \`$version_tag\`
+          *   **linux/arm64:**
+              *   Image: \`$registry/$repo_name/$image_base_name-linux-arm64\`
+              *   Tag: \`$version_tag\`
+          EOF
+          )
+
+          # Conditionally add specific version tags if dotenv step succeeded
+          if [[ "${{ steps.dotenv_release.outcome }}" == "success" ]]; then
+            specific_tags_section=""
+            if [[ "$image_base_name" == "python-base" ]]; then
+              py_major="${{ env.python_major_tag }}"
+              py_minor="${{ env.python_minor_tag }}"
+              specific_tags_section=$(cat <<EOF
+
+          **Python Version Tags:**
+          *   Major: \`${py_major}\`
+          *   Minor: \`${py_minor}\`
+          EOF
+              )
+            elif [[ "$image_base_name" == "nodejs-base" ]]; then
+              node_major="${{ env.nodejs_major_tag }}"
+              node_minor="${{ env.nodejs_minor_tag }}"
+              specific_tags_section=$(cat <<EOF
+
+          **Node.js Version Tags:**
+          *   Major: \`${node_major}\`
+          *   Minor: \`${node_minor}\`
+          EOF
+              )
+            elif [[ "$image_base_name" == "openjdk17-base" ]]; then
+              # Assuming openjdk_major_tag and openjdk_minor_tag exist in the versions file
+              jdk_major="${{ env.openjdk_major_tag }}"
+              jdk_minor="${{ env.openjdk_minor_tag }}"
+              specific_tags_section=$(cat <<EOF
+
+          **OpenJDK Version Tags:**
+          *   Major: \`${jdk_major}\`
+          *   Minor: \`${jdk_minor}\`
+          EOF
+              )
+            fi
+            body="${body}${specific_tags_section}"
+          fi
+
+          # Add pull examples
+          pull_examples=$(cat <<EOF
+
+          **Pull Examples:**
+
+          *   **AMD64 / x86_64:**
+              \`\`\`bash
+              docker pull $registry/$repo_name/$image_base_name-linux-amd64:$version_tag
+              \`\`\`
+          *   **ARM64 / aarch64:**
+              \`\`\`bash
+              docker pull $registry/$repo_name/$image_base_name-linux-arm64:$version_tag
+              \`\`\`
+          EOF
+          )
+          body="${body}${pull_examples}"
+
+          # Escape special characters for JSON and set output
+          body=$(echo "$body" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+          echo "body=$body" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: "Release ${{ github.ref_name }} / ${{ steps.parse_tag_release.outputs.image_base_name }}"
-          body: |
-            Platform-specific Docker images for `${{ steps.parse_tag_release.outputs.image_base_name }}` version `${{ steps.parse_tag_release.outputs.version }}` pushed.
-
-            **Published Images & Tags:**
-
-            *   **linux/amd64:**
-                *   Image: `${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag_release.outputs.image_base_name }}-linux-amd64`
-                *   Tag: `${{ steps.parse_tag_release.outputs.version }}`
-            *   **linux/arm64:**
-                *   Image: `${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag_release.outputs.image_base_name }}-linux-arm64`
-                *   Tag: `${{ steps.parse_tag_release.outputs.version }}`
-
-            **Pull Examples:**
-
-            *   **AMD64 / x86_64:**
-                ```bash
-                docker pull ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag_release.outputs.image_base_name }}-linux-amd64:${{ steps.parse_tag_release.outputs.version }}
-                ```
-            *   **ARM64 / aarch64:**
-                ```bash
-                docker pull ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag_release.outputs.image_base_name }}-linux-arm64:${{ steps.parse_tag_release.outputs.version }}
-                ```
+          body: ${{ steps.release_body.outputs.body }}
           draft: false
           prerelease: false
         env:
