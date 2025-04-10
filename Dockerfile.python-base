@@ -8,7 +8,7 @@ ENV POETRY_HOME=/home/nonroot \
     PATH=$PATH:/home/nonroot/.local/bin \
     PYTHONPATH=/home/nonroot/.local/lib/python3/site-packages
 
-RUN python3 -m pip install --no-cache-dir --upgrade --user -v poetry cryptography
+RUN python3 -m pip install --no-cache-dir --upgrade --user -v poetry cryptography virtualenv 
 
 # Poetry sets default max workers to num of cpu-cores + 4, but pip max connection pool
 # is set at 10 and will discard any above that when installing dependencies
