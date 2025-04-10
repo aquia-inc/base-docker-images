@@ -145,23 +145,16 @@ jobs:
             else
               echo "output_file_path=" >> $GITHUB_OUTPUT
             fi
-            pwd
-            ls -al
 
-      # --- Upload artifact ONLY on release tag pushes (for EITHER platform) ---
       - name: Upload versions artifact for ${{ matrix.platform }}
         uses: actions/upload-artifact@v4
-        # Only upload if extraction succeeded FOR THIS PLATFORM and it's a release tag push
         if: steps.get_versions.outputs.extraction_success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
         with:
-          # Create a unique artifact name per platform
           name: versions-file-${{ steps.sanitize_platform.outputs.suffix }}
-          # Use the output path which already includes the platform suffix
           path: ${{ steps.get_versions.outputs.output_file_path }}
           retention-days: 1
-          if-no-files-found: error # Fail if the file is missing
+          if-no-files-found: error
 
-      # --- Local .env steps are less critical now, but kept for potential local debugging ---
       - name: Check if env.versions file exists (Local check)
         id: check_env_file
         if: steps.get_versions.outputs.extraction_success == 'true'
@@ -281,7 +274,6 @@ jobs:
           registry="${{ env.REGISTRY }}"
 
           # Function to extract value from a versions file
-          # Usage: get_version_value "filename" "key_name"
           get_version_value() {
             local file="$1"
             local key="$2"
@@ -291,22 +283,25 @@ jobs:
           }
 
           # Initialize version variables
-          py_major_amd64="" py_minor_amd64=""
-          py_major_arm64="" py_minor_arm64=""
-          node_major_amd64="" node_minor_amd64=""
-          node_major_arm64="" node_minor_arm64=""
-          jdk_major_amd64="" jdk_minor_amd64=""
-          jdk_major_arm64="" jdk_minor_arm64=""
+          py_major_amd64="" py_minor_amd64="" py_full_amd64=""
+          py_major_arm64="" py_minor_arm64="" py_full_arm64=""
+          node_major_amd64="" node_minor_amd64="" node_full_amd64=""
+          node_major_arm64="" node_minor_arm64="" node_full_arm64=""
+          jdk_major_amd64="" jdk_minor_amd64="" jdk_full_amd64=""
+          jdk_major_arm64="" jdk_minor_arm64="" jdk_full_arm64=""
 
           # Read versions if files exist
           if [[ "${{ steps.download_artifact_amd64.outcome }}" == "success" ]]; then
               echo "Reading AMD64 versions file..."
               py_major_amd64=$(get_version_value "env.versions.linux-amd64" "python_major_tag")
               py_minor_amd64=$(get_version_value "env.versions.linux-amd64" "python_minor_tag")
+              py_full_amd64=$(get_version_value "env.versions.linux-amd64" "python")
               node_major_amd64=$(get_version_value "env.versions.linux-amd64" "nodejs_major_tag")
               node_minor_amd64=$(get_version_value "env.versions.linux-amd64" "nodejs_minor_tag")
+              node_full_amd64=$(get_version_value "env.versions.linux-amd64" "nodejs")
               jdk_major_amd64=$(get_version_value "env.versions.linux-amd64" "openjdk_major_tag")
               jdk_minor_amd64=$(get_version_value "env.versions.linux-amd64" "openjdk_minor_tag")
+              jdk_full_amd64=$(get_version_value "env.versions.linux-amd64" "openjdk")
           else
               echo "AMD64 versions artifact not downloaded or download failed."
           fi
@@ -315,10 +310,13 @@ jobs:
               echo "Reading ARM64 versions file..."
               py_major_arm64=$(get_version_value "env.versions.linux-arm64" "python_major_tag")
               py_minor_arm64=$(get_version_value "env.versions.linux-arm64" "python_minor_tag")
+              py_full_arm64=$(get_version_value "env.versions.linux-arm64" "python")
               node_major_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs_major_tag")
               node_minor_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs_minor_tag")
+              node_full_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs")
               jdk_major_arm64=$(get_version_value "env.versions.linux-arm64" "openjdk_major_tag")
               jdk_minor_arm64=$(get_version_value "env.versions.linux-arm64" "openjdk_minor_tag")
+              jdk_full_arm64=$(get_version_value "env.versions.linux-arm64" "openjdk")
           else
               echo "ARM64 versions artifact not downloaded or download failed."
           fi
@@ -345,12 +343,12 @@ jobs:
           # Conditionally add specific version tags section
           specific_tags_section=""
           if [[ "$image_base_name" == "python-base" ]]; then
-            if [ -n "$py_major_amd64" ] || [ -n "$py_major_arm64" ]; then # Only add section if we have data
+            if [ -n "$py_major_amd64" ] || [ -n "$py_major_arm64" ]; then
               specific_tags_section=$(cat <<EOF
 
-          **Python Version Tags:**
-          *   AMD64: Major=\`${py_major_amd64:-N/A}\`, Minor=\`${py_minor_amd64:-N/A}\`
-          *   ARM64: Major=\`${py_major_arm64:-N/A}\`, Minor=\`${py_minor_arm64:-N/A}\`
+          **Python Versions:**
+          *   AMD64: Major=\`${py_major_amd64:-N/A}\`, Minor=\`${py_minor_amd64:-N/A}\`, Full=\`${py_full_amd64:-N/A}\`
+          *   ARM64: Major=\`${py_major_arm64:-N/A}\`, Minor=\`${py_minor_arm64:-N/A}\`, Full=\`${py_full_arm64:-N/A}\`
           EOF
               )
             fi
@@ -358,19 +356,19 @@ jobs:
             if [ -n "$node_major_amd64" ] || [ -n "$node_major_arm64" ]; then
               specific_tags_section=$(cat <<EOF
 
-          **Node.js Version Tags:**
-          *   AMD64: Major=\`${node_major_amd64:-N/A}\`, Minor=\`${node_minor_amd64:-N/A}\`
-          *   ARM64: Major=\`${node_major_arm64:-N/A}\`, Minor=\`${node_minor_arm64:-N/A}\`
-          EOF`
+          **Node.js Versions:**
+          *   AMD64: Major=\`${node_major_amd64:-N/A}\`, Minor=\`${node_minor_amd64:-N/A}\`, Full=\`${node_full_amd64:-N/A}\`
+          *   ARM64: Major=\`${node_major_arm64:-N/A}\`, Minor=\`${node_minor_arm64:-N/A}\`, Full=\`${node_full_arm64:-N/A}\`
+          EOF
               )
             fi
           elif [[ "$image_base_name" == "openjdk17-base" ]]; then
             if [ -n "$jdk_major_amd64" ] || [ -n "$jdk_major_arm64" ]; then
               specific_tags_section=$(cat <<EOF
 
-          **OpenJDK Version Tags:**
-          *   AMD64: Major=\`${jdk_major_amd64:-N/A}\`, Minor=\`${jdk_minor_amd64:-N/A}\`
-          *   ARM64: Major=\`${jdk_major_arm64:-N/A}\`, Minor=\`${jdk_minor_arm64:-N/A}\`
+          **OpenJDK Versions:**
+          *   AMD64: Major=\`${jdk_major_amd64:-N/A}\`, Minor=\`${jdk_minor_amd64:-N/A}\`, Full=\`${jdk_full_amd64:-N/A}\`
+          *   ARM64: Major=\`${jdk_major_arm64:-N/A}\`, Minor=\`${jdk_minor_arm64:-N/A}\`, Full=\`${jdk_full_arm64:-N/A}\`
           EOF
               )
             fi
@@ -383,7 +381,6 @@ jobs:
             echo "No specific version tags found or extracted for $image_base_name."
           fi
 
-          # Add pull examples
           pull_examples=$(cat <<EOF
 
           **Pull Examples:**
@@ -395,7 +392,25 @@ jobs:
           *   **AMD64 / x86_64 (Latest):**
               \`\`\`bash
               docker pull $registry/$repo_name/${image_base_name}-linux-amd64:latest
-              \`\`\`
+              \`\`\`\n
+          EOF
+          )
+
+          # Add AMD64 Major/Minor pull examples if versions exist
+          if [[ "$image_base_name" == "python-base" ]]; then
+              if [ -n "$py_major_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Major - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    ```\n' "$py_major_amd64" "$registry" "$repo_name" "$image_base_name" "$py_major_amd64"); fi
+              if [ -n "$py_minor_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Minor - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    ```\n\n' "$py_minor_amd64" "$registry" "$repo_name" "$image_base_name" "$py_minor_amd64"); fi
+          elif [[ "$image_base_name" == "nodejs-base" ]]; then
+              if [ -n "$node_major_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Major - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    ```\n' "$node_major_amd64" "$registry" "$repo_name" "$image_base_name" "$node_major_amd64"); fi
+              if [ -n "$node_minor_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Minor - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    ```\n\n' "$node_minor_amd64" "$registry" "$repo_name" "$image_base_name" "$node_minor_amd64"); fi
+          elif [[ "$image_base_name" == "openjdk17-base" ]]; then
+              if [ -n "$jdk_major_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Major - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    ```\n' "$jdk_major_amd64" "$registry" "$repo_name" "$image_base_name" "$jdk_major_amd64"); fi
+              if [ -n "$jdk_minor_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Minor - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    ```\n\n' "$jdk_minor_amd64" "$registry" "$repo_name" "$image_base_name" "$jdk_minor_amd64"); fi
+          fi
+
+          # Add base ARM64 pull examples
+          pull_examples+=$(cat <<EOF
+
           *   **ARM64 / aarch64 (Version Specific):**
               \`\`\`bash
               docker pull $registry/$repo_name/${image_base_name}-linux-arm64:$version_tag
@@ -406,25 +421,34 @@ jobs:
               \`\`\`
           EOF
           )
-          body="${body}${pull_examples}"
 
-          # escape special chars for JSON output
+          # Add ARM64 Major/Minor pull examples if versions exist
+          if [[ "$image_base_name" == "python-base" ]]; then
+              if [ -n "$py_major_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Major - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    ```\n' "$py_major_arm64" "$registry" "$repo_name" "$image_base_name" "$py_major_arm64"); fi
+              if [ -n "$py_minor_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Minor - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    ```\n\n' "$py_minor_arm64" "$registry" "$repo_name" "$image_base_name" "$py_minor_arm64"); fi
+          elif [[ "$image_base_name" == "nodejs-base" ]]; then
+              if [ -n "$node_major_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Major - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    ```\n' "$node_major_arm64" "$registry" "$repo_name" "$image_base_name" "$node_major_arm64"); fi
+              if [ -n "$node_minor_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Minor - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    ```\n\n' "$node_minor_arm64" "$registry" "$repo_name" "$image_base_name" "$node_minor_arm64"); fi
+          elif [[ "$image_base_name" == "openjdk17-base" ]]; then
+              if [ -n "$jdk_major_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Major - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    ```\n' "$jdk_major_arm64" "$registry" "$repo_name" "$image_base_name" "$jdk_major_arm64"); fi
+              if [ -n "$jdk_minor_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Minor - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    ```\n\n' "$jdk_minor_arm64" "$registry" "$repo_name" "$image_base_name" "$jdk_minor_arm64"); fi
+          fi
+
+          # Append pull examples to the main body
+          body="${body}${pull_examples}"
+          # Set the raw body content as an environment variable for the next step
+          echo "Setting BODY_TEXT environment variable..."
           echo "BODY_TEXT<<EOF" >> $GITHUB_ENV
           echo "$body" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
-          # read it back escaped and set the output
-          echo "body=$(python -c 'import json, os; print(json.dumps(os.environ["BODY_TEXT"]))')" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: "Release ${{ steps.parse_tag_release.outputs.image_base_name }} v${{ steps.parse_tag_release.outputs.version }}"
-          # Read the raw body directly from the environment variable
           body: ${{ env.BODY_TEXT }}
-
           draft: false
           prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # BODY_TEXT is automatically available here from the previous step's GITHUB_ENV
