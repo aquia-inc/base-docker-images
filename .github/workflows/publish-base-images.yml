@@ -155,6 +155,7 @@ jobs:
             else
               echo "output_file_path=" >> $GITHUB_OUTPUT
             fi
+            pwd
             ls -al
 
       - name: Upload versions artifact (from amd64)
