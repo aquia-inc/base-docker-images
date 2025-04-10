@@ -136,7 +136,8 @@ jobs:
         uses: xom9ikk/dotenv@v2.3.0
         with:
           mode: versions
-          path: /tmp/.env.versions.${{ steps.sanitize_platform.outputs.suffix }}
+          path: /tmp/
+          filename: .env.versions.${{ steps.sanitize_platform.outputs.suffix }}
 
 
       - name: Extract metadata (tags, labels) for Docker
