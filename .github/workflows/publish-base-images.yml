@@ -51,7 +51,7 @@ jobs:
               echo "image=$image"
               echo "version=$version"
           else
-              echo "Image name and version could not be parsed"
+              echo "Image name and version could not be parsed from TAG='${{ env.TAG }}'"
               exit 1
           fi
 
@@ -65,6 +65,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Sanitize platform name for tag
+        id: sanitize_platform
+        run: echo "tag_suffix=$(echo ${{ matrix.platform }} | tr '/' '-')" >> $GITHUB_OUTPUT
+
       - name: Build Docker Image for ${{ matrix.platform }} (Test)
         id: build_test
         uses: docker/build-push-action@v6
@@ -73,7 +77,7 @@ jobs:
           file: Dockerfile.${{ steps.parse_tag.outputs.image }}
           platforms: ${{ matrix.platform }}
           load: true
-          tags: ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test-${{ matrix.platform }}
+          tags: ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test-${{ steps.sanitize_platform.outputs.tag_suffix }}
           cache-from: type=gha,scope=${{ github.repository }}-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ matrix.platform }}
 
@@ -81,7 +85,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
-          image-ref: ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test-${{ matrix.platform }}
+          image-ref: ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test-${{ steps.sanitize_platform.outputs.tag_suffix }}
           format: "sarif"
           output: "trivy-results-${{ matrix.platform }}.sarif"
           exit-code: "1"
@@ -95,11 +99,12 @@ jobs:
       #   with:
       #     sarif_file: "trivy-results-${{ matrix.platform }}.sarif"
       #     category: trivy-${{ matrix.platform }}
-      
+
       - name: Get installed package versions for ${{ matrix.platform }}
         run: |
           image_name="${{ steps.parse_tag.outputs.image }}"
-          test_tag="${{ github.repository }}/${image_name}:test-${{ matrix.platform }}"
+          sanitized_platform=$(echo "${{ matrix.platform }}" | tr '/' '-')
+          test_tag="${{ github.repository }}/${image_name}:test-${sanitized_platform}"
           output_file=".env.versions.${{ matrix.platform }}"
 
           if [[ $image_name == 'python-base' || $image_name == 'nodejs-base' || $image_name == 'openjdk17-base' ]]; then
@@ -141,7 +146,7 @@ jobs:
             latest=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
           tags: |
             type=semver,pattern={{version}},value=${{ steps.parse_tag.outputs.version }},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
-            type=raw,value=dev-${{ matrix.platform }}-${{ github.sha }},enable=${{ github.event_name != 'push' || github.ref_type != 'tag' }}
+            type=raw,value=dev-${{ steps.sanitize_platform.outputs.tag_suffix }}-${{ github.sha }},enable=${{ github.event_name != 'push' || github.ref_type != 'tag' }}
           labels: |
             org.opencontainers.image.title=${{ steps.parse_tag.outputs.image }} (${{ matrix.platform }})
             org.opencontainers.image.description=Base image for ${{ steps.parse_tag.outputs.image }} (${{ matrix.platform }})
