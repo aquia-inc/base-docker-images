@@ -87,7 +87,7 @@ jobs:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test-${{ steps.sanitize_platform.outputs.tag_suffix }}
           format: "sarif"
-          output: "trivy-results-${{ matrix.platform }}.sarif"
+          output: "trivy-results-${{ steps.sanitize_platform.outputs.tag_suffix }}.sarif"
           exit-code: "1"
           ignore-unfixed: true
           vuln-type: "os,library"
