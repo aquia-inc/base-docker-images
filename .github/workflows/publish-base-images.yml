@@ -23,10 +23,10 @@ jobs:
       matrix:
         platform: [linux/amd64, linux/arm64]
     permissions:
-      contents: write # Needed for checkout, potentially release creation if done here
-      packages: write # Needed to push to GHCR
-      security-events: write # Needed for Trivy SARIF upload
-      actions: read # Needed for cache actions? (Often implicitly granted)
+      contents: write
+      packages: write
+      security-events: write
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -62,7 +62,6 @@ jobs:
           else
               # Not a release tag - likely main branch push or PR default
               echo "Not a release tag build (TAG='${{ env.TAG }}'). Setting default values for test build."
-              # Use 'python-base' as default, similar to PR logic, so test build can find Dockerfile
               default_image="python-base"
               default_version="dev" # Use 'dev' for non-release builds
               echo "image_base_name=$default_image" >> $GITHUB_OUTPUT
@@ -87,7 +86,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # --- This build step runs on ALL triggers for testing ---
       - name: Build Docker Image for ${{ matrix.platform }} (Test)
         id: build_test
         uses: docker/build-push-action@v6
@@ -100,7 +98,6 @@ jobs:
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
 
-      # --- This scan step runs on ALL triggers ---
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
         uses: aquasecurity/trivy-action@master
         with:
@@ -108,12 +105,11 @@ jobs:
           image-ref: ${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}:test
           format: "sarif"
           output: "trivy-results-${{ steps.sanitize_platform.outputs.suffix }}.sarif"
-          exit-code: "1" # Fail the build if vulnerabilities are found (respecting severity/ignore-unfixed)
+          exit-code: "1"
           ignore-unfixed: true
           vuln-type: "os,library"
-          severity: "CRITICAL,HIGH,MEDIUM" # Scan for Medium and above
+          severity: "CRITICAL,HIGH,MEDIUM"
 
-      # --- This extraction step runs on ALL triggers (if image type matches) ---
       - name: Get installed package versions for ${{ matrix.platform }}
         id: get_versions
         run: |
@@ -123,30 +119,26 @@ jobs:
             output_file="env.versions.${{ steps.sanitize_platform.outputs.suffix }}"
             echo "Output file: $output_file"
             echo "Test tag: $test_tag"
-            extraction_status="false" # Default to false
+            extraction_status="false"
 
-            # Check if the image is one that should have a versions file
             if [[ "$image_base_name" == "python-base" || "$image_base_name" == "nodejs-base" || "$image_base_name" == "openjdk17-base" ]]; then
                 echo "Attempting to extract versions from $test_tag for $platform_image_name"
-                # Attempt extraction. Use 'sh -c' to better control exit code based on 'cat' success.
                 if docker run --rm --platform ${{ matrix.platform }} "$test_tag" sh -c 'cat /tmp/versions.txt && exit 0 || exit 1' > "$output_file"; then
-                    # Check if the created file actually has content
                     if [ -s "$output_file" ]; then
                         echo "Versions extracted successfully to $output_file"
                         extraction_status="true"
                     else
                         echo "Warning: Command succeeded but extracted versions file '$output_file' is empty. Treating as failure."
-                        rm -f "$output_file" # Remove empty file
+                        rm -f "$output_file"
                     fi
                 else
                     echo "Warning: Failed to execute 'cat /tmp/versions.txt' in container $test_tag. Exit code: $?"
-                    rm -f "$output_file" # Ensure removal on error
+                    rm -f "$output_file"
                 fi
             else
                 echo "No version extraction needed for $platform_image_name."
             fi
 
-            # Set outputs
             echo "extraction_success=$extraction_status" >> $GITHUB_OUTPUT
             if [[ "$extraction_status" == "true" ]]; then
               echo "output_file_path=$output_file" >> $GITHUB_OUTPUT
@@ -156,21 +148,22 @@ jobs:
             pwd
             ls -al
 
-      # --- MODIFIED: Upload artifact ONLY on release tag pushes ---
-      - name: Upload versions artifact (from amd64)
+      # --- Upload artifact ONLY on release tag pushes (for EITHER platform) ---
+      - name: Upload versions artifact for ${{ matrix.platform }}
         uses: actions/upload-artifact@v4
-        # Only upload if extraction succeeded on amd64 AND it's a release tag push
-        if: matrix.platform == 'linux/amd64' && steps.get_versions.outputs.extraction_success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
+        # Only upload if extraction succeeded FOR THIS PLATFORM and it's a release tag push
+        if: steps.get_versions.outputs.extraction_success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
         with:
-          name: versions-file-amd64
-          path: env.versions.linux-amd64
+          # Create a unique artifact name per platform
+          name: versions-file-${{ steps.sanitize_platform.outputs.suffix }}
+          # Use the output path which already includes the platform suffix
+          path: ${{ steps.get_versions.outputs.output_file_path }}
           retention-days: 1
-          if-no-files-found: error
+          if-no-files-found: error # Fail if the file is missing
 
       # --- Local .env steps are less critical now, but kept for potential local debugging ---
-      - name: Check if env.versions file exists (Local check before dotenv)
+      - name: Check if env.versions file exists (Local check)
         id: check_env_file
-        # Run if extraction succeeded (on any trigger type)
         if: steps.get_versions.outputs.extraction_success == 'true'
         run: |
           if [ -f "env.versions.${{ steps.sanitize_platform.outputs.suffix }}" ]; then
@@ -178,9 +171,7 @@ jobs:
             echo "Exists"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Does not exist (unexpected)"
-            # Exit 1 if this step running implies the file MUST exist
-            exit 1
+            echo "Does not exist"
           fi
 
       - name: Rename versions file to .env (Local Env)
@@ -192,20 +183,16 @@ jobs:
         id: dotenv_local
         uses: xom9ikk/dotenv@v2.3.0
         with:
-          path: . # Read the renamed .env file in the current directory
+          path: .
 
-      # --- Metadata generation runs on ALL triggers, but tags differ ---
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5.7.0
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}
           tags: |
-            # Add SemVer tag ONLY for release tag pushes
             type=semver,pattern={{version}},value=${{ steps.parse_tag.outputs.version }},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
-            # Add latest tag ONLY for release tag pushes
             type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
-            # Add dev tag ONLY for non-release pushes/PRs
             type=raw,value=dev-${{ github.sha }},enable=${{ github.event_name != 'push' || github.ref_type != 'tag' }}
           labels: |
             org.opencontainers.image.title=${{ steps.image_name.outputs.platform_image_name }} (${{ matrix.platform }})
@@ -214,40 +201,33 @@ jobs:
             org.opencontainers.image.build-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             org.opencontainers.image.architecture=${{ matrix.platform }}
 
-      # --- This build and push step runs ONLY on release tag pushes ---
       - name: Build and push Docker image for ${{ matrix.platform }}
         id: docker_build
         uses: docker/build-push-action@v6
-        # Only push if it's a push event to a tag (i.e., a release)
         if: github.event_name == 'push' && github.ref_type == 'tag'
         with:
           pull: true
           file: Dockerfile.${{ steps.parse_tag.outputs.image_base_name }}
           push: true
           platforms: ${{ matrix.platform }}
-          # Use tags and labels generated by the metadata action
-          # On tag pushes, this includes semver and latest. On other pushes, it's empty.
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
 
-      # --- This output step runs ONLY on release tag pushes ---
       - name: Output SHA256 digest for ${{ matrix.platform }}
         if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
           echo "SHA256 digest for ${{ steps.image_name.outputs.platform_image_name }}: ${{ steps.docker_build.outputs.digest }}"
           ls -al
 
-  # --- This entire job runs ONLY on release tag pushes ---
   create_release:
     runs-on: ubuntu-latest
     needs: publish_image
-    # Condition remains the same: only run on tag pushes where publish_image succeeded
     if: github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success'
     permissions:
-      contents: write # Needed to create the GitHub Release
-      actions: read # Needed to download artifacts
+      contents: write
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -255,11 +235,10 @@ jobs:
       - name: Extract Image Base Name and Version from Tag for Release
         id: parse_tag_release
         run: |
-          tag_ref="${{ github.ref }}" # e.g., refs/tags/release/python-base/v1.0.0
-          # Regex to capture base name and version from the specific release tag format
-          if [[ $tag_ref =~ refs/tags/release/([^/]+)/v([0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?)$ ]]; then # Added optional pre-release part
+          tag_ref="${{ github.ref }}"
+          if [[ $tag_ref =~ refs/tags/release/([^/]+)/v([0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?)$ ]]; then
               image_base_name="${BASH_REMATCH[1]}"
-              version="${BASH_REMATCH[2]}" # Includes pre-release part if present
+              version="${BASH_REMATCH[2]}"
               echo "Parsed from release tag: image_base_name=$image_base_name, version=$version"
               echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
               echo "version=$version" >> $GITHUB_OUTPUT
@@ -269,41 +248,29 @@ jobs:
               exit 1
           fi
 
-      - name: Download versions artifact
-        id: download_artifact
-        # Only attempt download if the image base name is one expected to have versions
+      - name: Download AMD64 versions artifact
+        id: download_artifact_amd64
         if: |
           steps.parse_tag_release.outputs.image_base_name == 'python-base' ||
           steps.parse_tag_release.outputs.image_base_name == 'nodejs-base' ||
           steps.parse_tag_release.outputs.image_base_name == 'openjdk17-base'
         uses: actions/download-artifact@v4
         with:
-          name: versions-file-amd64
+          name: versions-file-linux-amd64
           path: .
 
-      - name: Prepare .env file from downloaded artifact
-        # Only run if the download step was successful
-        if: steps.download_artifact.outcome == 'success'
-        run: |
-          if [ -f "env.versions.linux-amd64" ]; then
-            cp env.versions.linux-amd64 .env
-            echo "Copied env.versions.linux-amd64 to .env"
-          else
-            echo "Warning: Expected file env.versions.linux-amd64 not found after download."
-            # Create empty .env to prevent dotenv failure
-            touch .env
-          fi
-
-      - name: Read downloaded package versions
-        id: dotenv_release
-        # Run if download was successful OR if it failed but we created an empty .env
+      - name: Download ARM64 versions artifact
+        id: download_artifact_arm64
         if: |
           steps.parse_tag_release.outputs.image_base_name == 'python-base' ||
           steps.parse_tag_release.outputs.image_base_name == 'nodejs-base' ||
           steps.parse_tag_release.outputs.image_base_name == 'openjdk17-base'
-        uses: xom9ikk/dotenv@v2.3.0
+        uses: actions/download-artifact@v4
         with:
-          path: . # Read the .env file
+          name: versions-file-linux-arm64
+          path: .
+
+      # Removed Prepare .env and Read downloaded package versions (dotenv) steps
 
       - name: Create GitHub Release Body
         id: release_body
@@ -312,6 +279,49 @@ jobs:
           version_tag="${{ steps.parse_tag_release.outputs.version }}"
           repo_name="${{ github.repository }}"
           registry="${{ env.REGISTRY }}"
+
+          # Function to extract value from a versions file
+          # Usage: get_version_value "filename" "key_name"
+          get_version_value() {
+            local file="$1"
+            local key="$2"
+            if [ -f "$file" ]; then
+              grep "^${key}=" "$file" | cut -d'=' -f2
+            fi
+          }
+
+          # Initialize version variables
+          py_major_amd64="" py_minor_amd64=""
+          py_major_arm64="" py_minor_arm64=""
+          node_major_amd64="" node_minor_amd64=""
+          node_major_arm64="" node_minor_arm64=""
+          jdk_major_amd64="" jdk_minor_amd64=""
+          jdk_major_arm64="" jdk_minor_arm64=""
+
+          # Read versions if files exist
+          if [[ "${{ steps.download_artifact_amd64.outcome }}" == "success" ]]; then
+              echo "Reading AMD64 versions file..."
+              py_major_amd64=$(get_version_value "env.versions.linux-amd64" "python_major_tag")
+              py_minor_amd64=$(get_version_value "env.versions.linux-amd64" "python_minor_tag")
+              node_major_amd64=$(get_version_value "env.versions.linux-amd64" "nodejs_major_tag")
+              node_minor_amd64=$(get_version_value "env.versions.linux-amd64" "nodejs_minor_tag")
+              jdk_major_amd64=$(get_version_value "env.versions.linux-amd64" "openjdk_major_tag")
+              jdk_minor_amd64=$(get_version_value "env.versions.linux-amd64" "openjdk_minor_tag")
+          else
+              echo "AMD64 versions artifact not downloaded or download failed."
+          fi
+
+          if [[ "${{ steps.download_artifact_arm64.outcome }}" == "success" ]]; then
+              echo "Reading ARM64 versions file..."
+              py_major_arm64=$(get_version_value "env.versions.linux-arm64" "python_major_tag")
+              py_minor_arm64=$(get_version_value "env.versions.linux-arm64" "python_minor_tag")
+              node_major_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs_major_tag")
+              node_minor_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs_minor_tag")
+              jdk_major_arm64=$(get_version_value "env.versions.linux-arm64" "openjdk_major_tag")
+              jdk_minor_arm64=$(get_version_value "env.versions.linux-arm64" "openjdk_minor_tag")
+          else
+              echo "ARM64 versions artifact not downloaded or download failed."
+          fi
 
           # Start with the base body
           body=$(cat <<EOF
@@ -332,55 +342,45 @@ jobs:
           EOF
           )
 
-          # Conditionally add specific version tags if dotenv step succeeded AND file was found
-          if [[ "${{ steps.dotenv_release.outcome }}" == "success" && -f "env.versions.linux-amd64" ]]; then
-            specific_tags_section=""
-            if [[ "$image_base_name" == "python-base" ]]; then
-              py_major="$python_major_tag"
-              py_minor="$python_minor_tag"
-              if [ -n "$py_major" ] && [ -n "$py_minor" ]; then
-                specific_tags_section=$(cat <<EOF
+          # Conditionally add specific version tags section
+          specific_tags_section=""
+          if [[ "$image_base_name" == "python-base" ]]; then
+            if [ -n "$py_major_amd64" ] || [ -n "$py_major_arm64" ]; then # Only add section if we have data
+              specific_tags_section=$(cat <<EOF
 
-          **Python Version Tags (from AMD64 build):**
-          *   Major: \`${py_major}\`
-          *   Minor: \`${py_minor}\`
+          **Python Version Tags:**
+          *   AMD64: Major=\`${py_major_amd64:-N/A}\`, Minor=\`${py_minor_amd64:-N/A}\`
+          *   ARM64: Major=\`${py_major_arm64:-N/A}\`, Minor=\`${py_minor_arm64:-N/A}\`
           EOF
-                )
-              else
-                echo "Warning: Python tags (python_major_tag, python_minor_tag) not found in environment variables from .env file."
-              fi
-            elif [[ "$image_base_name" == "nodejs-base" ]]; then
-              node_major="$nodejs_major_tag"
-              node_minor="$nodejs_minor_tag"
-              if [ -n "$node_major" ] && [ -n "$node_minor" ]; then
-                specific_tags_section=$(cat <<EOF
-
-          **Node.js Version Tags (from AMD64 build):**
-          *   Major: \`${node_major}\`
-          *   Minor: \`${node_minor}\`
-          EOF
-                )
-              else
-                echo "Warning: Node.js tags (nodejs_major_tag, nodejs_minor_tag) not found in environment variables from .env file."
-              fi
-            elif [[ "$image_base_name" == "openjdk17-base" ]]; then
-              jdk_major="$openjdk_major_tag"
-              jdk_minor="$openjdk_minor_tag"
-              if [ -n "$jdk_major" ] && [ -n "$jdk_minor" ]; then
-                specific_tags_section=$(cat <<EOF
-
-          **OpenJDK Version Tags (from AMD64 build):**
-          *   Major: \`${jdk_major}\`
-          *   Minor: \`${jdk_minor}\`
-          EOF
-                )
-              else
-                echo "Warning: OpenJDK tags (openjdk_major_tag, openjdk_minor_tag) not found in environment variables from .env file."
-              fi
+              )
             fi
+          elif [[ "$image_base_name" == "nodejs-base" ]]; then
+            if [ -n "$node_major_amd64" ] || [ -n "$node_major_arm64" ]; then
+              specific_tags_section=$(cat <<EOF
+
+          **Node.js Version Tags:**
+          *   AMD64: Major=\`${node_major_amd64:-N/A}\`, Minor=\`${node_minor_amd64:-N/A}\`
+          *   ARM64: Major=\`${node_major_arm64:-N/A}\`, Minor=\`${node_minor_arm64:-N/A}\`
+          EOF
+              )
+            fi
+          elif [[ "$image_base_name" == "openjdk17-base" ]]; then
+            if [ -n "$jdk_major_amd64" ] || [ -n "$jdk_major_arm64" ]; then
+              specific_tags_section=$(cat <<EOF
+
+          **OpenJDK Version Tags:**
+          *   AMD64: Major=\`${jdk_major_amd64:-N/A}\`, Minor=\`${jdk_minor_amd64:-N/A}\`
+          *   ARM64: Major=\`${jdk_major_arm64:-N/A}\`, Minor=\`${jdk_minor_arm64:-N/A}\`
+          EOF
+              )
+            fi
+          fi
+
+          # Append the specific tags section if it was generated
+          if [ -n "$specific_tags_section" ]; then
             body="${body}${specific_tags_section}"
           else
-             echo "Skipping specific version tags: dotenv outcome (${{ steps.dotenv_release.outcome }}) or AMD64 versions file missing."
+            echo "No specific version tags found or extracted for $image_base_name."
           fi
 
           # Add pull examples
@@ -418,11 +418,10 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }} # Use the tag that triggered the workflow (e.g., release/python-base/v1.0.0)
+          tag_name: ${{ github.ref_name }}
           name: "Release ${{ steps.parse_tag_release.outputs.image_base_name }} v${{ steps.parse_tag_release.outputs.version }}"
-          body: ${{ steps.release_body.outputs.body }} # Use the JSON-escaped body from the previous step
+          body: ${{ steps.release_body.outputs.body }}
           draft: false
-          prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }} # Mark as pre-release if version contains '-'
+          prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
