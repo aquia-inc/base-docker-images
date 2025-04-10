@@ -104,7 +104,7 @@ jobs:
           image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
           platform_image_name="${{ steps.image_name.outputs.platform_image_name }}"
           test_tag="${{ github.repository }}/${platform_image_name}:test"
-          output_file="/tmp/.env.versions.${{ steps.sanitize_platform.outputs.suffix }}"
+          output_file=".env.versions"
           echo "Output file: $output_file"
           echo "Test tag: $test_tag"
 
@@ -124,7 +124,7 @@ jobs:
       - name: Check if .env.versions file exists
         id: check_env_file
         run: |
-          if [ -f "/tmp/.env.versions.${{ steps.sanitize_platform.outputs.suffix }}" ]; then
+          if [ -f ".env.versions" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
@@ -136,8 +136,7 @@ jobs:
         uses: xom9ikk/dotenv@v2.3.0
         with:
           mode: versions
-          path: /tmp/
-          filename: .env.versions.${{ steps.sanitize_platform.outputs.suffix }}
+          path: .env.versions
 
 
       - name: Extract metadata (tags, labels) for Docker
