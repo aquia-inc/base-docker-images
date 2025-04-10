@@ -32,3 +32,4 @@ RUN apk del libcurl-openssl4 curl
 
 USER nonroot
 RUN python3 --version
+
