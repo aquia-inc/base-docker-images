@@ -234,12 +234,17 @@ jobs:
           name: versions-file-amd64
           path: .
 
+      - name: Rename downloaded artifact to .env
+        if: steps.download_artifact.outcome == 'success'
+        run: mv .env.versions.linux-amd64 .env
+  
+
       - name: Read downloaded package versions
         id: dotenv_release
         if: steps.download_artifact.outcome == 'success'
         uses: xom9ikk/dotenv@v2.3.0
         with:
-          path: ".env.versions.linux-amd64"
+          path: .
 
       - name: Create GitHub Release Body
         id: release_body
