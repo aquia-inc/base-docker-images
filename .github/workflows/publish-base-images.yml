@@ -164,7 +164,7 @@ jobs:
         if: matrix.platform == 'linux/amd64' && steps.get_versions.outputs.extraction_success == 'true'
         with:
           name: versions-file-amd64
-          path: .env.versions.linux-amd64
+          path: /home/runner/work/base-docker-images/base-docker-images/.env.versions.linux-amd64
           retention-days: 1
           if-no-files-found: error # Fail if the expected file isn't there
 
