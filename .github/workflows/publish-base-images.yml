@@ -173,8 +173,11 @@ jobs:
         run: |
           if [ -f ".env.versions.${{ steps.sanitize_platform.outputs.suffix }}" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Exists"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Does not exist"
+            exit 1
           fi
       - name: Rename versions file to .env (Local Env)
         if: steps.check_env_file.outputs.exists == 'true'
