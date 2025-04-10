@@ -166,7 +166,7 @@ jobs:
           name: versions-file-amd64
           path: .env.versions.linux-amd64
           retention-days: 1
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Check if .env.versions file exists (Local check before dotenv)
         id: check_env_file
