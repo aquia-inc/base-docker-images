@@ -111,30 +111,48 @@ jobs:
       - name: Get installed package versions for ${{ matrix.platform }}
         id: get_versions
         run: |
-          image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
-          platform_image_name="${{ steps.image_name.outputs.platform_image_name }}"
-          test_tag="${{ github.repository }}/${platform_image_name}:test"
-          output_file=".env.versions.${{ steps.sanitize_platform.outputs.suffix }}"
-          echo "Output file: $output_file"
-          echo "Test tag: $test_tag"
-
-          # Check if the image is one that should have a versions file
-          if [[ "$image_base_name" == "python-base" || "$image_base_name" == "nodejs-base" || "$image_base_name" == "openjdk17-base" ]]; then
-              echo "Extracting versions from $test_tag for $platform_image_name"
+            image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
+            platform_image_name="${{ steps.image_name.outputs.platform_image_name }}"
+            test_tag="${{ github.repository }}/${platform_image_name}:test"
+            output_file=".env.versions.${{ steps.sanitize_platform.outputs.suffix }}"
+            echo "Output file: $output_file"
+            echo "Test tag: $test_tag"
+            extraction_status="false" # Default to false
+  
+            # Check if the image is one that should have a versions file
+            if [[ "$image_base_name" == "python-base" || "$image_base_name" == "nodejs-base" || "$image_base_name" == "openjdk17-base" ]]; then
+                echo "Attempting to extract versions from $test_tag for $platform_image_name"
+                # Attempt extraction. Use 'sh -c' to better control exit code based on 'cat' success.
+                if docker run --rm --platform ${{ matrix.platform }} "$test_tag" sh -c 'cat /tmp/versions.txt && exit 0 || exit 1' > "$output_file"; then
+                    # Check if the created file actually has content
+                    if [ -s "$output_file" ]; then
+                        echo "Versions extracted successfully to $output_file"
+                        extraction_status="true"
+                    else
+                        echo "Warning: Command succeeded but extracted versions file '$output_file' is empty. Treating as failure."
+                        # Keep extraction_status="false"
+                        # Optionally remove the empty file: rm "$output_file"
+                    fi
+                else
+                    echo "Warning: Failed to execute 'cat /tmp/versions.txt' in container $test_tag. Exit code: $?"
+                    # Ensure the potentially partially created/empty file is removed on error
+                    rm -f "$output_file"
+                    # Keep extraction_status="false"
+                fi
+            else
+                echo "No version extraction needed for $platform_image_name."
+                # Keep extraction_status="false"
+            fi
+  
+            # Set outputs
+            echo "extraction_success=$extraction_status" >> $GITHUB_OUTPUT
+            # Set path only if extraction was truly successful and file should exist
+            if [[ "$extraction_status" == "true" ]]; then
               echo "output_file_path=$output_file" >> $GITHUB_OUTPUT
-              if docker run --rm --platform ${{ matrix.platform }} "$test_tag" cat /tmp/versions.txt > "$output_file"; then
-                echo "Versions extracted to $output_file"
-                echo "extraction_success=true" >> $GITHUB_OUTPUT
-              else
-                echo "Warning: Failed to extract versions from $test_tag. Creating empty file."
-                touch "$output_file"
-                echo "extraction_success=false" >> $GITHUB_OUTPUT
-              fi
-          else
-              echo "No version extraction needed for $platform_image_name."
+            else
               echo "output_file_path=" >> $GITHUB_OUTPUT
-              echo "extraction_success=false" >> $GITHUB_OUTPUT
-          fi
+            fi
+  
 
       - name: Upload versions artifact (from amd64)
         uses: actions/upload-artifact@v4
