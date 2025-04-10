@@ -37,27 +37,33 @@ jobs:
             ${{ runner.os }}-trivy-db-${{ matrix.platform }}
             ${{ runner.os }}-trivy-db-
 
-      - name: Sanitize platform name for tag
+      - name: Sanitize platform name for tag/name suffix
         id: sanitize_platform
-        run: echo "tag_suffix=$(echo ${{ matrix.platform }} | tr '/' '-')" >> $GITHUB_OUTPUT              
+        run: echo "suffix=$(echo ${{ matrix.platform }} | tr '/' '-')" >> $GITHUB_OUTPUT
 
-      - name: Extract Image and Version from Tag
+      - name: Extract Image Base Name and Version from Tag
         id: parse_tag
         run: |
           match=$(echo ${{ env.TAG }} | grep -oP 'release/([^/]+)/v(\d+\.\d+\.\d+)$' | sed 's/release\///')
           echo "match=$match"
           if [[ $match =~ ^([^/]+)/v(.+)$ ]]; then
               echo "Match found"
-              image="${BASH_REMATCH[1]}"
+              image_base_name="${BASH_REMATCH[1]}"
               version="${BASH_REMATCH[2]}"
-              echo "image=$image" >> $GITHUB_OUTPUT
+              echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
               echo "version=$version" >> $GITHUB_OUTPUT
-              echo "image=$image"
+              echo "image_base_name=$image_base_name"
               echo "version=$version"
           else
-              echo "Image name and version could not be parsed from TAG='${{ env.TAG }}'"
+              echo "Image base name and version could not be parsed from TAG='${{ env.TAG }}'"
               exit 1
           fi
+
+      - name: Construct Platform-Specific Image Name
+        id: image_name
+        run: |
+          echo "platform_image_name=${{ steps.parse_tag.outputs.image_base_name }}-${{ steps.sanitize_platform.outputs.suffix }}" >> $GITHUB_OUTPUT
+          echo "Platform Image Name: ${{ steps.parse_tag.outputs.image_base_name }}-${{ steps.sanitize_platform.outputs.suffix }}"
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3.4.0
@@ -74,57 +80,48 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           pull: true
-          file: Dockerfile.${{ steps.parse_tag.outputs.image }}
+          file: Dockerfile.${{ steps.parse_tag.outputs.image_base_name }}
           platforms: ${{ matrix.platform }}
           load: true
-          tags: ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test-${{ steps.sanitize_platform.outputs.tag_suffix }}
-          cache-from: type=gha,scope=${{ github.repository }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ matrix.platform }}
+          tags: ${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}:test
+          cache-from: type=gha,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
-          image-ref: ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test-${{ steps.sanitize_platform.outputs.tag_suffix }}
+          image-ref: ${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}:test
           format: "sarif"
-          output: "trivy-results-${{ steps.sanitize_platform.outputs.tag_suffix }}.sarif"
+          output: "trivy-results-${{ steps.sanitize_platform.outputs.suffix }}.sarif"
           exit-code: "1"
           ignore-unfixed: true
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH,MEDIUM"
 
-      # - name: Upload Trivy scan results to GitHub Security tab
-      #   uses: github/codeql-action/upload-sarif@v3
-      #   if: always()
-      #   with:
-      #     sarif_file: "trivy-results-${{ matrix.platform }}.sarif"
-      #     category: trivy-${{ matrix.platform }}
-
       - name: Get installed package versions for ${{ matrix.platform }}
         run: |
-          image_name="${{ steps.parse_tag.outputs.image }}"
-          test_tag="${{ github.repository }}/${image_name}:test-${{ steps.sanitize_platform.outputs.tag_suffix }}"
-          output_file=".env.versions.${{ steps.sanitize_platform.outputs.tag_suffix }}"
+          image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
+          platform_image_name="${{ steps.image_name.outputs.platform_image_name }}"
+          test_tag="${{ github.repository }}/${platform_image_name}:test"
+          output_file=".env.versions"
           echo "Output file: $output_file"
           echo "Test tag: $test_tag"
 
-          if [[ $image_name == 'python-base' || $image_name == 'nodejs-base' || $image_name == 'openjdk17-base' ]]; then
-              echo "Extracting versions from $test_tag for $image_name"
-              if docker run --rm --platform ${{ matrix.platform }} "$test_tag" cat /tmp/versions.txt > "$output_file"; then
-                echo "Versions extracted to $output_file"
-              else
-                echo "Warning: Failed to extract versions from $test_tag. Creating empty file."
-                touch "$output_file"
-              fi
-          else
-              echo "No version extraction needed for $image_name. Creating empty file."
-              touch "$output_file"
-          fi
+          case "${{ steps.parse_tag.outputs.image }}" in 
+            python-base|nodejs-base|openjdk17-base)
+              docker run --rm ${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:test cat /tmp/versions.txt > .env.versions
+              ;;
+            *)
+              touch .env.versions
+              ;;
+          esac
+
 
       - name: Check if .env.versions file exists
         id: check_env_file
         run: |
-          if [ -f .env.versions.${{ matrix.platform }} ]; then
+          if [ -f ".env.versions" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
@@ -136,21 +133,19 @@ jobs:
         uses: xom9ikk/dotenv@v2.3.0
         with:
           mode: versions
-          path: .env.versions.${{ matrix.platform }}
+
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5.7.0
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag.outputs.image }}
-          flavor: |
-            latest=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}
           tags: |
             type=semver,pattern={{version}},value=${{ steps.parse_tag.outputs.version }},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
-            type=raw,value=dev-${{ steps.sanitize_platform.outputs.tag_suffix }}-${{ github.sha }},enable=${{ github.event_name != 'push' || github.ref_type != 'tag' }}
+            type=raw,value=dev-${{ github.sha }},enable=${{ github.event_name != 'push' || github.ref_type != 'tag' }}
           labels: |
-            org.opencontainers.image.title=${{ steps.parse_tag.outputs.image }} (${{ matrix.platform }})
-            org.opencontainers.image.description=Base image for ${{ steps.parse_tag.outputs.image }} (${{ matrix.platform }})
+            org.opencontainers.image.title=${{ steps.image_name.outputs.platform_image_name }} (${{ matrix.platform }})
+            org.opencontainers.image.description=Base image for ${{ steps.parse_tag.outputs.image_base_name }} targeting ${{ matrix.platform }}
             org.opencontainers.image.vendor=Aquia Inc
             org.opencontainers.image.build-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             org.opencontainers.image.architecture=${{ matrix.platform }}
@@ -161,18 +156,18 @@ jobs:
         if: github.event_name == 'push' && github.ref_type == 'tag'
         with:
           pull: true
-          file: Dockerfile.${{ steps.parse_tag.outputs.image }}
+          file: Dockerfile.${{ steps.parse_tag.outputs.image_base_name }}
           push: true
           platforms: ${{ matrix.platform }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ github.repository }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ matrix.platform }}
+          cache-from: type=gha,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
 
       - name: Output SHA256 digest for ${{ matrix.platform }}
         if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
-          echo "SHA256 digest for ${{ matrix.platform }}: ${{ steps.docker_build.outputs.digest }}"
+          echo "SHA256 digest for ${{ steps.image_name.outputs.platform_image_name }}: ${{ steps.docker_build.outputs.digest }}"
 
   create_release:
     runs-on: ubuntu-latest
@@ -184,15 +179,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract Image and Version from Tag
-        id: parse_tag
+      - name: Extract Image Base Name and Version from Tag for Release
+        id: parse_tag_release
         run: |
           tag_ref="${{ github.ref }}"
           if [[ $tag_ref =~ refs/tags/release/([^/]+)/v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-              image="${BASH_REMATCH[1]}"
+              image_base_name="${BASH_REMATCH[1]}"
               version="${BASH_REMATCH[2]}"
-              echo "Parsed from release tag: image=$image, version=$version"
-              echo "image=$image" >> $GITHUB_OUTPUT
+              echo "Parsed from release tag: image_base_name=$image_base_name, version=$version"
+              echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
               echo "version=$version" >> $GITHUB_OUTPUT
           else
               echo "Could not parse release tag format from ref: $tag_ref"
@@ -201,48 +196,33 @@ jobs:
         env:
           TAG: ${{ github.ref }}
 
-      - name: Extract final tags for Release Notes
-        id: meta_release
-        uses: docker/metadata-action@v5.7.0
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag.outputs.image }}
-          flavor: |
-            latest=true
-          tags: |
-            type=semver,pattern={{version}},value=${{ steps.parse_tag.outputs.version }}
-
-      - name: Extracting tag names for release notes
-        id: extract_tags
-        run: |
-          tags=""
-          while read -r line; do
-            tag_name=$(echo "$line" | awk -F ':' '{print $NF}')
-            if [[ -n "$tag_name" ]]; then
-              tags="$tags$tag_name, "
-            fi
-          done <<< "${{ steps.meta_release.outputs.tags }}"
-          tags=${tags%, *}
-          echo "Extracted tags: $tags"
-          echo "tags=$tags" >> $GITHUB_OUTPUT
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: "Release ${{ github.ref_name }} / ${{ steps.parse_tag.outputs.image }}"
+          name: "Release ${{ github.ref_name }} / ${{ steps.parse_tag_release.outputs.image_base_name }}"
           body: |
-            Multi-arch Docker image `${{ steps.parse_tag.outputs.image }}` pushed for linux/amd64 and linux/arm64.
+            Platform-specific Docker images for `${{ steps.parse_tag_release.outputs.image_base_name }}` version `${{ steps.parse_tag_release.outputs.version }}` pushed.
 
-            **Published Tags:**
-            ${{ steps.extract_tags.outputs.tags }}
+            **Published Images & Tags:**
 
-            **Pull Example:**
-            ```bash
-            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:${{ steps.parse_tag.outputs.version }}
-            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag.outputs.image }}:latest
-            ```
+            *   **linux/amd64:**
+                *   Image: `${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag_release.outputs.image_base_name }}-linux-amd64`
+                *   Tag: `${{ steps.parse_tag_release.outputs.version }}`
+            *   **linux/arm64:**
+                *   Image: `${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag_release.outputs.image_base_name }}-linux-arm64`
+                *   Tag: `${{ steps.parse_tag_release.outputs.version }}`
 
-            *Note: The SHA256 digest applies to the manifest list, not individual platform images.*
+            **Pull Examples:**
+
+            *   **AMD64 / x86_64:**
+                ```bash
+                docker pull ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag_release.outputs.image_base_name }}-linux-amd64:${{ steps.parse_tag_release.outputs.version }}
+                ```
+            *   **ARM64 / aarch64:**
+                ```bash
+                docker pull ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.parse_tag_release.outputs.image_base_name }}-linux-arm64:${{ steps.parse_tag_release.outputs.version }}
+                ```
           draft: false
           prerelease: false
         env:
