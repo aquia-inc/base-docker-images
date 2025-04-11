@@ -48,26 +48,39 @@ jobs:
       - name: Extract Image Base Name and Version from Tag
         id: parse_tag
         run: |
-          # Use grep -oP for Perl-compatible regex to extract parts, sed to remove prefix
-          match=$(echo "${{ env.TAG }}" | grep -oP 'release/([^/]+)/v(\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?)' | sed 's/release\///')
-          echo "Input TAG: ${{ env.TAG }}"
-          echo "Regex match result: $match"
+          # Regex updated to capture optional build metadata (like +rebuild.timestamp)
+          # Format: release/<image-name>/v<version>[-prerelease][+buildmetadata]
+          # Example: release/python-base/v1.2.3+rebuild.20231027100000
+          regex='release/([^/]+)/v(\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?)'
+          tag_to_parse="${{ env.TAG }}"
+
+          echo "Input TAG: $tag_to_parse"
+          # Use grep -oP and sed to extract the relevant part first
+          match=$(echo "$tag_to_parse" | grep -oP "$regex" | sed 's|release/||')
+          echo "Regex match result on relevant part: $match"
+
           if [[ $match =~ ^([^/]+)/v(.+)$ ]]; then
               echo "Match found (Release Tag format)"
               image_base_name="${BASH_REMATCH[1]}"
-              version="${BASH_REMATCH[2]}" # Includes potential pre-release identifiers like -pr
+              # Version now includes potential pre-release AND build metadata
+              version="${BASH_REMATCH[2]}"
+              # Extract version *without* build metadata for potential use elsewhere if needed
+              version_no_build=$(echo "$version" | sed 's/\+.*//')
               echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
-              echo "version=$version" >> $GITHUB_OUTPUT
-              echo "Parsed: image_base_name=$image_base_name, version=$version"
+              echo "version=$version" >> $GITHUB_OUTPUT # Full version with build metadata
+              echo "version_no_build=$version_no_build" >> $GITHUB_OUTPUT # Version without build metadata
+              echo "Parsed: image_base_name=$image_base_name, version=$version, version_no_build=$version_no_build"
           else
               # Not a release tag - likely main branch push or PR default
-              echo "Not a release tag build (TAG='${{ env.TAG }}'). Setting default values for test build."
+              echo "Not a release tag build (TAG='$tag_to_parse'). Setting default values for test build."
               default_image="python-base"
               default_version="dev" # Use 'dev' for non-release builds
               echo "image_base_name=$default_image" >> $GITHUB_OUTPUT
               echo "version=$default_version" >> $GITHUB_OUTPUT
+              echo "version_no_build=$default_version" >> $GITHUB_OUTPUT
               echo "Using defaults: image_base_name=$default_image, version=$default_version"
           fi
+
 
       - name: Construct Platform-Specific Image Name
         id: image_name
@@ -93,7 +106,7 @@ jobs:
           pull: true
           file: Dockerfile.${{ steps.parse_tag.outputs.image_base_name }}
           platforms: ${{ matrix.platform }}
-          load: true # Load the image into docker daemon for testing/scanning
+          load: true 
           tags: ${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}:test
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
@@ -103,8 +116,8 @@ jobs:
         with:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}:test
-          format: "sarif"
-          output: "trivy-results-${{ steps.sanitize_platform.outputs.suffix }}.sarif"
+          format: table
+          # output: "trivy-results-${{ steps.sanitize_platform.outputs.suffix }}.sarif"
           exit-code: "1"
           ignore-unfixed: true
           vuln-type: "os,library"
@@ -419,7 +432,7 @@ jobs:
               \`\`\`bash
               docker pull $registry/$repo_name/${image_base_name}-linux-arm64:latest
               \`\`\`
- 
+
           EOF
           )
 
