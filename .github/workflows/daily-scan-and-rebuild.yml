@@ -107,10 +107,12 @@ jobs:
               # Extract FROM image name and current SHA digest from Dockerfile
               from_line=$(grep -i '^FROM' "$dockerfile" | head -n 1)
               echo "Parsing FROM line: $from_line"
-              if [[ "$from_line" =~ FROM\s*(--platform=[^ ]+\s+)?([^@ ]+)(@sha256:[a-f0-9]{64}).* ]]; then
-                 from_image_name="${BASH_REMATCH[2]}" # cgr.dev/chainguard/wolfi-base:latest
-                 current_sha_with_prefix="${BASH_REMATCH[3]}" # @sha256:de8e...
-                 current_sha_digest="${current_sha_with_prefix#@}" # sha256:de8e...
+              
+              #  Use non-capturing group for optional platform: (?:...) and lazy match for image name: (.+?) amd digest group: (@sha256:[a-f0-9]{64})
+              if [[ "$from_line" =~ FROM\s*(?:--platform=[^ ]+\s+)?(.+?)(@sha256:[a-f0-9]{64}).* ]]; then
+                 from_image_name="${BASH_REMATCH[1]}" # cgr.dev/chainguard/wolfi-base:latest
+                 current_sha_with_prefix="${BASH_REMATCH[2]}" # @sha256:0e8c...
+                 current_sha_digest="${current_sha_with_prefix#@}" # sha256:0e8c...
                  echo "Dockerfile uses base image: $from_image_name with SHA: $current_sha_digest"
 
                  echo "Querying registry for latest digest of $from_image_name:latest..."
