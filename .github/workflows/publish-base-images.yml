@@ -419,7 +419,7 @@ jobs:
               \`\`\`bash
               docker pull $registry/$repo_name/${image_base_name}-linux-arm64:latest
               \`\`\`
-
+ 
           EOF
           )
 
