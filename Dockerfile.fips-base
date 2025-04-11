@@ -22,15 +22,16 @@ WORKDIR /usr/src
 # Latest NIST-approved FIPS-enabled OpenSSL version 3.0.9 as of the time of coding this Dockerfile
 # https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4282
 # Download and build OpenSSL 3.0.9 from source
+WORKDIR /usr/src
 ENV OPENSSL_MODULES="/usr/local/ssl/lib64/ossl-modules"
-RUN wget -q https://www.openssl.org/source/openssl-3.0.9.tar.gz
-RUN  tar -zxf openssl-3.0.9.tar.gz > /dev/null
-RUN  cd openssl-3.0.9 && \
-  ./Configure enable-fips --prefix=/usr/local/ssl --openssldir=/usr/local/ssl linux-x86_64 no-ssl3 no-legacy no-comp no-idea no-dtls no-dtls1 no-err no-psk no-srp no-ec2m no-weak-ssl-ciphers -DOPENSSL_USE_BUILD_DATE && \
-  make -j$(nproc) && \
-  make -j$(nproc) install_sw && \
-  make -j$(nproc) install_ssldirs && \
-  make -j$(nproc) install_fips
+RUN wget -q https://www.openssl.org/source/openssl-3.0.9.tar.gz && tar -zxf openssl-3.0.9.tar.gz > /dev/null
+
+RUN cd openssl-3.0.9 && \
+    ./Configure enable-fips --prefix=/usr/local/ssl --openssldir=/usr/local/ssl no-ssl3 no-legacy no-comp no-idea no-dtls no-dtls1 no-err no-psk no-srp no-ec2m no-weak-ssl-ciphers -DOPENSSL_USE_BUILD_DATE && \
+    make -j$(nproc) && \
+    make -j$(nproc) install_sw && \
+    make -j$(nproc) install_ssldirs && \
+    make -j$(nproc) install_fips
 
 # Ensure that the FIPS module is correctly installed
 RUN /usr/local/ssl/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module /usr/local/ssl/lib64/ossl-modules/fips.so
