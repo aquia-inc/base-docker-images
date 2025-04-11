@@ -37,11 +37,11 @@ jobs:
             echo "Discovered image base names: $BASE_NAMES"
             echo "IMAGE_BASE_NAMES=$BASE_NAMES" >> $GITHUB_ENV
 
-      - name: Install Utilities (Trivy, jq)
+      - name: Install utils
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release jq gpg
-          wget -qO - https://aquasecurity.github.io/trivy-repo/aqua-security.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/trivy.gpg
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release jq 
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
           echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list > /dev/null
           sudo apt-get update
           sudo apt-get install -y trivy
