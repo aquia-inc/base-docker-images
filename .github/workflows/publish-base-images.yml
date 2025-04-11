@@ -393,7 +393,7 @@ jobs:
           *   **AMD64 / x86_64 (Latest):**
               \`\`\`bash
               docker pull $registry/$repo_name/${image_base_name}-linux-amd64:latest
-              \`\`\` \n
+              \`\`\` 
 
           EOF
           )
@@ -421,6 +421,7 @@ jobs:
               \`\`\`bash
               docker pull $registry/$repo_name/${image_base_name}-linux-arm64:latest
               \`\`\`
+              
           EOF
           )
 
