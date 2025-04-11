@@ -383,6 +383,7 @@ jobs:
 
           pull_examples=$(cat <<EOF
 
+          
           **Pull Examples:**
 
           *   **AMD64 / x86_64 (Version Specific):**
@@ -392,7 +393,8 @@ jobs:
           *   **AMD64 / x86_64 (Latest):**
               \`\`\`bash
               docker pull $registry/$repo_name/${image_base_name}-linux-amd64:latest
-              \`\`\`\n
+              \`\`\` \n
+
           EOF
           )
 
@@ -436,6 +438,7 @@ jobs:
 
           # Append pull examples to the main body
           body="${body}${pull_examples}"
+
           # Set the raw body content as an environment variable for the next step
           echo "Setting BODY_TEXT environment variable..."
           echo "BODY_TEXT<<EOF" >> $GITHUB_ENV
@@ -452,3 +455,5 @@ jobs:
           prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          
