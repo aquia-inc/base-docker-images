@@ -1,6 +1,6 @@
 ### OPENSSL WITH FIPS BUILD ###
 # Using Wolfi-Alpine base image instead of Wolfi because it has better tooling for building OpenSSL
-FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:62c1dbf69ab6dc5277f544e82cb861b9efb5520765aa11ea7bc868b0163ff619
+FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:0e8c04606c88644fcdcec271f5bacf93ec3d074bf8f7646f2e6772beed5d4b2d
 
 # Install openssl dependencies
 RUN apk update && apk add --no-cache \
@@ -34,8 +34,12 @@ RUN cd openssl-3.0.9 && \
     make -j$(nproc) install_fips
 
 # Ensure that the FIPS module is correctly installed
-RUN /usr/local/ssl/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module /usr/local/ssl/lib64/ossl-modules/fips.so
+# RUN /usr/local/ssl/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module /usr/local/ssl/lib64/ossl-modules/fips.so
+# Ensure that the FIPS module is correctly installed by trying both lib and lib64 paths
+RUN /usr/local/ssl/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module /usr/local/ssl/lib/ossl-modules/fips.so || \
+    (echo "Trying lib64 path for fipsinstall..." && /usr/local/ssl/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module /usr/local/ssl/lib64/ossl-modules/fips.so)
 
+ 
 # Enable FIPS mode in OpenSSL configuration
 RUN echo "openssl_conf = openssl_init" > /usr/local/ssl/openssl.cnf && \
   echo "[openssl_init]" >> /usr/local/ssl/openssl.cnf && \
