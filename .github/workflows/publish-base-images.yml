@@ -263,8 +263,6 @@ jobs:
           name: versions-file-linux-arm64
           path: .
 
-      # Removed Prepare .env and Read downloaded package versions (dotenv) steps
-
       - name: Create GitHub Release Body
         id: release_body
         run: |
@@ -421,7 +419,7 @@ jobs:
               \`\`\`bash
               docker pull $registry/$repo_name/${image_base_name}-linux-arm64:latest
               \`\`\`
-              
+
           EOF
           )
 
