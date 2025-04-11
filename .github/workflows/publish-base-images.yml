@@ -145,8 +145,6 @@ jobs:
             else
               echo "output_file_path=" >> $GITHUB_OUTPUT
             fi
-            pwd
-            ls -al
 
       - name: Upload versions artifact for ${{ matrix.platform }}
         uses: actions/upload-artifact@v4
@@ -264,6 +262,8 @@ jobs:
         with:
           name: versions-file-linux-arm64
           path: .
+
+      # Removed Prepare .env and Read downloaded package versions (dotenv) steps
 
       - name: Create GitHub Release Body
         id: release_body
@@ -393,7 +393,8 @@ jobs:
           *   **AMD64 / x86_64 (Latest):**
               \`\`\`bash
               docker pull $registry/$repo_name/${image_base_name}-linux-amd64:latest
-              \`\`\`
+              \`\`\` \n
+
           EOF
           )
 
