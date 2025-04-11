@@ -28,7 +28,6 @@ jobs:
       - name: Get image types
         id: discover_images 
         run: |
-            # Use find for potentially more robust handling of filenames
             BASE_NAMES=$(find . -maxdepth 1 -name 'Dockerfile.*' -type f -printf '%f\n' | sed 's/^Dockerfile\.//' | sort -u | paste -sd ' ')
             if [ -z "$BASE_NAMES" ]; then
               echo "::error::No Dockerfiles found matching 'Dockerfile.*'"
@@ -124,26 +123,29 @@ jobs:
                      latest_sha_digest=$(echo "$inspect_output" | jq -r 'if type == "array" then .[0].digest else (.manifests[0].digest // .config.digest // .digest) end // empty')
 
                      if [ -n "$latest_sha_digest" ]; then
-                         echo "Latest digest found in registry for $from_image_name:latest is: $latest_sha_digest"
+                         echo "Latest digest found in registry for [$from_image_name] is: [$latest_sha_digest]"
                          if [ "$current_sha_digest" != "$latest_sha_digest" ]; then
                              echo "::notice::Newer base image ($latest_sha_digest) available for $from_image_name. Current is $current_sha_digest."
                              echo "Adding '$base_name' to the rebuild list because fixable vulnerabilities were found AND the base image is outdated."
                              needs_rebuild_list="${needs_rebuild_list} ${base_name}"
                              rebuild_reason="Fixable vulnerabilities found and base image $from_image_name has updates."
                          else
-                             echo "Base image $from_image_name ($current_sha_digest) is already up-to-date. Skipping rebuild trigger for $base_name, even though fixable vulnerabilities were found."
+                             echo "Base image [$from_image_name] ($current_sha_digest) is already up-to-date. Skipping rebuild trigger for $base_name, even though fixable vulnerabilities were found."
                              rebuild_reason="Fixable vulnerabilities found, but base image $from_image_name is already up-to-date."
                          fi
                      else
-                         echo "::warning::Could not extract latest digest from manifest inspect output for $from_image_name:latest using jq. Skipping rebuild trigger for $base_name."
+                         echo "::warning::Could not extract latest digest from manifest inspect output for [$from_image_name] using jq. Skipping rebuild trigger for $base_name."
                          rebuild_reason="Fixable vulnerabilities found, but could not determine latest base image digest."
                      fi
                  else
-                     echo "::warning::Failed to inspect manifest for base image $from_image_name:latest (Exit code: $inspect_exit_code). Cannot verify base image freshness. Skipping rebuild trigger for $base_name."
-                     rebuild_reason="Fixable vulnerabilities found, but failed to inspect base image $from_image_name:latest."
+                     echo "::warning::Failed to inspect manifest for base image [$from_image_name] (Exit code: $inspect_exit_code). Cannot verify base image freshness. Skipping rebuild trigger for $base_name."
+                     rebuild_reason="Fixable vulnerabilities found, but failed to inspect base image $from_image_name."
                  fi
               else
-                 echo "::error::Could not parse FROM line with '@sha256:...' digest in $dockerfile. Skipping rebuild trigger for $base_name."
+                 # This error message means grep failed to extract one or both parts
+                 echo "::error::Could not parse FROM line components using grep in $dockerfile. Line was: '$from_line'"
+                 echo "Extracted image name: [$from_image_name]" # Log what was extracted
+                 echo "Extracted SHA prefix: [$current_sha_with_prefix]" # Log what was extracted
                  rebuild_reason="Fixable vulnerabilities found, but could not parse FROM line in $dockerfile."
               fi
             else
