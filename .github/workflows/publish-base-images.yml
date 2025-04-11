@@ -383,6 +383,7 @@ jobs:
 
           pull_examples=$(cat <<EOF
 
+          
           **Pull Examples:**
 
           *   **AMD64 / x86_64 (Version Specific):**
