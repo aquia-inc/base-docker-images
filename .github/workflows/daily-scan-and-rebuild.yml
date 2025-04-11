@@ -40,9 +40,9 @@ jobs:
       - name: Install Utilities (Trivy, jq)
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release jq
-          wget -qO - https://aquasecurity.github.io/trivy-repo/aqua-security.gpg.key | sudo apt-key add -
-          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release jq gpg
+          wget -qO - https://aquasecurity.github.io/trivy-repo/aqua-security.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/trivy.gpg
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list > /dev/null
           sudo apt-get update
           sudo apt-get install -y trivy
 
