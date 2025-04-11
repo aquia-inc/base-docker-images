@@ -1,0 +1,32 @@
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:0f1d81605bda6e2388c3c7f731700d8c12e17259d58ffba11f36ddc81d9c0a76 AS build
+
+# Set environment variables for Java and Maven
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+ENV PATH=$PATH:$JAVA_HOME/bin
+ENV MAVEN_HOME=/usr/share/java/maven
+ENV PATH=$PATH:$MAVEN_HOME/bin
+
+# Install OpenJDK 17 and Maven
+RUN apk update && \
+apk del libcrypto3 libssl3 && \
+apk add --no-cache --upgrade openjdk-17 maven=3.9.5-r0  libcrypto3 libssl3
+
+# Clean up the package cache
+RUN rm -rf /var/cache/apk/*
+
+# Extract Java version and save to file
+RUN java -version 2>&1 | awk 'NR==1{ gsub(/"/, "", $3); print $3 }' | grep -v '^0\.0\.0$' | grep -v '^0$' | awk -F'-' '{print $1}' | awk -F'.' '{print $1}' > /tmp/temp_java_version.txt
+
+# Create symbolic link to match the installed Java version
+RUN JAVA_VERSION=$(cat /tmp/temp_java_version.txt | head -n 1) && \
+    mkdir -p /usr/local/jvm/versions/java && \
+    ln -s /usr/local/jvm/versions/java/${JAVA_VERSION}/ /usr/local/jvm/versions/java/current
+
+# Save Java version
+RUN echo "java_major_tag=$(cat /tmp/temp_java_version.txt | head -n 1)" > /tmp/versions.txt
+
+# Extract minor version
+RUN java -version 2>&1 | awk 'NR==1{ gsub(/"/, "", $3); print $3 }' | grep -v '^0\.0\.0$' | grep -v '^0$' | tr -d '\n' | sed 's/\.[0-9]*$//' > /tmp/java_minor_version.txt
+RUN echo "java_minor_tag=$(cat /tmp/java_minor_version.txt)" >> /tmp/versions.txt
+RUN echo "java=$(java -version 2>&1 | awk 'NR==1{ gsub(/"/, "", $3); print $3 }' | grep -v '^0\.0\.0$' | grep -v '^0$' | tr -d '\n')" >> /tmp/versions.txt
+
