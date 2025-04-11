@@ -1,0 +1,211 @@
+# .github/workflows/daily-scan-rebuild.yml
+name: Daily Vulnerability Scan and Rebuild
+
+on:
+  schedule:
+    # Runs daily at 10:00 UTC (5 AM EST / 6 AM EDT)
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  GH_REPO: ${{ github.repository }}
+  TRIGGER_SEVERITIES: "CRITICAL,HIGH,MEDIUM"
+
+jobs:
+  scan_and_rebuild:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write    # Needed to push new tags
+      packages: read     # Needed to pull images and inspect manifests
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+
+      - name: Get image types
+        id: discover_images 
+        run: |
+            # Use find for potentially more robust handling of filenames
+            BASE_NAMES=$(find . -maxdepth 1 -name 'Dockerfile.*' -type f -printf '%f\n' | sed 's/^Dockerfile\.//' | sort -u | paste -sd ' ')
+            if [ -z "$BASE_NAMES" ]; then
+              echo "::error::No Dockerfiles found matching 'Dockerfile.*'"
+              exit 1
+            fi
+            echo "Discovered image base names: $BASE_NAMES"
+            echo "IMAGE_BASE_NAMES=$BASE_NAMES" >> $GITHUB_ENV
+
+      - name: Install Utilities (Trivy, jq)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release jq
+          wget -qO - https://aquasecurity.github.io/trivy-repo/aqua-security.gpg.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan Images, Check Base SHA, and Trigger Rebuilds
+        id: scan_check_rebuild
+        run: |
+          set -e
+
+          needs_rebuild_list=""
+
+          if [ -z "$IMAGE_BASE_NAMES" ]; then
+             echo "::error::IMAGE_BASE_NAMES environment variable is not set. Discovery might have failed."
+             exit 1
+          fi
+          echo "Processing image base names: $IMAGE_BASE_NAMES"
+
+          for base_name in $IMAGE_BASE_NAMES; do
+            echo "--- Processing image base name: $base_name ---"
+            found_fixable_vulns_for_base=false
+            rebuild_reason=""
+
+            for platform_suffix in linux-amd64 linux-arm64; do
+              image_name="${base_name}-${platform_suffix}"
+              full_image_tag="${{ env.REGISTRY }}/${{ env.GH_REPO }}/${image_name}:latest"
+
+              echo "Scanning image: $full_image_tag"
+
+              if ! docker manifest inspect "$full_image_tag" > /dev/null 2>&1; then
+                 echo "::warning::Image $full_image_tag not found in registry. Skipping scan for this platform."
+                 continue
+              fi
+
+              scan_exit_code=0
+              trivy image --ignore-unfixed --exit-code 1 --severity ${{ env.TRIGGER_SEVERITIES }} --format table "$full_image_tag" || scan_exit_code=$?
+
+              if [ $scan_exit_code -eq 1 ]; then
+                echo "::warning::Fixable vulnerabilities found in $full_image_tag (Severity: ${{ env.TRIGGER_SEVERITIES }})"
+                found_fixable_vulns_for_base=true
+              elif [ $scan_exit_code -eq 0 ]; then
+                echo "No fixable vulnerabilities found in $full_image_tag at specified severities."
+              else
+                echo "::error::Trivy scan failed for $full_image_tag with exit code $scan_exit_code. Skipping further checks for $base_name."
+                continue 2
+              fi
+            done
+
+            if [ "$found_fixable_vulns_for_base" = true ]; then
+              echo "Fixable vulnerabilities found for $base_name. Checking base image freshness in Dockerfile.$base_name..."
+              dockerfile="Dockerfile.$base_name"
+              if [ ! -f "$dockerfile" ]; then
+                echo "::error::Dockerfile $dockerfile not found. Cannot check base image. Skipping rebuild trigger for $base_name."
+                continue
+              fi
+
+              # Extract FROM image name and current SHA digest from Dockerfile
+              from_line=$(grep -i '^FROM' "$dockerfile" | head -n 1)
+              echo "Parsing FROM line: $from_line"
+              if [[ "$from_line" =~ FROM\s*(--platform=[^ ]+\s+)?([^@ ]+)(@sha256:[a-f0-9]{64}) ]]; then
+                 from_image_name="${BASH_REMATCH[2]}"
+                 current_sha_with_prefix="${BASH_REMATCH[3]}"
+                 current_sha_digest="${current_sha_with_prefix#@}"
+                 echo "Dockerfile uses base image: $from_image_name with SHA: $current_sha_digest"
+
+                 echo "Querying registry for latest digest of $from_image_name:latest..."
+                 latest_sha_digest=""
+                 inspect_output=""
+                 inspect_exit_code=0
+                 inspect_output=$(docker manifest inspect "$from_image_name:latest" 2>/dev/null) || inspect_exit_code=$?
+
+                 if [ $inspect_exit_code -eq 0 ] && [ -n "$inspect_output" ]; then
+                     latest_sha_digest=$(echo "$inspect_output" | jq -r 'if type == "array" then .[0].digest else (.manifests[0].digest // .config.digest // .digest) end // empty')
+
+                     if [ -n "$latest_sha_digest" ]; then
+                         echo "Latest digest found in registry for $from_image_name:latest is: $latest_sha_digest"
+                         if [ "$current_sha_digest" != "$latest_sha_digest" ]; then
+                             echo "::notice::Newer base image ($latest_sha_digest) available for $from_image_name. Current is $current_sha_digest."
+                             echo "Adding '$base_name' to the rebuild list because fixable vulnerabilities were found AND the base image is outdated."
+                             needs_rebuild_list="${needs_rebuild_list} ${base_name}"
+                             rebuild_reason="Fixable vulnerabilities found and base image $from_image_name has updates."
+                         else
+                             echo "Base image $from_image_name ($current_sha_digest) is already up-to-date. Skipping rebuild trigger for $base_name, even though fixable vulnerabilities were found."
+                             rebuild_reason="Fixable vulnerabilities found, but base image $from_image_name is already up-to-date."
+                         fi
+                     else
+                         echo "::warning::Could not extract latest digest from manifest inspect output for $from_image_name:latest using jq. Skipping rebuild trigger for $base_name."
+                         rebuild_reason="Fixable vulnerabilities found, but could not determine latest base image digest."
+                     fi
+                 else
+                     echo "::warning::Failed to inspect manifest for base image $from_image_name:latest (Exit code: $inspect_exit_code). Cannot verify base image freshness. Skipping rebuild trigger for $base_name."
+                     rebuild_reason="Fixable vulnerabilities found, but failed to inspect base image $from_image_name:latest."
+                 fi
+              else
+                 echo "::error::Could not parse FROM line with '@sha256:...' digest in $dockerfile. Skipping rebuild trigger for $base_name."
+                 rebuild_reason="Fixable vulnerabilities found, but could not parse FROM line in $dockerfile."
+              fi
+            else
+              echo "No fixable vulnerabilities found for $base_name in any platform scan."
+              rebuild_reason="No fixable vulnerabilities found."
+            fi
+            echo "Rebuild decision for $base_name: $rebuild_reason"
+          done
+
+          unique_needs_rebuild=$(echo "$needs_rebuild_list" | xargs -n1 | sort -u | xargs)
+
+          if [ -z "$unique_needs_rebuild" ]; then
+            echo "No images require rebuilding based on vulnerability scans and base image freshness checks."
+            echo "triggered_rebuilds=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "--- Triggering rebuilds for: $unique_needs_rebuild ---"
+          echo "triggered_rebuilds=true" >> $GITHUB_OUTPUT
+          echo "rebuild_list=$unique_needs_rebuild" >> $GITHUB_OUTPUT
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          for base_name in $unique_needs_rebuild; do
+            echo "Finding latest release tag for $base_name..."
+            latest_release_tag=$(git tag --list "release/${base_name}/v*" | sort -V | tail -n 1)
+
+            if [ -z "$latest_release_tag" ]; then
+              echo "::error::Could not find any release tag matching 'release/${base_name}/v*' to base the rebuild on. Skipping rebuild trigger for $base_name."
+              continue
+            fi
+            echo "Latest release tag found: $latest_release_tag"
+
+            version_part=$(echo "$latest_release_tag" | sed -n "s|release/${base_name}/\(v.*\)|\1|p")
+            if [ -z "$version_part" ]; then
+              echo "::error::Could not extract version part from tag '$latest_release_tag'. Skipping rebuild for $base_name."
+              continue
+            fi
+
+            timestamp=$(date +%Y%m%d%H%M%S)
+            version_part_no_build=$(echo "$version_part" | sed 's/\+.*//')
+            new_tag="release/${base_name}/${version_part_no_build}+rebuild.${timestamp}"
+
+            echo "Creating and pushing new tag: $new_tag"
+            git tag "$new_tag"
+            git push origin "$new_tag"
+            echo "Rebuild triggered for $base_name by pushing tag $new_tag."
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summarize Rebuild Actions
+        if: always()
+        run: |
+          echo "## Daily Scan and Rebuild Summary" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.scan_check_rebuild.outputs.triggered_rebuilds }}" == "true" ]]; then
+            echo "Rebuilds were triggered for the following base images:" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ steps.scan_check_rebuild.outputs.rebuild_list }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "(Reason: Fixable vulnerabilities found and base image updates detected)." >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ job.status }}" == "success" ]]; then
+            echo "No images required rebuilding today." >> $GITHUB_STEP_SUMMARY
+            echo "(Either no fixable vulnerabilities were found, or base images were already up-to-date)." >> $GITHUB_STEP_SUMMARY
+          else
+             echo "Workflow encountered an error." >> $GITHUB_STEP_SUMMARY
+          fi
