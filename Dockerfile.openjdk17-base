@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:0f1d81605bda6e2388c3c7f731700d8c12e17259d58ffba11f36ddc81d9c0a76 AS build
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:c519d1c81a18a5c752f701bc59ceddfa4bf1a44e9bb605c73856cef216f69f7b AS build
 
 # Set environment variables for Java and Maven
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
@@ -9,7 +9,7 @@ ENV PATH=$PATH:$MAVEN_HOME/bin
 # Install OpenJDK 17 and Maven
 RUN apk update && \
 apk del libcrypto3 libssl3 && \
-apk add --no-cache --upgrade openjdk-17 maven=3.9.5-r0  libcrypto3 libssl3
+    apk add --no-cache --upgrade openjdk-17 maven=3.9.5-r0  libcrypto3 libssl3 glibc glibc-locale-posix ld-linux libcrypt1
 
 # Clean up the package cache
 RUN rm -rf /var/cache/apk/*
