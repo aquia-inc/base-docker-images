@@ -99,6 +99,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # --- FIX: ADD QEMU SETUP ---
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      # --- END FIX ---
+
       - name: Build Docker Image for ${{ matrix.platform }} (Test)
         id: build_test
         uses: docker/build-push-action@v6
@@ -106,7 +111,7 @@ jobs:
           pull: true
           file: Dockerfile.${{ steps.parse_tag.outputs.image_base_name }}
           platforms: ${{ matrix.platform }}
-          load: true 
+          load: true
           tags: ${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}:test
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
@@ -136,6 +141,7 @@ jobs:
 
             if [[ "$image_base_name" == "python-base" || "$image_base_name" == "nodejs-base" || "$image_base_name" == "openjdk17-base" ]]; then
                 echo "Attempting to extract versions from $test_tag for $platform_image_name"
+                # This command should now work because QEMU is set up
                 if docker run --rm --platform ${{ matrix.platform }} "$test_tag" sh -c 'cat /tmp/versions.txt && exit 0 || exit 1' > "$output_file"; then
                     if [ -s "$output_file" ]; then
                         echo "Versions extracted successfully to $output_file"
@@ -242,15 +248,16 @@ jobs:
         id: parse_tag_release
         run: |
           tag_ref="${{ github.ref }}"
-          if [[ $tag_ref =~ refs/tags/release/([^/]+)/v([0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?)$ ]]; then
+          # Updated regex to handle optional build metadata in the tag being parsed for release info
+          if [[ $tag_ref =~ refs/tags/release/([^/]+)/v([0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?)$ ]]; then
               image_base_name="${BASH_REMATCH[1]}"
-              version="${BASH_REMATCH[2]}"
+              version="${BASH_REMATCH[2]}" # This includes potential pre-release and build metadata
               echo "Parsed from release tag: image_base_name=$image_base_name, version=$version"
               echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
               echo "version=$version" >> $GITHUB_OUTPUT
           else
               echo "Error: Could not parse release tag format from ref: $tag_ref"
-              echo "Expected format: refs/tags/release/<image-name>/vX.Y.Z[-prerelease]"
+              echo "Expected format: refs/tags/release/<image-name>/vX.Y.Z[-prerelease][+buildmetadata]"
               exit 1
           fi
 
@@ -280,7 +287,7 @@ jobs:
         id: release_body
         run: |
           image_base_name="${{ steps.parse_tag_release.outputs.image_base_name }}"
-          version_tag="${{ steps.parse_tag_release.outputs.version }}"
+          version_tag="${{ steps.parse_tag_release.outputs.version }}" # Use full version from tag
           repo_name="${{ github.repository }}"
           registry="${{ env.REGISTRY }}"
 
@@ -310,9 +317,10 @@ jobs:
               node_major_amd64=$(get_version_value "env.versions.linux-amd64" "nodejs_major_tag")
               node_minor_amd64=$(get_version_value "env.versions.linux-amd64" "nodejs_minor_tag")
               node_full_amd64=$(get_version_value "env.versions.linux-amd64" "nodejs")
-              jdk_major_amd64=$(get_version_value "env.versions.linux-amd64" "openjdk_major_tag")
-              jdk_minor_amd64=$(get_version_value "env.versions.linux-amd64" "openjdk_minor_tag")
-              jdk_full_amd64=$(get_version_value "env.versions.linux-amd64" "openjdk")
+              # Corrected keys for openjdk
+              jdk_major_amd64=$(get_version_value "env.versions.linux-amd64" "java_major_tag")
+              jdk_minor_amd64=$(get_version_value "env.versions.linux-amd64" "java_minor_tag")
+              jdk_full_amd64=$(get_version_value "env.versions.linux-amd64" "java")
           else
               echo "AMD64 versions artifact not downloaded or download failed."
           fi
@@ -325,9 +333,10 @@ jobs:
               node_major_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs_major_tag")
               node_minor_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs_minor_tag")
               node_full_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs")
-              jdk_major_arm64=$(get_version_value "env.versions.linux-arm64" "openjdk_major_tag")
-              jdk_minor_arm64=$(get_version_value "env.versions.linux-arm64" "openjdk_minor_tag")
-              jdk_full_arm64=$(get_version_value "env.versions.linux-arm64" "openjdk")
+              # Corrected keys for openjdk
+              jdk_major_arm64=$(get_version_value "env.versions.linux-arm64" "java_major_tag")
+              jdk_minor_arm64=$(get_version_value "env.versions.linux-arm64" "java_minor_tag")
+              jdk_full_arm64=$(get_version_value "env.versions.linux-arm64" "java")
           else
               echo "ARM64 versions artifact not downloaded or download failed."
           fi
@@ -394,7 +403,7 @@ jobs:
 
           pull_examples=$(cat <<EOF
 
-          
+
           **Pull Examples:**
 
           *   **AMD64 / x86_64 (Version Specific):**
@@ -404,7 +413,7 @@ jobs:
           *   **AMD64 / x86_64 (Latest):**
               \`\`\`bash
               docker pull $registry/$repo_name/${image_base_name}-linux-amd64:latest
-              \`\`\` 
+              \`\`\`
 
           EOF
           )
@@ -467,5 +476,3 @@ jobs:
           prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-          
