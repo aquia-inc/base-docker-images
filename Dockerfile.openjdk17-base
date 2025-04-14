@@ -77,8 +77,10 @@ RUN bash -c 'echo "Verifying Java and Maven installation as $(whoami)..." && \
     mvn -version'
 
 
+
 #### Adoption Notes ###
-######################
+#######################
+
 # This base image provides OpenJDK 17, Maven, Git, and Bash on a minimal Wolfi base.
 # It runs unprivileged, as the 'nonroot' user by default.
 #
