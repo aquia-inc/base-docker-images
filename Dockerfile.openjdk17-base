@@ -1,32 +1,105 @@
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:c519d1c81a18a5c752f701bc59ceddfa4bf1a44e9bb605c73856cef216f69f7b AS build
+# Use a minimal, security-focused base image (Wolfi)
+# Pinned digest ensures reproducibility and supply chain security
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:c519d1c81a18a5c752f701bc59ceddfa4bf1a44e9bb605c73856cef216f69f7b
 
-# Set environment variables for Java and Maven
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
-ENV PATH=$PATH:$JAVA_HOME/bin
-ENV MAVEN_HOME=/usr/share/java/maven
-ENV PATH=$PATH:$MAVEN_HOME/bin
+# Define versions as arguments for easier updates and clarity
+ARG MAVEN_VERSION=3.9.5-r0
+ARG OPENJDK_PACKAGE=openjdk-17
 
-# Install OpenJDK 17 and Maven
+# Install necessary packages, common build tools, create non-root user, and perform cleanup
+# --upgrade ensures latest packages for security (including dependencies)
 RUN apk update && \
-apk del libcrypto3 libssl3 && \
-    apk add --no-cache --upgrade openjdk-17 maven=3.9.5-r0  libcrypto3 libssl3 glibc glibc-locale-posix ld-linux libcrypt1
+    # Rationale: Removing/re-adding SSL libs ensures specific patched versions are installed, addressing potential CVEs.
+    apk del libcrypto3 libssl3 && \
+    apk add --no-cache --upgrade \
+        # Core Java/Maven stack
+        ${OPENJDK_PACKAGE} \
+        maven=${MAVEN_VERSION} \
+        # Essential runtime dependencies (kept up-to-date by --upgrade)
+        libcrypto3 \
+        libssl3 \
+        glibc \
+        glibc-locale-posix \
+        ld-linux \
+        libcrypt1 \
+        git \
+        bash \
+        ca-certificates && \
+    mkdir -p /home/nonroot/.m2 && \
+    chown -R nonroot:nonroot /home/nonroot 
+    # && \
+    # rm -rf /var/cache/apk/*
 
-# Clean up the package cache
-RUN rm -rf /var/cache/apk/*
+# Set standard environment variables
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk 
+ENV MAVEN_HOME=/usr/share/maven 
+ENV PATH=/usr/sbin:/usr/bin:/sbin:/bin:$JAVA_HOME/bin:$MAVEN_HOME/bin 
+ENV USER_HOME=/home/nonroot
 
-# Extract Java version and save to file
-RUN java -version 2>&1 | awk 'NR==1{ gsub(/"/, "", $3); print $3 }' | grep -v '^0\.0\.0$' | grep -v '^0$' | awk -F'-' '{print $1}' | awk -F'.' '{print $1}' > /tmp/temp_java_version.txt
+# Extract Java versions and save to /tmp/versions.txt for automation compatibility
+RUN \
+    JAVA_VERSION_RAW=$(java -version 2>&1 | awk 'NR==1{ gsub(/"/, "", $3); print $3 }') && \
+    JAVA_VERSION_CLEAN=$(echo "$JAVA_VERSION_RAW" | grep -v '^0\.0\.0$' | grep -v '^0$') && \
+    JAVA_MAJOR=$(echo "$JAVA_VERSION_CLEAN" | awk -F'.' '{print $1}') && \
+    JAVA_MINOR=$(echo "$JAVA_VERSION_CLEAN" | sed 's/\.[0-9]*$//') && \
+    JAVA_FULL=$(echo "$JAVA_VERSION_CLEAN" | tr -d '\n') && \
+    echo "Detected Java Versions: Full=$JAVA_FULL, Major=$JAVA_MAJOR, Minor=$JAVA_MINOR" && \
+    echo "java_major_tag=${JAVA_MAJOR}" > /tmp/versions.txt && \
+    echo "java_minor_tag=${JAVA_MINOR}" >> /tmp/versions.txt && \
+    echo "java=${JAVA_FULL}" >> /tmp/versions.txt && \
+    echo "Contents of /tmp/versions.txt:" && \
+    cat /tmp/versions.txt && \
+    # Sourceable env script for easy adoption in subsequent build stages
+    echo "#!/bin/sh" > /etc/profile.d/java_env.sh && \
+    echo "# This script sets up the environment for Java/Maven development." >> /etc/profile.d/java_env.sh && \
+    echo "# Source this file in subsequent RUN steps or interactive shells:" >> /etc/profile.d/java_env.sh && \
+    echo "# Example: RUN . /etc/profile.d/java_env.sh && mvn package" >> /etc/profile.d/java_env.sh && \
+    echo "" >> /etc/profile.d/java_env.sh && \
+    echo "export JAVA_HOME=${JAVA_HOME}" >> /etc/profile.d/java_env.sh && \
+    echo "export MAVEN_HOME=${MAVEN_HOME}" >> /etc/profile.d/java_env.sh && \
+    echo "export PATH=${PATH}" >> /etc/profile.d/java_env.sh && \
+    echo "export JAVA_VERSION_FULL=${JAVA_FULL}" >> /etc/profile.d/java_env.sh && \
+    echo "export JAVA_MAJOR=${JAVA_MAJOR}" >> /etc/profile.d/java_env.sh && \
+    echo "export JAVA_MINOR=${JAVA_MINOR}" >> /etc/profile.d/java_env.sh && \
+    chmod +x /etc/profile.d/java_env.sh && \
+    echo "Created sourceable environment script: /etc/profile.d/java_env.sh"
+    
 
-# Create symbolic link to match the installed Java version
-RUN JAVA_VERSION=$(cat /tmp/temp_java_version.txt | head -n 1) && \
-    mkdir -p /usr/local/jvm/versions/java && \
-    ln -s /usr/local/jvm/versions/java/${JAVA_VERSION}/ /usr/local/jvm/versions/java/current
+# Drop privileges and set the working directory
+USER nonroot
+WORKDIR ${USER_HOME}
+# Verify installation using bash explicitly
+# Sourcing using '.' is POSIX compliant, using bash here for guarantee of consistency
+RUN bash -c 'echo "Verifying Java and Maven installation as $(whoami)..." && \
+    . /etc/profile.d/java_env.sh && \
+    echo "PATH is: $PATH" && \
+    java -version && \
+    mvn -version'
 
-# Save Java version
-RUN echo "java_major_tag=$(cat /tmp/temp_java_version.txt | head -n 1)" > /tmp/versions.txt
 
-# Extract minor version
-RUN java -version 2>&1 | awk 'NR==1{ gsub(/"/, "", $3); print $3 }' | grep -v '^0\.0\.0$' | grep -v '^0$' | tr -d '\n' | sed 's/\.[0-9]*$//' > /tmp/java_minor_version.txt
-RUN echo "java_minor_tag=$(cat /tmp/java_minor_version.txt)" >> /tmp/versions.txt
-RUN echo "java=$(java -version 2>&1 | awk 'NR==1{ gsub(/"/, "", $3); print $3 }' | grep -v '^0\.0\.0$' | grep -v '^0$' | tr -d '\n')" >> /tmp/versions.txt
-
+### Adoption Notes ###
+######################
+# This base image provides OpenJDK 17, Maven, Git, and Bash on a minimal Wolfi base.
+# It runs as the 'nonroot' user by default.
+#
+# To use in a multi-stage build:
+#
+# FROM ghcr.io/aquia-inc/base-docker-images/openjdk17-base-linux-amd64:latest 
+#
+# # Source the environment script to ensure PATH and version variables are set within the RUN command's shell
+# RUN . /etc/profile.d/java_env.sh && \
+#     echo "Building with Java $JAVA_VERSION_FULL..." && \
+#     # Your git clone, mvn package, etc. commands here
+#     # Example:
+#     # git clone https://your.repo/app.git . && \
+#     # mvn package -DskipTests
+#
+# # --- Final Stage ---
+# FROM ghcr.io/aquia-inc/base-docker-images/openjdk17-base-linux-amd64:latest AS builder 
+# WORKDIR /app
+# # Copy only the necessary artifact from the builder stage
+# COPY --from=builder /home/nonroot/target/your-app.jar .
+# # Ensure the final stage also runs as nonroot (already default in this base)
+# # USER nonroot
+# EXPOSE 8080
+# CMD ["java", "-jar", "your-app.jar"]
