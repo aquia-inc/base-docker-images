@@ -41,7 +41,7 @@ RUN \
     JAVA_VERSION_RAW=$(java -version 2>&1 | awk 'NR==1{ gsub(/"/, "", $3); print $3 }') && \
     JAVA_VERSION_CLEAN=$(echo "$JAVA_VERSION_RAW" | grep -v '^0\.0\.0$' | grep -v '^0$') && \
     JAVA_MAJOR=$(echo "$JAVA_VERSION_CLEAN" | awk -F'.' '{print $1}') && \
-    JAVA_MINOR=$(echo "$JAVA_VERSION_CLEAN" | sed 's/\.[0-9]*$//') && \
+    JAVA_MINOR=$(echo "$JAVA_VERSION_CLEAN" | awk -F'.' '{print $1"."$2}') && \
     JAVA_FULL=$(echo "$JAVA_VERSION_CLEAN" | tr -d '\n') && \
     echo "Detected Java Versions: Full=$JAVA_FULL, Major=$JAVA_MAJOR, Minor=$JAVA_MINOR" && \
     echo "java_major_tag=${JAVA_MAJOR}" > /tmp/versions.txt && \
@@ -77,29 +77,59 @@ RUN bash -c 'echo "Verifying Java and Maven installation as $(whoami)..." && \
     mvn -version'
 
 
-### Adoption Notes ###
-######################
+
+#### Adoption Notes ###
+#######################
+
 # This base image provides OpenJDK 17, Maven, Git, and Bash on a minimal Wolfi base.
-# It runs as the 'nonroot' user by default.
+# It runs unprivileged, as the 'nonroot' user by default.
 #
-# To use in a multi-stage build:
+# The following demonstrates a typical multi-stage build pattern to create a lean final image.
 #
-# FROM ghcr.io/aquia-inc/base-docker-images/openjdk17-base-linux-amd64:latest 
+# --- Stage 1: Builder ---
+# Use this base image to compile your application.
 #
-# # Source the environment script to ensure PATH and version variables are set within the RUN command's shell
-# RUN . /etc/profile.d/java_env.sh && \
-#     echo "Building with Java $JAVA_VERSION_FULL..." && \
-#     # Your git clone, mvn package, etc. commands here
-#     # Example:
-#     # git clone https://your.repo/app.git . && \
-#     # mvn package -DskipTests
-#
-# # --- Final Stage ---
+# # Use the appropriate base image tag and platform
 # FROM ghcr.io/aquia-inc/base-docker-images/openjdk17-base-linux-amd64:latest AS builder 
+#
+# # Set the working directory within the nonroot user's home
+# WORKDIR /home/nonroot/app
+#
+# # Copy your application source code (pom.xml, src directory, etc.) into the builder stage
+# # Adjust this COPY command based on your project structure
+# COPY pom.xml .
+# COPY src ./src
+#
+# # Run the build process.
+# # Source the environment script to ensure PATH (for java, mvn) and version variables are set.
+# # Maven typically outputs artifacts to the 'target' directory within the WORKDIR.
+# RUN \
+#     # Source the environment script provided by the base image
+#     . /etc/profile.d/java_env.sh && \
+#     echo "Building with Java $JAVA_VERSION_FULL..." && \
+#     # Run your Maven build command (e.g., package, verify)
+#     # -DskipTests is common in CI/CD build stages
+#     mvn package -DskipTests
+#
+# --- Stage 2: Runtime ---
+# Use the same lean base image for the final runtime environment.
+#
+# FROM ghcr.io/aquia-inc/base-docker-images/openjdk17-base-linux-amd64:latest AS runtime 
+#
+# # Set the application's working directory
 # WORKDIR /app
-# # Copy only the necessary artifact from the builder stage
-# COPY --from=builder /home/nonroot/target/your-app.jar .
-# # Ensure the final stage also runs as nonroot (already default in this base)
-# # USER nonroot
+#
+# # Copy *only* the necessary artifact (e.g., the executable JAR)
+# # from the 'builder' stage into this final 'runtime' stage.
+# # Adjust the source path based on your WORKDIR and Maven output in the builder stage.
+# COPY --from=builder /home/nonroot/app/target/your-app-name.jar .
+#
+# # Expose the port your application listens on
 # EXPOSE 8080
-# CMD ["java", "-jar", "your-app.jar"]
+#
+# # This image runs as 'nonroot' by default, no need for explicit USER command here.
+# # USER nonroot
+#
+# # Define the command to run your application
+# # Replace 'your-app-name.jar' with the actual name of your JAR file.
+# CMD ["java", "-jar", "your-app-name.jar"]
