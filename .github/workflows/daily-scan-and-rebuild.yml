@@ -23,10 +23,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 
+          fetch-depth: 0 # Required to list tags
 
       - name: Get image types
-        id: discover_images 
+        id: discover_images
         run: |
             BASE_NAMES=$(find . -maxdepth 1 -name 'Dockerfile.*' -type f -printf '%f\n' | sed 's/^Dockerfile\.//' | sort -u | paste -sd ' ')
             if [ -z "$BASE_NAMES" ]; then
@@ -39,7 +39,7 @@ jobs:
       - name: Install utils
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release jq 
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release jq
           wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
           echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list > /dev/null
           sudo apt-get update
@@ -52,6 +52,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # CORRECTED INDENTATION for this step:
       - name: Scan Images, Check Base SHA, and Trigger Rebuilds
         id: scan_check_rebuild
         run: |
@@ -196,6 +197,7 @@ jobs:
 
           for base_name in $unique_needs_rebuild; do
             echo "Finding latest release tag for $base_name..."
+            # Find tags matching the pattern, sort version numbers correctly, get the last one
             latest_release_tag=$(git tag --list "release/${base_name}/v*" | sort -V | tail -n 1)
 
             if [ -z "$latest_release_tag" ]; then
@@ -204,6 +206,7 @@ jobs:
             fi
             echo "Latest release tag found: $latest_release_tag"
 
+            # Extract the version part (e.g., v1.2.3 or v1.2.3+build.meta)
             version_part=$(echo "$latest_release_tag" | sed -n "s|release/${base_name}/\(v.*\)|\1|p")
             if [ -z "$version_part" ]; then
               echo "::error::Could not extract version part from tag '$latest_release_tag'. Skipping rebuild for $base_name."
@@ -211,6 +214,7 @@ jobs:
             fi
 
             timestamp=$(date +%Y%m%d%H%M%S)
+            # Remove existing build metadata if present before adding new one
             version_part_no_build=$(echo "$version_part" | sed 's/\+.*//')
             new_tag="release/${base_name}/${version_part_no_build}+rebuild.${timestamp}"
 
@@ -219,7 +223,5 @@ jobs:
             git push origin "$new_tag"
             echo "Rebuild triggered for $base_name by pushing tag $new_tag."
           done
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  
-  
+        env: # CORRECTED INDENTATION for env block
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

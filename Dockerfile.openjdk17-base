@@ -9,7 +9,7 @@ ENV PATH=$PATH:$MAVEN_HOME/bin
 # Install OpenJDK 17 and Maven
 RUN apk update && \
 apk del libcrypto3 libssl3 && \
-apk add --no-cache --upgrade openjdk-17 maven=3.9.5-r0  libcrypto3 libssl3
+    apk add --no-cache --upgrade openjdk-17 maven=3.9.5-r0  libcrypto3 libssl3 glibc glibc-locale-posix ld-linux libcrypt1
 
 # Clean up the package cache
 RUN rm -rf /var/cache/apk/*
