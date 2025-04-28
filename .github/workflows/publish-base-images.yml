@@ -203,14 +203,40 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}
           tags: |
+            # Standard tags: version, latest, dev-<sha>
             type=semver,pattern={{version}},value=${{ steps.parse_tag.outputs.version }},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
             type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
             type=raw,value=dev-${{ github.sha }},enable=${{ github.event_name != 'push' || github.ref_type != 'tag' }}
+
+            # Python Major/Minor tags
+            type=raw,value={{env.python_major_tag}},enable=${{ steps.parse_tag.outputs.image_base_name == 'python-base' && env.python_major_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=raw,value={{env.python_minor_tag}},enable=${{ steps.parse_tag.outputs.image_base_name == 'python-base' && env.python_minor_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
+
+            # Node.js Major/Minor tags
+            type=raw,value={{env.nodejs_major_tag}},enable=${{ steps.parse_tag.outputs.image_base_name == 'nodejs-base' && env.nodejs_major_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=raw,value={{env.nodejs_minor_tag}},enable=${{ steps.parse_tag.outputs.image_base_name == 'nodejs-base' && env.nodejs_minor_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
+
+            # OpenJDK Major/Minor tags
+            type=raw,value={{env.java_major_tag}},enable=${{ steps.parse_tag.outputs.image_base_name == 'openjdk17-base' && env.java_major_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=raw,value={{env.java_minor_tag}},enable=${{ steps.parse_tag.outputs.image_base_name == 'openjdk17-base' && env.java_minor_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
           labels: |
             org.opencontainers.image.title=${{ steps.image_name.outputs.platform_image_name }} (${{ matrix.platform }})
             org.opencontainers.image.description=Base image for ${{ steps.parse_tag.outputs.image_base_name }} targeting ${{ matrix.platform }}
             org.opencontainers.image.vendor=Aquia Inc
             org.opencontainers.image.build-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            # --- Add language version labels if available ---
+            # Python
+            python.version.major=${{ env.python_major_tag }}
+            python.version.minor=${{ env.python_minor_tag }}
+            python.version.full=${{ env.python }}
+            # Node.js
+            nodejs.version.major=${{ env.nodejs_major_tag }}
+            nodejs.version.minor=${{ env.nodejs_minor_tag }}
+            nodejs.version.full=${{ env.nodejs }}
+            # Java (OpenJDK)
+            java.version.major=${{ env.java_major_tag }}
+            java.version.minor=${{ env.java_minor_tag }}
+            java.version.full=${{ env.java }}
             org.opencontainers.image.architecture=${{ matrix.platform }}
 
       - name: Build and push Docker image for ${{ matrix.platform }}
@@ -345,7 +371,7 @@ jobs:
           body=$(cat <<EOF
           Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
 
-          The \`latest\` tag for each platform now points to this release.
+          The \`latest\` tag for each platform now points to this release. Major and Minor version tags (e.g., \`3\`, \`3.12\`) are recommended to always pick up the latest version of spefcific language base images.
 
           **Published Images & Tags:**
 
@@ -353,10 +379,22 @@ jobs:
               *   Image: \`$registry/$repo_name/$image_base_name-linux-amd64\`
               *   Tag: \`$version_tag\`
               *   Tag: \`latest\`
+              $( [ -n "$py_major_amd64" ] && printf "*   Tag: \`%s\`\n" "$py_major_amd64" || true ) \
+              $( [ -n "$py_minor_amd64" ] && printf "*   Tag: \`%s\`\n" "$py_minor_amd64" || true ) \
+              $( [ -n "$node_major_amd64" ] && printf "*   Tag: \`%s\`\n" "$node_major_amd64" || true ) \
+              $( [ -n "$node_minor_amd64" ] && printf "*   Tag: \`%s\`\n" "$node_minor_amd64" || true ) \
+              $( [ -n "$jdk_major_amd64" ] && printf "*   Tag: \`%s\`\n" "$jdk_major_amd64" || true ) \
+              $( [ -n "$jdk_minor_amd64" ] && printf "*   Tag: \`%s\`\n" "$jdk_minor_amd64" || true )
           *   **linux/arm64:**
               *   Image: \`$registry/$repo_name/$image_base_name-linux-arm64\`
               *   Tag: \`$version_tag\`
               *   Tag: \`latest\`
+              $( [ -n "$py_major_arm64" ] && printf "*   Tag: \`%s\`\n" "$py_major_arm64" || true ) \
+              $( [ -n "$py_minor_arm64" ] && printf "*   Tag: \`%s\`\n" "$py_minor_arm64" || true ) \
+              $( [ -n "$node_major_arm64" ] && printf "*   Tag: \`%s\`\n" "$node_major_arm64" || true ) \
+              $( [ -n "$node_minor_arm64" ] && printf "*   Tag: \`%s\`\n" "$node_minor_arm64" || true ) \
+              $( [ -n "$jdk_major_arm64" ] && printf "*   Tag: \`%s\`\n" "$jdk_major_arm64" || true ) \
+              $( [ -n "$jdk_minor_arm64" ] && printf "*   Tag: \`%s\`\n" "$jdk_minor_arm64" || true )
           EOF
           )
 
@@ -420,14 +458,14 @@ jobs:
 
           # Add AMD64 Major/Minor pull examples if versions exist
           if [[ "$image_base_name" == "python-base" ]]; then
-              if [ -n "$py_major_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Major - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    ```\n' "$py_major_amd64" "$registry" "$repo_name" "$image_base_name" "$py_major_amd64"); fi
-              if [ -n "$py_minor_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Minor - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    ```\n\n' "$py_minor_amd64" "$registry" "$repo_name" "$image_base_name" "$py_minor_amd64"); fi
+              if [ -n "$py_major_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Major - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    \`\`\`\n' "$py_major_amd64" "$registry" "$repo_name" "$image_base_name" "$py_major_amd64"); fi
+              if [ -n "$py_minor_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Minor - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    \`\`\`\n\n' "$py_minor_amd64" "$registry" "$repo_name" "$image_base_name" "$py_minor_amd64"); fi
           elif [[ "$image_base_name" == "nodejs-base" ]]; then
-              if [ -n "$node_major_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Major - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    ```\n' "$node_major_amd64" "$registry" "$repo_name" "$image_base_name" "$node_major_amd64"); fi
-              if [ -n "$node_minor_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Minor - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    ```\n\n' "$node_minor_amd64" "$registry" "$repo_name" "$image_base_name" "$node_minor_amd64"); fi
+              if [ -n "$node_major_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Major - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    \`\`\`\n' "$node_major_amd64" "$registry" "$repo_name" "$image_base_name" "$node_major_amd64"); fi
+              if [ -n "$node_minor_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Minor - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    \`\`\`\n\n' "$node_minor_amd64" "$registry" "$repo_name" "$image_base_name" "$node_minor_amd64"); fi
           elif [[ "$image_base_name" == "openjdk17-base" ]]; then
-              if [ -n "$jdk_major_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Major - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    ```\n' "$jdk_major_amd64" "$registry" "$repo_name" "$image_base_name" "$jdk_major_amd64"); fi
-              if [ -n "$jdk_minor_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Minor - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    ```\n\n' "$jdk_minor_amd64" "$registry" "$repo_name" "$image_base_name" "$jdk_minor_amd64"); fi
+              if [ -n "$jdk_major_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Major - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    \`\`\`\n' "$jdk_major_amd64" "$registry" "$repo_name" "$image_base_name" "$jdk_major_amd64"); fi
+              if [ -n "$jdk_minor_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Minor - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    \`\`\`\n\n' "$jdk_minor_amd64" "$registry" "$repo_name" "$image_base_name" "$jdk_minor_amd64"); fi
           fi
 
           # Add base ARM64 pull examples
@@ -447,20 +485,19 @@ jobs:
 
           # Add ARM64 Major/Minor pull examples if versions exist
           if [[ "$image_base_name" == "python-base" ]]; then
-              if [ -n "$py_major_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Major - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    ```\n' "$py_major_arm64" "$registry" "$repo_name" "$image_base_name" "$py_major_arm64"); fi
-              if [ -n "$py_minor_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Minor - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    ```\n\n' "$py_minor_arm64" "$registry" "$repo_name" "$image_base_name" "$py_minor_arm64"); fi
+              if [ -n "$py_major_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Major - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    \`\`\`\n' "$py_major_arm64" "$registry" "$repo_name" "$image_base_name" "$py_major_arm64"); fi
+              if [ -n "$py_minor_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Minor - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    \`\`\`\n\n' "$py_minor_arm64" "$registry" "$repo_name" "$image_base_name" "$py_minor_arm64"); fi
           elif [[ "$image_base_name" == "nodejs-base" ]]; then
-              if [ -n "$node_major_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Major - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    ```\n' "$node_major_arm64" "$registry" "$repo_name" "$image_base_name" "$node_major_arm64"); fi
-              if [ -n "$node_minor_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Minor - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    ```\n\n' "$node_minor_arm64" "$registry" "$repo_name" "$image_base_name" "$node_minor_arm64"); fi
+              if [ -n "$node_major_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Major - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    \`\`\`\n' "$node_major_arm64" "$registry" "$repo_name" "$image_base_name" "$node_major_arm64"); fi
+              if [ -n "$node_minor_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Minor - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    \`\`\`\n\n' "$node_minor_arm64" "$registry" "$repo_name" "$image_base_name" "$node_minor_arm64"); fi
           elif [[ "$image_base_name" == "openjdk17-base" ]]; then
-              if [ -n "$jdk_major_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Major - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    ```\n' "$jdk_major_arm64" "$registry" "$repo_name" "$image_base_name" "$jdk_major_arm64"); fi
-              if [ -n "$jdk_minor_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Minor - %s):**\n    ```bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    ```\n\n' "$jdk_minor_arm64" "$registry" "$repo_name" "$image_base_name" "$jdk_minor_arm64"); fi
+              if [ -n "$jdk_major_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Major - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    \`\`\`\n' "$jdk_major_arm64" "$registry" "$repo_name" "$image_base_name" "$jdk_major_arm64"); fi
+              if [ -n "$jdk_minor_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Minor - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    \`\`\`\n\n' "$jdk_minor_arm64" "$registry" "$repo_name" "$image_base_name" "$jdk_minor_arm64"); fi
           fi
 
           # Append pull examples to the main body
           body="${body}${pull_examples}"
 
-          # Set the raw body content as an environment variable for the next step
           echo "Setting BODY_TEXT environment variable..."
           echo "BODY_TEXT<<EOF" >> $GITHUB_ENV
           echo "$body" >> $GITHUB_ENV
