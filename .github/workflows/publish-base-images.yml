@@ -404,7 +404,7 @@ jobs:
             if [ -n "$py_major_amd64" ] || [ -n "$py_major_arm64" ]; then
               specific_tags_section=$(cat <<EOF
 
-          **Python Versions:**
+          **Python Version Tags:**
           *   AMD64: Major=\`${py_major_amd64:-N/A}\`, Minor=\`${py_minor_amd64:-N/A}\`, Full=\`${py_full_amd64:-N/A}\`
           *   ARM64: Major=\`${py_major_arm64:-N/A}\`, Minor=\`${py_minor_arm64:-N/A}\`, Full=\`${py_full_arm64:-N/A}\`
           EOF
@@ -414,7 +414,7 @@ jobs:
             if [ -n "$node_major_amd64" ] || [ -n "$node_major_arm64" ]; then
               specific_tags_section=$(cat <<EOF
 
-          **Node.js Versions:**
+          **Node.js Version Tags:**
           *   AMD64: Major=\`${node_major_amd64:-N/A}\`, Minor=\`${node_minor_amd64:-N/A}\`, Full=\`${node_full_amd64:-N/A}\`
           *   ARM64: Major=\`${node_major_arm64:-N/A}\`, Minor=\`${node_minor_arm64:-N/A}\`, Full=\`${node_full_arm64:-N/A}\`
           EOF
@@ -424,7 +424,7 @@ jobs:
             if [ -n "$jdk_major_amd64" ] || [ -n "$jdk_major_arm64" ]; then
               specific_tags_section=$(cat <<EOF
 
-          **OpenJDK Versions:**
+          **OpenJDK Version Tags:**
           *   AMD64: Major=\`${jdk_major_amd64:-N/A}\`, Minor=\`${jdk_minor_amd64:-N/A}\`, Full=\`${jdk_full_amd64:-N/A}\`
           *   ARM64: Major=\`${jdk_major_arm64:-N/A}\`, Minor=\`${jdk_minor_arm64:-N/A}\`, Full=\`${jdk_full_arm64:-N/A}\`
           EOF
