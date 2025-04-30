@@ -24,7 +24,7 @@ WORKDIR /usr/src
 # Download and build OpenSSL 3.0.9 from source
 WORKDIR /usr/src
 ENV OPENSSL_MODULES="/usr/local/ssl/lib64/ossl-modules"
-RUN wget -q https://www.openssl.org/source/openssl-3.0.9.tar.gz && tar -zxf openssl-3.0.9.tar.gz > /dev/null
+RUN wget -q https://www.openssl.org/source/openssl-3.0.9.tar.gz && tar -zxvf openssl-3.0.9.tar.gz > /dev/null
 
 RUN cd openssl-3.0.9 && \
     ./Configure enable-fips --prefix=/usr/local/ssl --openssldir=/usr/local/ssl no-ssl3 no-legacy no-comp no-idea no-dtls no-dtls1 no-err no-psk no-srp no-ec2m no-weak-ssl-ciphers -DOPENSSL_USE_BUILD_DATE && \
@@ -33,8 +33,6 @@ RUN cd openssl-3.0.9 && \
     make -j$(nproc) install_ssldirs && \
     make -j$(nproc) install_fips
 
-# Ensure that the FIPS module is correctly installed
-# RUN /usr/local/ssl/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module /usr/local/ssl/lib64/ossl-modules/fips.so
 # Ensure that the FIPS module is correctly installed by trying both lib and lib64 paths
 RUN /usr/local/ssl/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module /usr/local/ssl/lib/ossl-modules/fips.so || \
     (echo "Trying lib64 path for fipsinstall..." && /usr/local/ssl/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module /usr/local/ssl/lib64/ossl-modules/fips.so)
@@ -62,7 +60,58 @@ USER nobody
 # ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
 # ENV LDFLAGS="-L/usr/local/lib -L/usr/lib"
 # ENV CPPFLAGS="-I/usr/local/ssl/include/openssl"
-# ENV PKG_CONFIG_PATH="/usr/local/lib/pkgconfig"
-# ENV LD_LIBRARY_PATH="/usr/lib:/lib:/usr/local/lib;/usr/local/lib/engines-3"
-# ENV OPENSSL_INCLUDES="-I/usr/local/include/openssl"
 # ENV PATH="/usr/local/ssl/bin:$PATH"
+
+# If building other software (like Nginx, Python, etc.), you might need
+# variations of these ENV vars depending on that software's build system.
+ # ENV CPPFLAGS="-I/usr/local/ssl/include/openssl"
+ # ENV PKG_CONFIG_PATH="/usr/local/lib/pkgconfig"
+ # ENV LD_LIBRARY_PATH="/usr/lib:/lib:/usr/local/lib;/usr/local/lib/engines-3"
+
+### EXAMPLE STAGE 2: Build an application using the FIPS OpenSSL ###
+# # Use a standard base image for the final application
+# FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:2d96f988c92c74fd0697748787edaa1e4a6b931b1eec28dd746ecd1b79c59e82 AS final-app
+# LABEL stage="final-app"
+# # Install runtime dependencies and build tools for the example app
+# RUN apk update && apk add --no-cache \
+#     gcc \
+#     libc-dev \
+#     # Add any other runtime dependencies for your actual application here
+#     ca-certificates # Often needed for network communication
+
+# # Copy the FIPS-enabled OpenSSL installation from the builder stage
+# COPY --from=fips-builder /usr/local/ssl /usr/local/ssl/
+
+# # Set environment variables needed to link against the custom OpenSSL
+# # These tell the compiler/linker where to find the FIPS OpenSSL headers and libraries.
+# ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
+# ENV LDFLAGS="-L/usr/local/ssl/lib64 -Wl,-rpath,/usr/local/ssl/lib64"
+# ENV CPPFLAGS="-I/usr/local/ssl/include"
+# # PKG_CONFIG_PATH might be needed for some build systems
+# # ENV PKG_CONFIG_PATH="/usr/local/ssl/lib64/pkgconfig"
+# ENV LD_LIBRARY_PATH="/usr/local/ssl/lib64"
+# ENV PATH="/usr/local/ssl/bin:$PATH"
+
+# # Example: Create and compile a simple C program that checks FIPS mode
+# WORKDIR /app
+# RUN echo '#include <stdio.h>\n\
+# #include <openssl/evp.h>\n\
+# int main() {\n\
+#     if (EVP_default_properties_is_fips_enabled(NULL)) {\n\
+#         printf("FIPS mode is enabled.\\n");\n\
+#     } else {\n\
+#         printf("FIPS mode is NOT enabled.\\n");\n\
+#     }\n\
+#     printf("OpenSSL library version: %s\\n", OpenSSL_version(OPENSSL_VERSION_STRING));\n\
+#     return 0;\n\
+# }' > fips_check.c
+
+# # Compile the program, linking against the FIPS OpenSSL
+# # The LDFLAGS and CPPFLAGS environment variables are used by gcc here
+# RUN gcc fips_check.c -o fips_check -lssl -lcrypto $LDFLAGS $CPPFLAGS
+
+# # Set the default user for the final image
+# USER nobody
+
+# # Set the default command to run the example program
+# CMD ["/app/fips_check"]
