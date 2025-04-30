@@ -10,12 +10,27 @@ This repository contains Dockerfiles for Aquia Base Docker Images.
 
 This repository is a work in progress, but the produced images are conssidered stable, unless otherwise noted below.
 
-## Hardened images
+## Available Images
+
+[![GHCR Pulls (fips-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/fips-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/fips-base-linux-amd64)
+[![GHCR Pulls (fips-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/fips-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/fips-base-linux-arm64)
+[![GHCR Pulls (nginx-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/nginx-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/nginx-base-linux-amd64)
+[![GHCR Pulls (nginx-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/nginx-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/nginx-base-linux-arm64)
+[![GHCR Pulls (nodejs-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/nodejs-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/nodejs-base-linux-amd64)
+[![GHCR Pulls (nodejs-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/nodejs-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/nodejs-base-linux-arm64)
+[![GHCR Pulls (openjdk17-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/openjdk17-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/openjdk17-base-linux-amd64)
+[![GHCR Pulls (openjdk17-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/openjdk17-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/openjdk17-base-linux-arm64)
+[![GHCR Pulls (python-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/python-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/python-base-linux-amd64)
+[![GHCR Pulls (python-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/python-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/python-base-linux-arm64)
+[![GHCR Pulls (wolfi-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/wolfi-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/wolfi-base-linux-amd64)
+[![GHCR Pulls (wolfi-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/wolfi-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/wolfi-base-linux-arm64)
+
+## Hardening
 
 Images are considered hardened when they do not contain fixed CVE vulnerabilities of the following severities: CRITICAL, HIGH, MEDIUM. They are based on [wolfi-base](<https://edu.chainguard.dev/open-source/wolfi/overview/>) from Chainguard. We use Renovate to automatically update each of these base images to the most recently published image ([`latest`](https://edu.chainguard.dev/chainguard/chainguard-images/reference/wolfi-base/tags_history/)).
 
 * NodeJS
-* Python
+* Python 3.13
 * OpenJDK-17, with Maven 3.9.5
 * Wolfi Base
 * Wolfi Base with [FIPS (beta*)](#beta-images)
@@ -23,17 +38,17 @@ Images are considered hardened when they do not contain fixed CVE vulnerabilitie
 
 ### Recommended Version Pinning
 
-The images are tagged with [Semantic Versioning](https://semver.org/) and also with the installed language's major (i.e. `python-base:3`) and major + minor (i.e. `python-base:3.12`) versions (currently implemented for Python, Node, openJDK).
+The images are tagged with [Semantic Versioning](https://semver.org/) and also with the installed language's major (i.e. `python-base:3`) and major + minor (i.e. `python-base:3.13`) versions (currently implemented for Python, Node, openJDK).
 
-If you want to ensure that your image's installed language is not updated to a potentially non-backwards-compatible version, you can pin the version of the image you are using to the specific version of the language you want - i.e. `python-base:3.12`.
+If you want to ensure that your image's installed language is not updated to a potentially non-backwards-compatible version, you can pin the version of the image you are using to the specific version of the language you want - i.e. `python-base:3.13`.
 
-Note, however, that due to the limitations of our using Chainguard's free tier, we can only keep the latest wolfi-base image up-to-date, so once wolfi-base moves to python 3.13 for example, the python-base:3.12 will no longer be automatically patched by our workflows.
+Note, however, that due to the limitations of our using Chainguard's free tier, we can only keep the latest wolfi-base image up-to-date, so once wolfi-base moves to python 3.14 for example, the python-base:3.13 will no longer be automatically patched by our workflows.
 
-On the other hand, pinning your image to `python-base:3` for exammple, allows you to receive all Python 3 security updates, but it will also force you to upgrade to the next minor version whenever wolfi-base is updated to that version of Python.
+On the other hand, pinning your image to `python-base:3` for example, allows you to receive all Python 3 security updates, but it will also force you to upgrade to the next minor version whenever wolfi-base is updated to that version of Python.
 
 Both choices have tradeoffs and is a decision you need to make based on your project's needs.
 
-The non-language-specific images, such as the `nginx-base` and `wolfi-base` can be pinned to `:latest` as they are unlikely to bring backwards-incompatible changes to your workloads.
+The non-language-specific images, such as the `nginx-base` and `wolfi-base` images can be pinned to `:latest`, as they are unlikely to bring backwards-incompatible changes to your workloads.
 
 ## How to Use
 
@@ -66,6 +81,7 @@ The beta images are tested within limited scope and are generally stable but not
 
 The image built from the [Dockerfile.fips-base](./Dockerfile.fips-base) includes FIPS-enabled OpenSSL and the Dockerfile shows an example of how to use it in the `Example Stage 2` section that should be modified to your workload's specific needs.
 
+[More information on the FIPS image.](./FIPS.md)
 
 ### Nginx Security
 
@@ -73,10 +89,10 @@ The image built from the [Dockerfile.fips-base](./Dockerfile.fips-base) includes
 
 If you are using the nginx image provided in this repository, you should also use the `nginx.conf` file in this repository if you need to make any changes to it.  In most cases, you should not need to make any changes to the nginx configuration as it is already matching configuration set up in the container.
 
-#### Running nginx as user `root`
+Starting nginx as user `root`
 
-The nginx server in the nginx image should be run as user `nginx` for security reasons, but the server can also be started as user `root` in situations where nginx needs to bind to ports < 1025, i.e. `0.0.0.0:80`.  In those scenarios nginx parent process will be started as `root`, then drop privileges when starting worker processes by switching to user `nginx`.
-This mode of operation reqires that the following stanza at the top of `nginx.conf` is uncommented and looks as follows:
+The nginx server in the nginx image should be run as user `nginx` for security reasons, but the server can also be started as user `root` in situations where nginx needs to bind to ports <= 1024, i.e. `0.0.0.0:80`.  In those scenarios nginx parent process will be started as `root`, then drop privileges when starting worker processes by switching to user `nginx`.
+This mode of operation requires that the following stanza at the top of the [`nginx.conf`](./nginx.conf) config file is uncommented and looks as follows:
 
 ```shell
     user nginx;
@@ -113,7 +129,7 @@ Please see the <a href="examples/">examples</a> directory for an example nginx w
 
 ### Add New Image
 
-PR to main with new Dockerfile in format `Dockerfile.<image-name>`. This will build your Docker image with semver tag `0.0.1`.
+PR to `main` with new Dockerfile in format `Dockerfile.<image-name>`. This will build your Docker image with semver tag `0.0.1`.
 
 ### Update Image
 
