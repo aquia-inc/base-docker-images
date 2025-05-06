@@ -67,7 +67,7 @@ All currently available images are [listed here](https://github.com/orgs/aquia-i
 To use an image in your project, you can use the following snippet:
 
 ```shell
-FROM ghcr.io/aquia-inc/base-docker-images/<docker-image-name>:<semver tag>
+FROM ghcr.io/aquia-inc/base-docker-images/<docker-image-name>:<tag>
 ```
 
 Anyone can pull the image locally with their Github [personal access token](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-to-the-container-registry).
