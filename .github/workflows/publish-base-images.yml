@@ -259,6 +259,67 @@ jobs:
           echo "SHA256 digest for ${{ steps.image_name.outputs.platform_image_name }}: ${{ steps.docker_build.outputs.digest }}"
           ls -al
 
+      - name: Determine Repository Owner Type for ${{ matrix.platform }}
+        id: owner_type
+        if: steps.docker_build.outputs.digest != '' && github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          OWNER_LOGIN: ${{ github.repository_owner }}
+        run: |
+          echo "Determining owner type for $OWNER_LOGIN"
+          # GITHUB_TOKEN is implicitly used by gh api
+          OWNER_TYPE_JSON=$(gh api "users/$OWNER_LOGIN" --jq '.type')
+          # Remove quotes from JSON string output by jq
+          OWNER_TYPE=$(echo "$OWNER_TYPE_JSON" | tr -d '"')
+
+          echo "Raw type from API: '$OWNER_TYPE_JSON', Parsed type: '$OWNER_TYPE'"
+
+          if [ "$OWNER_TYPE" = "User" ]; then
+            echo "api_path_segment=users" >> $GITHUB_OUTPUT
+            echo "Determined owner type for $OWNER_LOGIN: User"
+          elif [ "$OWNER_TYPE" = "Organization" ]; then
+            echo "api_path_segment=orgs" >> $GITHUB_OUTPUT
+            echo "Determined owner type for $OWNER_LOGIN: Organization"
+          else
+            echo "::error::Could not determine owner type for '$OWNER_LOGIN'. Received type: '$OWNER_TYPE'."
+            echo "Full API response for users/$OWNER_LOGIN:"
+            gh api "users/$OWNER_LOGIN"
+            exit 1
+          fi
+
+      - name: Make Package Public on GHCR for ${{ matrix.platform }}
+        if: steps.docker_build.outputs.digest != '' && steps.owner_type.outputs.api_path_segment != '' && github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          PACKAGE_NAME: ${{ steps.image_name.outputs.platform_image_name }}
+          OWNER: ${{ github.repository_owner }}
+          API_PATH_SEGMENT: ${{ steps.owner_type.outputs.api_path_segment }}
+          # GITHUB_TOKEN is implicitly used by gh api
+        run: |
+          echo "Attempting to set package visibility to public for $PACKAGE_NAME (owner: $OWNER, type path: $API_PATH_SEGMENT)"
+          API_URL_PATH="/${API_PATH_SEGMENT}/${OWNER}/packages/container/${PACKAGE_NAME}"
+          echo "Target API path: $API_URL_PATH"
+
+          if gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$API_URL_PATH" \
+            -f visibility='public' \
+            --silent; then
+            echo "Successfully set package $PACKAGE_NAME to public."
+          else
+            ERROR_CODE=$?
+            # Check if it's already public or if the package doesn't exist yet (race condition)
+            CURRENT_VISIBILITY=$(gh api "$API_URL_PATH" --jq .visibility --silent 2>/dev/null | tr -d '"')
+            if [ "$CURRENT_VISIBILITY" = "public" ]; then
+              echo "Package $PACKAGE_NAME is already public. No action needed."
+            else
+              echo "::error::Failed to set package $PACKAGE_NAME to public (gh api exit code $ERROR_CODE). Current visibility: '$CURRENT_VISIBILITY'."
+              echo "Full package details for diagnostics (if package exists):"
+              gh api "$API_URL_PATH" --silent || echo "::error::Fetching package details also failed or package does not exist yet."
+              # exit 1 
+            fi
+          fi
+
   create_release:
     runs-on: ubuntu-latest
     needs: publish_image
