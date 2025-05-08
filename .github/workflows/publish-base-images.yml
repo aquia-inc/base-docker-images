@@ -264,9 +264,9 @@ jobs:
         if: steps.docker_build.outputs.digest != '' && github.event_name == 'push' && github.ref_type == 'tag'
         env:
           OWNER_LOGIN: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Determining owner type for $OWNER_LOGIN"
-          # GITHUB_TOKEN is implicitly used by gh api
           OWNER_TYPE_JSON=$(gh api "users/$OWNER_LOGIN" --jq '.type')
           # Remove quotes from JSON string output by jq
           OWNER_TYPE=$(echo "$OWNER_TYPE_JSON" | tr -d '"')
