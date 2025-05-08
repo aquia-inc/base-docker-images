@@ -18,6 +18,8 @@ env:
 jobs:
   publish_image:
     runs-on: ubuntu-latest
+    env: # Add GH_TOKEN at the job level
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -263,8 +265,8 @@ jobs:
         id: owner_type
         if: steps.docker_build.outputs.digest != '' && github.event_name == 'push' && github.ref_type == 'tag'
         env:
-          OWNER_LOGIN: ${{ github.repository_owner }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER_LOGIN: ${{ github.repository_owner }} 
+          # GH_TOKEN is inherited from the job-level env
         run: |
           echo "Determining owner type for $OWNER_LOGIN"
           OWNER_TYPE_JSON=$(gh api "users/$OWNER_LOGIN" --jq '.type')
@@ -292,7 +294,7 @@ jobs:
           PACKAGE_NAME: ${{ steps.image_name.outputs.platform_image_name }}
           OWNER: ${{ github.repository_owner }}
           API_PATH_SEGMENT: ${{ steps.owner_type.outputs.api_path_segment }}
-          # GITHUB_TOKEN is implicitly used by gh api
+          # GH_TOKEN is now inherited from the job-level env
         run: |
           echo "Attempting to set package visibility to public for $PACKAGE_NAME (owner: $OWNER, type path: $API_PATH_SEGMENT)"
           API_URL_PATH="/${API_PATH_SEGMENT}/${OWNER}/packages/container/${PACKAGE_NAME}"
