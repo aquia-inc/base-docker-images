@@ -10,21 +10,6 @@ This repository contains Dockerfiles for Aquia Base Docker Images.
 
 This repository is a work in progress, but the produced images are conssidered stable, unless otherwise noted below.
 
-## Available Images
-
-[![GHCR Pulls (fips-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/fips-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/fips-base-linux-amd64)
-[![GHCR Pulls (fips-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/fips-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/fips-base-linux-arm64)
-[![GHCR Pulls (nginx-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/nginx-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/nginx-base-linux-amd64)
-[![GHCR Pulls (nginx-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/nginx-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/nginx-base-linux-arm64)
-[![GHCR Pulls (nodejs-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/nodejs-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/nodejs-base-linux-amd64)
-[![GHCR Pulls (nodejs-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/nodejs-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/nodejs-base-linux-arm64)
-[![GHCR Pulls (openjdk17-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/openjdk17-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/openjdk17-base-linux-amd64)
-[![GHCR Pulls (openjdk17-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/openjdk17-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/openjdk17-base-linux-arm64)
-[![GHCR Pulls (python-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/python-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/python-base-linux-amd64)
-[![GHCR Pulls (python-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/python-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/python-base-linux-arm64)
-[![GHCR Pulls (wolfi-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/wolfi-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/wolfi-base-linux-amd64)
-[![GHCR Pulls (wolfi-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/wolfi-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/wolfi-base-linux-arm64)
-
 ## Hardening
 
 Images are considered hardened when they do not contain fixed CVE vulnerabilities of the following severities: CRITICAL, HIGH, MEDIUM. They are based on [wolfi-base](<https://edu.chainguard.dev/open-source/wolfi/overview/>) from Chainguard. We use Renovate to automatically update each of these base images to the most recently published image ([`latest`](https://edu.chainguard.dev/chainguard/chainguard-images/reference/wolfi-base/tags_history/)).
@@ -167,4 +152,4 @@ For example:
 
 * Any workflows that we want to trigger other workflows [cannot use the default GITHUB_TOKEN](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow), so we are using a Deploy Key for the [Create Release Tag](.github/workflows/create-release-tag.yml#L64) workflow. A Deploy Key is [preferable](https://medium.com/prompt/trigger-another-github-workflow-without-using-a-personal-access-token-f594c21373ef) to a Personal Access Token, since it can be repository-scoped and not tied to a specific user.
 
-* The [Create Release Tag](.github/workflows/create-release-tag.yml#L64) workflow is triggered by the [Create Release Tag](.github/workflows/create-release-tag.yml) workflow.  
+* The [Publish Base Image](.github/workflows/publish-base-immages.yml) workflow is triggered by the [Create Release Tag](.github/workflows/create-release-tag.ym) workflow.  
