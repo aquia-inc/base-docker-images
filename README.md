@@ -5,7 +5,6 @@ This repository contains Dockerfiles for Aquia Base Docker Images.
 
 ![Many Dockerfiles](dockerfiledotfinaldotv2dotfinallyfinal-v0-l7sfec8j2v5e1.png.webp)
 
-
 ## WiP
 
 This repository is a work in progress, but the produced images are considered stable, unless otherwise noted below.
@@ -31,7 +30,6 @@ This repository is a work in progress, but the produced images are considered st
 * [openjdk17-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base-linux-arm64)
 * [python-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fpython-base-linux-arm64)
 * [wolfi-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-arm64)
-
 
 ## Hardening
 
@@ -68,12 +66,11 @@ To prevent this, you should add the `--pull` flag to your `docker build` command
 
 In your CI/CD pipelines:
 
-
 docker build <span style="font-weight:bold;color:green;">--pull</span> -t ...
 
+### Authenticating to GHCR
 
-
-### Logging into GHCR for the first time
+While these images are public and can be pulled without authentication, anonymous pulls are subject to stricter rate limits. For use in CI/CD pipelines or for frequent local development, it is highly recommended to authenticate with a Personal Access Token (PAT) to avoid potential rate-limiting issues.
 
 ```shell
 export CR_PAT=YOUR_TOKEN
@@ -92,7 +89,6 @@ FROM ghcr.io/aquia-inc/base-docker-images/<docker-image-name>:<tag>
 ```
 
 Anyone can pull the image locally with their Github [personal access token](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-to-the-container-registry).
-
 
 ### Beta images
 
@@ -145,7 +141,6 @@ Running on lower ports as user `root` and worker processes running as user `ngin
 
 Please see the <a href="examples/">examples</a> directory for an example nginx workload <A href="examples/default.conf">configuration</a> file and the corresponding <a href="examples/Dockerfile.example.nginx">Dockerfile</a>.
 
-
 ## Contributing
 
 ### Add New Image
@@ -188,4 +183,4 @@ For example:
 
 * Any workflows that we want to trigger other workflows [cannot use the default GITHUB_TOKEN](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow), so we are using a Deploy Key for the [Create Release Tag](.github/workflows/create-release-tag.yml#L64) workflow. A Deploy Key is [preferable](https://medium.com/prompt/trigger-another-github-workflow-without-using-a-personal-access-token-f594c21373ef) to a Personal Access Token, since it can be repository-scoped and not tied to a specific user.
 
-* The [Create Release Tag](.github/workflows/create-release-tag.yml#L64) workflow is triggered by the [Create Release Tag](.github/workflows/create-release-tag.yml) workflow.  
+* The [Publish Base Image](.github/workflows/publish-base-immages.yml) workflow is triggered by the [Create Release Tag](.github/workflows/create-release-tag.ym) workflow.  
