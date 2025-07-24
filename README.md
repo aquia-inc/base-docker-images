@@ -1,7 +1,7 @@
 
 # Aquia Base Docker Images
 
-This repository contains Dockerfiles for Aquia Base Docker Images.
+This repository contains Dockerfiles and releases of hardened Aquia Base Docker Images.
 
 ![Many Dockerfiles](dockerfiledotfinaldotv2dotfinallyfinal-v0-l7sfec8j2v5e1.png.webp)
 
