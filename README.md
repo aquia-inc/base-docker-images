@@ -8,22 +8,30 @@ This repository contains Dockerfiles for Aquia Base Docker Images.
 
 ## WiP
 
-This repository is a work in progress, but the produced images are conssidered stable, unless otherwise noted below.
+This repository is a work in progress, but the produced images are considered stable, unless otherwise noted below.
 
 ## Available Images
 
-[![GHCR Pulls (fips-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/fips-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/fips-base-linux-amd64)
-[![GHCR Pulls (fips-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/fips-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/fips-base-linux-arm64)
-[![GHCR Pulls (nginx-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/nginx-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/nginx-base-linux-amd64)
-[![GHCR Pulls (nginx-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/nginx-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/nginx-base-linux-arm64)
-[![GHCR Pulls (nodejs-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/nodejs-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/nodejs-base-linux-amd64)
-[![GHCR Pulls (nodejs-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/nodejs-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/nodejs-base-linux-arm64)
-[![GHCR Pulls (openjdk17-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/openjdk17-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/openjdk17-base-linux-amd64)
-[![GHCR Pulls (openjdk17-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/openjdk17-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/openjdk17-base-linux-arm64)
-[![GHCR Pulls (python-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/python-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/python-base-linux-amd64)
-[![GHCR Pulls (python-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/python-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/python-base-linux-arm64)
-[![GHCR Pulls (wolfi-base-linux-amd64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/wolfi-base-linux-amd64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/wolfi-base-linux-amd64)
-[![GHCR Pulls (wolfi-base-linux-arm64)](https://img.shields.io/ghcr.io/pulls/aquia-inc/base-docker-images/wolfi-base-linux-arm64.svg)](https://github.com/aquia-inc/base-docker-images/pkgs/container/wolfi-base-linux-arm64)
+[![Latest Release](https://img.shields.io/github/v/release/aquia-inc/base-docker-images?label=Latest%20Release&style=for-the-badge&logo=github)](https://github.com/aquia-inc/base-docker-images/releases/latest) [![Release Date](https://img.shields.io/github/release-date/aquia-inc/base-docker-images?label=Release%20Date&style=for-the-badge&logo=github)](https://github.com/aquia-inc/base-docker-images/releases/latest)
+
+### Latest linux/amd64 Releases
+
+* [fips-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64)
+* [nginx-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-amd64)
+* [nodejs-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-base-linux-amd64)
+* [openjdk17-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base-linux-amd64)
+* [python-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fpython-base-linux-amd64)
+* [wolfi-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-amd64)
+
+### Latest linux/arm64 Releases
+
+* [fips-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-arm64)
+* [nginx-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-arm64)
+* [nodejs-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-base-linux-arm64)
+* [openjdk17-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base-linux-arm64)
+* [python-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fpython-base-linux-arm64)
+* [wolfi-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-arm64)
+
 
 ## Hardening
 
@@ -52,6 +60,19 @@ The non-language-specific images, such as the `nginx-base` and `wolfi-base` imag
 
 ## How to Use
 
+### Ensure your base image is always fresh
+
+By default, docker build will use a cached version of a base image if it already exists in the build environment. Because your Dockerfile uses mutable tags like :latest, there's a risk that your CI/CD pipeline could use a stale base image, potentially missing critical security patches.
+
+To prevent this, you should add the `--pull` flag to your `docker build` command. This flag explicitly tells Docker to always attempt to pull a newer version of the base image from the remote registry before starting the build.
+
+In your CI/CD pipelines:
+
+
+docker build <span style="font-weight:bold;color:green;">--pull</span> -t ...
+
+
+
 ### Logging into GHCR for the first time
 
 ```shell
@@ -75,7 +96,7 @@ Anyone can pull the image locally with their Github [personal access token](http
 
 ### Beta images
 
-The beta images are tested within limited scope and are generally stable but not recommended for production use without thorough testing in lower environments.  We encourage you to use them for testing and development and provide feedback to us to help us get them to GA.  If any bugs or unexpected behaviors are encountered, please open an issue using the BUG_REPORT template in this repository with enough detail to reproduce the issue.
+The beta images are tested within limited scope and are generally stable but not recommended for production use without thorough testing in lower environments.  We encourage you to use them for testing and development and provide feedback to us to help us get them to GA faster.  If any bugs or unexpected behaviors are encountered, please open an issue using the BUG_REPORT template in this repository with enough detail to reproduce the issue.
 
 #### FIPS-enabled base image
 
