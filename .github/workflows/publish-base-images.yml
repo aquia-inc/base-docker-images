@@ -356,7 +356,7 @@ jobs:
           steps.parse_tag_release.outputs.image_base_name == 'python-base' ||
           steps.parse_tag_release.outputs.image_base_name == 'nodejs-base' ||
           steps.parse_tag_release.outputs.image_base_name == 'openjdk17-base'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: versions-file-linux-amd64
           path: .
@@ -367,7 +367,7 @@ jobs:
           steps.parse_tag_release.outputs.image_base_name == 'python-base' ||
           steps.parse_tag_release.outputs.image_base_name == 'nodejs-base' ||
           steps.parse_tag_release.outputs.image_base_name == 'openjdk17-base'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: versions-file-linux-arm64
           path: .
