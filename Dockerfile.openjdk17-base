@@ -3,7 +3,7 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:1fd981aa0bcefd8da87ce55a9ae907862fcb6835c658fdb284867117fb0268ce
 
 # Define versions as arguments for easier updates and clarity
-ARG MAVEN_VERSION=3.9.5-r0
+ARG MAVEN_VERSION=3.9.8-r0
 ARG OPENJDK_PACKAGE=openjdk-17
 
 # Install necessary packages, common build tools, create non-root user, and perform cleanup
