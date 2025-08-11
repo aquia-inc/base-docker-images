@@ -8,7 +8,7 @@ on:
     branches:
       - main
   pull_request:
-    branches: [ main ]
+    branches: [main]
 env:
   REGISTRY: ghcr.io
   # Use a default tag for PRs to allow parsing logic to run without error
@@ -18,7 +18,7 @@ env:
 jobs:
   publish_image:
     runs-on: ubuntu-latest
-    env: # Add GH_TOKEN at the job level
+    env:  # Add GH_TOKEN at the job level
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
@@ -199,6 +199,10 @@ jobs:
         with:
           path: .
 
+      - name: Generate build timestamp
+        id: build_timestamp
+        run: echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5.7.0
@@ -222,10 +226,18 @@ jobs:
             type=raw,value={{env.java_major_tag}},enable=${{ steps.parse_tag.outputs.image_base_name == 'openjdk17-base' && env.java_major_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
             type=raw,value={{env.java_minor_tag}},enable=${{ steps.parse_tag.outputs.image_base_name == 'openjdk17-base' && env.java_minor_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
           labels: |
+            # See https://github.com/opencontainers/image-spec/blob/main/annotations.md
             org.opencontainers.image.title=${{ steps.image_name.outputs.platform_image_name }} (${{ matrix.platform }})
             org.opencontainers.image.description=Base image for ${{ steps.parse_tag.outputs.image_base_name }} targeting ${{ matrix.platform }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}.git
+            org.opencontainers.image.version=${{ steps.parse_tag.outputs.version }}
+            org.opencontainers.image.created=${{ steps.build_timestamp.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.vendor=Aquia Inc
-            org.opencontainers.image.build-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            org.opencontainers.image.platform=${{ matrix.platform }}
+            # Custom annotations
+            build-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             # --- Add language version labels if available ---
             # Python
             python.version.major=${{ env.python_major_tag }}
@@ -296,30 +308,50 @@ jobs:
           API_PATH_SEGMENT: ${{ steps.owner_type.outputs.api_path_segment }}
           # GH_TOKEN is now inherited from the job-level env
         run: |
-          echo "Attempting to set package visibility to public for $PACKAGE_NAME (owner: $OWNER, type path: $API_PATH_SEGMENT)"
           API_URL_PATH="/${API_PATH_SEGMENT}/${OWNER}/packages/container/${PACKAGE_NAME}"
           echo "Target API path: $API_URL_PATH"
 
-          if gh api \
-            --method PATCH \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "$API_URL_PATH" \
-            -f visibility='public' \
-            --silent; then
-            echo "Successfully set package $PACKAGE_NAME to public."
-          else
-            ERROR_CODE=$?
-            # Check if it's already public or if the package doesn't exist yet (race condition)
-            CURRENT_VISIBILITY=$(gh api "$API_URL_PATH" --jq .visibility --silent 2>/dev/null | tr -d '"')
-            if [ "$CURRENT_VISIBILITY" = "public" ]; then
-              echo "Package $PACKAGE_NAME is already public. No action needed."
+          max_attempts=3
+          attempt_num=1
+          success=false
+          while [ $attempt_num -le $max_attempts ]; do
+            echo "Attempt $attempt_num of $max_attempts to set package visibility for '$PACKAGE_NAME'..."
+            if gh api \
+              --method PATCH \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$API_URL_PATH" \
+              -f visibility='public' \
+              --silent; then
+              echo "Successfully set package '$PACKAGE_NAME' to public."
+              success=true
+              break
             else
-              echo "::error::Failed to set package $PACKAGE_NAME to public (gh api exit code $ERROR_CODE). Current visibility: '$CURRENT_VISIBILITY'."
-              echo "Full package details for diagnostics (if package exists):"
-              gh api "$API_URL_PATH" --silent || echo "::error::Fetching package details also failed or package does not exist yet."
-              # exit 1 
+              ERROR_CODE=$?
+              echo "Attempt $attempt_num failed with exit code $ERROR_CODE."
+              # Check if it's already public, which is a success condition.
+              CURRENT_VISIBILITY=$(gh api "$API_URL_PATH" --jq .visibility --silent 2>/dev/null | tr -d '"')
+              if [ "$CURRENT_VISIBILITY" = "public" ]; then
+                echo "Package '$PACKAGE_NAME' is already public. Considering this a success."
+                success=true
+                break
+              fi
+
+              if [ $attempt_num -eq $max_attempts ]; then
+                break # Exit loop on final attempt
+              fi
+
+              echo "Waiting 5 seconds before retrying..."
+              sleep 5
+              ((attempt_num++))
             fi
+          done
+
+          if [ "$success" = "false" ]; then
+            echo "::error::Failed to set package '$PACKAGE_NAME' to public after $max_attempts attempts."
+            echo "Full package details for diagnostics:"
+            gh api "$API_URL_PATH" --silent || echo "::warning::Fetching package details also failed, which may happen if the package was never created."
+            exit 1
           fi
 
   create_release:
@@ -422,7 +454,6 @@ jobs:
               node_major_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs_major_tag")
               node_minor_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs_minor_tag")
               node_full_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs")
-              # Corrected keys for openjdk
               jdk_major_arm64=$(get_version_value "env.versions.linux-arm64" "java_major_tag")
               jdk_minor_arm64=$(get_version_value "env.versions.linux-arm64" "java_minor_tag")
               jdk_full_arm64=$(get_version_value "env.versions.linux-arm64" "java")
@@ -430,11 +461,44 @@ jobs:
               echo "ARM64 versions artifact not downloaded or download failed."
           fi
 
-          # Start with the base body
-          body=$(cat <<EOF
-          Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
+          # --- Consolidate version info using generic variables ---
+          LANGUAGE_NAME=""
+          MAJOR_AMD64="" MINOR_AMD64="" FULL_AMD64=""
+          MAJOR_ARM64="" MINOR_ARM64="" FULL_ARM64=""
 
-          The \`latest\` tag for each platform now points to this release. Major and Minor version tags (e.g., \`3\`, \`3.12\`) are recommended to always pick up the latest version of spefcific language base images.
+          case "$image_base_name" in
+            "python-base")
+              LANGUAGE_NAME="Python"
+              MAJOR_AMD64=$py_major_amd64; MINOR_AMD64=$py_minor_amd64; FULL_AMD64=$py_full_amd64
+              MAJOR_ARM64=$py_major_arm64; MINOR_ARM64=$py_minor_arm64; FULL_ARM64=$py_full_arm64
+              ;;
+            "nodejs-base")
+              LANGUAGE_NAME="Node.js"
+              MAJOR_AMD64=$node_major_amd64; MINOR_AMD64=$node_minor_amd64; FULL_AMD64=$node_full_amd64
+              MAJOR_ARM64=$node_major_arm64; MINOR_ARM64=$node_minor_arm64; FULL_ARM64=$node_full_arm64
+              ;;
+            "openjdk17-base")
+              LANGUAGE_NAME="OpenJDK"
+              MAJOR_AMD64=$jdk_major_amd64; MINOR_AMD64=$jdk_minor_amd64; FULL_AMD64=$jdk_full_amd64
+              MAJOR_ARM64=$jdk_major_arm64; MINOR_ARM64=$jdk_minor_arm64; FULL_ARM64=$jdk_full_arm64
+              ;;
+          esac
+
+          # --- Build Release Body ---
+          if [ -n "$LANGUAGE_NAME" ]; then
+            # Language-specific images
+            intro_text="Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
+
+          **For CI/CD stability, we strongly recommend pinning to major.minor versions (e.g., \`${MINOR_AMD64:-X.Y}\`) rather than \`latest\` or specific semver tags.** This provides the best balance of security updates while avoiding breaking changes."
+          else
+            # Non-language base images  
+            intro_text="Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
+
+          **For non-language base images, pin to \`:latest\` tag with \`docker pull --pull=always\` in your CI** to ensure you get the latest security updates and base image improvements."
+          fi
+
+          body=$(cat <<EOF
+          $intro_text
 
           **Published Images & Tags:**
 
@@ -442,124 +506,71 @@ jobs:
               *   Image: \`$registry/$repo_name/$image_base_name-linux-amd64\`
               *   Tag: \`$version_tag\`
               *   Tag: \`latest\`
-              $( [ -n "$py_major_amd64" ] && printf "*   Tag: \`%s\`\n" "$py_major_amd64" || true ) \
-              $( [ -n "$py_minor_amd64" ] && printf "*   Tag: \`%s\`\n" "$py_minor_amd64" || true ) \
-              $( [ -n "$node_major_amd64" ] && printf "*   Tag: \`%s\`\n" "$node_major_amd64" || true ) \
-              $( [ -n "$node_minor_amd64" ] && printf "*   Tag: \`%s\`\n" "$node_minor_amd64" || true ) \
-              $( [ -n "$jdk_major_amd64" ] && printf "*   Tag: \`%s\`\n" "$jdk_major_amd64" || true ) \
-              $( [ -n "$jdk_minor_amd64" ] && printf "*   Tag: \`%s\`\n" "$jdk_minor_amd64" || true )
+              $( [ -n "$MAJOR_AMD64" ] && printf "*   Tag: \`%s\`\n" "$MAJOR_AMD64" || true ) \
+              $( [ -n "$MINOR_AMD64" ] && printf "*   Tag: \`%s\`\n" "$MINOR_AMD64" || true )
           *   **linux/arm64:**
               *   Image: \`$registry/$repo_name/$image_base_name-linux-arm64\`
               *   Tag: \`$version_tag\`
               *   Tag: \`latest\`
-              $( [ -n "$py_major_arm64" ] && printf "*   Tag: \`%s\`\n" "$py_major_arm64" || true ) \
-              $( [ -n "$py_minor_arm64" ] && printf "*   Tag: \`%s\`\n" "$py_minor_arm64" || true ) \
-              $( [ -n "$node_major_arm64" ] && printf "*   Tag: \`%s\`\n" "$node_major_arm64" || true ) \
-              $( [ -n "$node_minor_arm64" ] && printf "*   Tag: \`%s\`\n" "$node_minor_arm64" || true ) \
-              $( [ -n "$jdk_major_arm64" ] && printf "*   Tag: \`%s\`\n" "$jdk_major_arm64" || true ) \
-              $( [ -n "$jdk_minor_arm64" ] && printf "*   Tag: \`%s\`\n" "$jdk_minor_arm64" || true )
+              $( [ -n "$MAJOR_ARM64" ] && printf "*   Tag: \`%s\`\n" "$MAJOR_ARM64" || true ) \
+              $( [ -n "$MINOR_ARM64" ] && printf "*   Tag: \`%s\`\n" "$MINOR_ARM64" || true )
           EOF
           )
 
-          # Conditionally add specific version tags section
-          specific_tags_section=""
-          if [[ "$image_base_name" == "python-base" ]]; then
-            if [ -n "$py_major_amd64" ] || [ -n "$py_major_arm64" ]; then
-              specific_tags_section=$(cat <<EOF
+          # --- Add content specific to image type ---
+          if [ -n "$LANGUAGE_NAME" ]; then
+            # Language-specific images: version details + best practices + examples
+            version_details="
 
-          **Python Version Tags:**
-          *   AMD64: Major=\`${py_major_amd64:-N/A}\`, Minor=\`${py_minor_amd64:-N/A}\`, Full=\`${py_full_amd64:-N/A}\`
-          *   ARM64: Major=\`${py_major_arm64:-N/A}\`, Minor=\`${py_minor_arm64:-N/A}\`, Full=\`${py_full_arm64:-N/A}\`
-          EOF
-              )
-            fi
-          elif [[ "$image_base_name" == "nodejs-base" ]]; then
-            if [ -n "$node_major_amd64" ] || [ -n "$node_major_arm64" ]; then
-              specific_tags_section=$(cat <<EOF
+          **$LANGUAGE_NAME Version Details:**
+          *   AMD64: Major=\`${MAJOR_AMD64:-N/A}\`, Minor=\`${MINOR_AMD64:-N/A}\`, Full=\`${FULL_AMD64:-N/A}\`
+          *   ARM64: Major=\`${MAJOR_ARM64:-N/A}\`, Minor=\`${MINOR_ARM64:-N/A}\`, Full=\`${FULL_ARM64:-N/A}\`
 
-          **Node.js Version Tags:**
-          *   AMD64: Major=\`${node_major_amd64:-N/A}\`, Minor=\`${node_minor_amd64:-N/A}\`, Full=\`${node_full_amd64:-N/A}\`
-          *   ARM64: Major=\`${node_major_arm64:-N/A}\`, Minor=\`${node_minor_arm64:-N/A}\`, Full=\`${node_full_arm64:-N/A}\`
-          EOF
-              )
-            fi
-          elif [[ "$image_base_name" == "openjdk17-base" ]]; then
-            if [ -n "$jdk_major_amd64" ] || [ -n "$jdk_major_arm64" ]; then
-              specific_tags_section=$(cat <<EOF
-
-          **OpenJDK Version Tags:**
-          *   AMD64: Major=\`${jdk_major_amd64:-N/A}\`, Minor=\`${jdk_minor_amd64:-N/A}\`, Full=\`${jdk_full_amd64:-N/A}\`
-          *   ARM64: Major=\`${jdk_major_arm64:-N/A}\`, Minor=\`${jdk_minor_arm64:-N/A}\`, Full=\`${jdk_full_arm64:-N/A}\`
-          EOF
-              )
-            fi
-          fi
-
-          # Append the specific tags section if it was generated
-          if [ -n "$specific_tags_section" ]; then
-            body="${body}${specific_tags_section}"
-          else
-            echo "No specific version tags found or extracted for $image_base_name."
-          fi
-
-          pull_examples=$(cat <<EOF
-
+          **🎯 Language Runtime Pinning Best Practices:**
+          * **✅ Recommended for CI/CD**: Pin to major.minor (e.g., \`${MINOR_AMD64:-X.Y}\`) - Gets security patches, avoids breaking changes
+          * **⚠️ Use with caution**: \`latest\` tag - May introduce breaking changes unexpectedly  
+          * **⚠️ Avoid in CI**: Specific semver tags (e.g., \`$version_tag\`) - Misses important security updates
+          * **⚠️ High risk**: Major-only tags (e.g., \`${MAJOR_AMD64:-X}\`) - May include breaking changes within major versions
 
           **Pull Examples:**
 
-          *   **AMD64 / x86_64 (Version Specific):**
-              \`\`\`bash
-              docker pull $registry/$repo_name/${image_base_name}-linux-amd64:$version_tag
-              \`\`\`
-          *   **AMD64 / x86_64 (Latest):**
-              \`\`\`bash
-              docker pull $registry/$repo_name/${image_base_name}-linux-amd64:latest
-              \`\`\`
+          **For Production/CI (Recommended):**"
+            body+="$version_details"
 
-          EOF
-          )
+            # Add recommended major.minor examples
+            if [ -n "$MINOR_AMD64" ]; then
+              body+=$(printf '\n* **AMD64**: \`docker pull %s/%s/%s-linux-amd64:%s\`' "$registry" "$repo_name" "$image_base_name" "$MINOR_AMD64")
+            fi
+            if [ -n "$MINOR_ARM64" ]; then
+              body+=$(printf '\n* **ARM64**: \`docker pull %s/%s/%s-linux-arm64:%s\`' "$registry" "$repo_name" "$image_base_name" "$MINOR_ARM64")
+            fi
 
-          # Add AMD64 Major/Minor pull examples if versions exist
-          if [[ "$image_base_name" == "python-base" ]]; then
-              if [ -n "$py_major_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Major - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    \`\`\`\n' "$py_major_amd64" "$registry" "$repo_name" "$image_base_name" "$py_major_amd64"); fi
-              if [ -n "$py_minor_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Minor - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    \`\`\`\n\n' "$py_minor_amd64" "$registry" "$repo_name" "$image_base_name" "$py_minor_amd64"); fi
-          elif [[ "$image_base_name" == "nodejs-base" ]]; then
-              if [ -n "$node_major_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Major - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    \`\`\`\n' "$node_major_amd64" "$registry" "$repo_name" "$image_base_name" "$node_major_amd64"); fi
-              if [ -n "$node_minor_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Minor - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    \`\`\`\n\n' "$node_minor_amd64" "$registry" "$repo_name" "$image_base_name" "$node_minor_amd64"); fi
-          elif [[ "$image_base_name" == "openjdk17-base" ]]; then
-              if [ -n "$jdk_major_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Major - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    \`\`\`\n' "$jdk_major_amd64" "$registry" "$repo_name" "$image_base_name" "$jdk_major_amd64"); fi
-              if [ -n "$jdk_minor_amd64" ]; then pull_examples+=$(printf '\n*   **AMD64 / x86_64 (Minor - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-amd64:%s\n    \`\`\`\n\n' "$jdk_minor_amd64" "$registry" "$repo_name" "$image_base_name" "$jdk_minor_amd64"); fi
+            body+=$'\n\n          **For Development/Testing:**'
+            body+=$(printf '\n* **AMD64 (Latest)**: \`docker pull %s/%s/%s-linux-amd64:latest\`' "$registry" "$repo_name" "$image_base_name")
+            body+=$(printf '\n* **ARM64 (Latest)**: \`docker pull %s/%s/%s-linux-arm64:latest\`' "$registry" "$repo_name" "$image_base_name")
+
+            body+=$'\n\n          **For Specific Version Requirements:**'
+            body+=$(printf '\n* **AMD64 (Exact)**: \`docker pull %s/%s/%s-linux-amd64:%s\`' "$registry" "$repo_name" "$image_base_name" "$version_tag")
+            body+=$(printf '\n* **ARM64 (Exact)**: \`docker pull %s/%s/%s-linux-arm64:%s\`' "$registry" "$repo_name" "$image_base_name" "$version_tag")
+          else
+            # Non-language base images: best practices + examples
+            base_practices="
+
+          **🎯 Base Image Best Practices:**
+          * **✅ Recommended for CI/CD**: Use \`:latest\` with \`--pull=always\` - Ensures latest security patches
+          * **💡 Why different from language images?** Base images focus on security/OS updates rather than runtime version compatibility
+
+          **Pull Examples:**
+
+          **For Production/CI (Recommended):**
+          * **AMD64**: \`docker pull --pull=always $registry/$repo_name/$image_base_name-linux-amd64:latest\`
+          * **ARM64**: \`docker pull --pull=always $registry/$repo_name/$image_base_name-linux-arm64:latest\`
+
+          **For Specific Version Requirements:**
+          * **AMD64 (Exact)**: \`docker pull $registry/$repo_name/$image_base_name-linux-amd64:$version_tag\`
+          * **ARM64 (Exact)**: \`docker pull $registry/$repo_name/$image_base_name-linux-arm64:$version_tag\`"
+            body+="$base_practices"
           fi
-
-          # Add base ARM64 pull examples
-          pull_examples+=$(cat <<EOF
-
-          *   **ARM64 / aarch64 (Version Specific):**
-              \`\`\`bash
-              docker pull $registry/$repo_name/${image_base_name}-linux-arm64:$version_tag
-              \`\`\`
-          *   **ARM64 / aarch64 (Latest):**
-              \`\`\`bash
-              docker pull $registry/$repo_name/${image_base_name}-linux-arm64:latest
-              \`\`\`
-
-          EOF
-          )
-
-          # Add ARM64 Major/Minor pull examples if versions exist
-          if [[ "$image_base_name" == "python-base" ]]; then
-              if [ -n "$py_major_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Major - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    \`\`\`\n' "$py_major_arm64" "$registry" "$repo_name" "$image_base_name" "$py_major_arm64"); fi
-              if [ -n "$py_minor_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Minor - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    \`\`\`\n\n' "$py_minor_arm64" "$registry" "$repo_name" "$image_base_name" "$py_minor_arm64"); fi
-          elif [[ "$image_base_name" == "nodejs-base" ]]; then
-              if [ -n "$node_major_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Major - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    \`\`\`\n' "$node_major_arm64" "$registry" "$repo_name" "$image_base_name" "$node_major_arm64"); fi
-              if [ -n "$node_minor_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Minor - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    \`\`\`\n\n' "$node_minor_arm64" "$registry" "$repo_name" "$image_base_name" "$node_minor_arm64"); fi
-          elif [[ "$image_base_name" == "openjdk17-base" ]]; then
-              if [ -n "$jdk_major_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Major - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    \`\`\`\n' "$jdk_major_arm64" "$registry" "$repo_name" "$image_base_name" "$jdk_major_arm64"); fi
-              if [ -n "$jdk_minor_arm64" ]; then pull_examples+=$(printf '\n*   **ARM64 / aarch64 (Minor - \`%s\`):**\n    \`\`\`bash\n    docker pull %s/%s/%s-linux-arm64:%s\n    \`\`\`\n\n' "$jdk_minor_arm64" "$registry" "$repo_name" "$image_base_name" "$jdk_minor_arm64"); fi
-          fi
-
-          # Append pull examples to the main body
-          body="${body}${pull_examples}"
 
           echo "Setting BODY_TEXT environment variable..."
           echo "BODY_TEXT<<EOF" >> $GITHUB_ENV
