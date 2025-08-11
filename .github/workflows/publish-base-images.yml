@@ -29,6 +29,8 @@ jobs:
       packages: write
       security-events: write
       actions: read
+      attestations: write
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -266,6 +268,15 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
+
+      - name: Attest build provenance for ${{ matrix.platform }}
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
+        with:
+          # Create cryptographic attestation for build provenance
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}
+          subject-digest: ${{ steps.docker_build.outputs.digest }}
+          push-to-registry: true
 
       - name: Output SHA256 digest for ${{ matrix.platform }}
         if: github.event_name == 'push' && github.ref_type == 'tag'
