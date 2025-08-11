@@ -1,6 +1,6 @@
 ### OPENSSL WITH FIPS BUILD ###
 # Using Wolfi-Alpine base image instead of Wolfi because it has better tooling for building OpenSSL
-FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:13f5ca8ef527c5115490bc4f3f60c780708961beb854e9a76eed07c593c347de
+FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:a4c00b697e154b92e6d99d7f60405641b9d46adce4cb1e3c2e54af69f74f95d3
 
 # Install openssl dependencies
 RUN apk update && apk add --no-cache \
