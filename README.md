@@ -68,14 +68,9 @@ In your CI/CD pipelines:
 
 docker build <span style="font-weight:bold;color:green;">--pull</span> -t ...
 
-### Logging into GHCR for the first time
-
-docker build <span style="font-weight:bold;color:green;">--pull</span> -t ...
-
 ### Authenticating to GHCR
 
 While these images are public and can be pulled without authentication, anonymous pulls are subject to stricter rate limits. For use in CI/CD pipelines or for frequent local development, it is highly recommended to authenticate with a Personal Access Token (PAT) to avoid potential rate-limiting issues.
-
 
 ```shell
 export CR_PAT=YOUR_TOKEN
