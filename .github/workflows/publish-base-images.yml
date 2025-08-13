@@ -33,7 +33,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Trivy - configure cache
         id: cache-trivy-db
@@ -374,7 +374,7 @@ jobs:
       actions: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Extract Image Base Name and Version from Tag for Release
         id: parse_tag_release
