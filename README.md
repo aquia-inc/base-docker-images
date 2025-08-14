@@ -64,9 +64,17 @@ By default, docker build will use a cached version of a base image if it already
 
 To prevent this, you should add the `--pull` flag to your `docker build` command. This flag explicitly tells Docker to always attempt to pull a newer version of the base image from the remote registry before starting the build.
 
-In your CI/CD pipelines:
+**In your CI/CD pipelines, always use:**
 
-docker build <span style="font-weight:bold;color:green;">--pull</span> -t ...
+```shell
+docker build --pull -t your-app .
+```
+
+**In your Dockerfile:**
+
+```dockerfile
+FROM ghcr.io/aquia-inc/base-docker-images/<image-name>:latest
+```
 
 ### Authenticating to GHCR
 
