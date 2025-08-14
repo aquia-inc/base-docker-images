@@ -120,6 +120,13 @@ jobs:
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
 
+      - name: Output Docker Image Size for ${{ matrix.platform }}
+        run: |
+          image_tag="${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}:test"
+          echo "Getting size for image: $image_tag"
+          size=$(docker images --format "table {{.Size}}" "$image_tag" | tail -n +2)
+          echo "Docker image size for ${{ matrix.platform }}: $size"
+
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
         uses: aquasecurity/trivy-action@master
         with:
