@@ -57,3 +57,5 @@ USER nginx
 
 # Copy NGINX configuration
 COPY nginx.conf /etc/nginx/nginx.conf
+
+# End of Dockerfile
