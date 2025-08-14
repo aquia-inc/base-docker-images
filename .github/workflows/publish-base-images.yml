@@ -120,6 +120,13 @@ jobs:
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
 
+      - name: Output Docker Image Size for ${{ matrix.platform }}
+        run: |
+          image_tag="${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}:test"
+          echo "Getting size for image: $image_tag"
+          size=$(docker images --format "table {{.Size}}" "$image_tag" | tail -n +2)
+          echo "Docker image size for ${{ matrix.platform }}: $size"
+
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
         uses: aquasecurity/trivy-action@master
         with:
@@ -313,13 +320,18 @@ jobs:
 
       - name: Make Package Public on GHCR for ${{ matrix.platform }}
         if: steps.docker_build.outputs.digest != '' && steps.owner_type.outputs.api_path_segment != '' && github.event_name == 'push' && github.ref_type == 'tag'
+        continue-on-error: true
         env:
           PACKAGE_NAME: ${{ github.event.repository.name }}/${{ steps.image_name.outputs.platform_image_name }}
           OWNER: ${{ github.repository_owner }}
           API_PATH_SEGMENT: ${{ steps.owner_type.outputs.api_path_segment }}
           # GH_TOKEN is now inherited from the job-level env
         run: |
-          API_URL_PATH="/${API_PATH_SEGMENT}/${OWNER}/packages/container/${PACKAGE_NAME}"
+          # URL encode the package name (replace / with %2F)
+          ENCODED_PACKAGE_NAME=$(echo "$PACKAGE_NAME" | sed 's|/|%2F|g')
+          API_URL_PATH="/${API_PATH_SEGMENT}/${OWNER}/packages/container/${ENCODED_PACKAGE_NAME}"
+          echo "Package name: $PACKAGE_NAME"
+          echo "Encoded package name: $ENCODED_PACKAGE_NAME"
           echo "Target API path: $API_URL_PATH"
 
           # Wait for package to be available in GHCR API
@@ -363,10 +375,10 @@ jobs:
           done
 
           if [ "$success" = "false" ]; then
-            echo "::error::Failed to set package '$PACKAGE_NAME' to public after $max_attempts attempts."
+            echo "::warning::Failed to set package '$PACKAGE_NAME' to public after $max_attempts attempts."
             echo "Full package details for diagnostics:"
             gh api "$API_URL_PATH" --silent || echo "::warning::Fetching package details also failed, which may happen if the package was never created."
-            exit 1
+            echo "::warning::Package visibility could not be set to public, but build will continue."
           fi
 
   create_release:
