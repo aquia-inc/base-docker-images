@@ -584,18 +584,20 @@ jobs:
             base_practices="
 
           **🎯 Base Image Best Practices:**
-          * **✅ Recommended for CI/CD**: Use \`:latest\` with \`--pull=always\` - Ensures latest security patches
-          * **💡 Why different from language images?** Base images focus on security/OS updates rather than runtime version compatibility
+          * **✅ Recommended for CI/CD**: Use \`:latest\` with \`docker build --pull\` - Ensures latest security patches
+          * **💡 Why use latest?** Base images are building blocks that benefit from automatic security updates
+          * **⚠️ Important**: Always use \`docker build --pull\` in CI to fetch the latest base image version
 
-          **Pull Examples:**
+          **Dockerfile Examples:**
 
           **For Production/CI (Recommended):**
-          * **AMD64**: \`docker pull --pull=always $registry/$repo_name/$image_base_name-linux-amd64:latest\`
-          * **ARM64**: \`docker pull --pull=always $registry/$repo_name/$image_base_name-linux-arm64:latest\`
+          * **AMD64**: \`FROM $registry/$repo_name/${image_base_name}-linux-amd64:latest\`
+          * **ARM64**: \`FROM $registry/$repo_name/${image_base_name}-linux-arm64:latest\`
+          * **Build command**: \`docker build --pull -t your-app .\`
 
           **For Specific Version Requirements:**
-          * **AMD64 (Exact)**: \`docker pull $registry/$repo_name/$image_base_name-linux-amd64:$version_tag\`
-          * **ARM64 (Exact)**: \`docker pull $registry/$repo_name/$image_base_name-linux-arm64:$version_tag\`"
+          * **AMD64 (Exact)**: \`FROM $registry/$repo_name/${image_base_name}-linux-amd64:$version_tag\`
+          * **ARM64 (Exact)**: \`FROM $registry/$repo_name/${image_base_name}-linux-arm64:$version_tag\`"
             body+="$base_practices"
           fi
 
