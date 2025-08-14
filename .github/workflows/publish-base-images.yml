@@ -11,9 +11,8 @@ on:
     branches: [main]
 env:
   REGISTRY: ghcr.io
-  # Use a default tag for PRs to allow parsing logic to run without error
-  # For other events (main push, tag push), use the actual ref
-  TAG: ${{ (github.event_name == 'pull_request' && 'release/python-base/v0.0.0-pr') || github.ref }}
+  # For tag pushes, use the actual ref. For PRs, detect from modified Dockerfiles
+  TAG: ${{ github.ref }}
 
 jobs:
   publish_image:
@@ -36,6 +35,28 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0  # Need full history for git diff comparisons
+
+      - name: Detect image for PR builds
+        id: detect_image
+        if: github.event_name == 'pull_request'
+        run: |
+          modified_dockerfile=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^Dockerfile\." | head -n 1)
+          if [ -n "$modified_dockerfile" ]; then
+            detected_image=$(echo "$modified_dockerfile" | sed 's/^Dockerfile\.//')
+            detected_tag="release/${detected_image}/v0.0.0-pr"
+            echo "TAG=$detected_tag" >> $GITHUB_ENV
+            echo "dockerfile_found=true" >> $GITHUB_OUTPUT
+            echo "Detected image from PR: $detected_image, using tag: $detected_tag"
+          else
+            echo "dockerfile_found=false" >> $GITHUB_OUTPUT
+            echo "No Dockerfile changes detected in PR, will exit early"
+          fi
+
+      - name: Exit early if no Dockerfile changes in PR
+        if: github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found != 'true'
+        run: |
+          echo "No Dockerfile changes detected in PR, exiting."
+          exit 0
 
       - name: Check if Dockerfile changed for this image
         id: dockerfile_check
