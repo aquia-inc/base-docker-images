@@ -521,7 +521,7 @@ jobs:
             # Non-language base images  
             intro_text="Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
 
-          **For non-language base images, pin to \`:latest\` tag with \`docker pull --pull=always\` in your CI** to ensure you get the latest security updates and base image improvements."
+          **For non-language base images, pin to \`:latest\` tag with \`docker pull\` in your CI** to ensure you get the latest security updates and base image improvements."
           fi
 
           body=$(cat <<EOF
@@ -583,17 +583,17 @@ jobs:
             # Non-language base images: best practices + examples
             base_practices="
 
-          **🎯 Base Image Best Practices:**
-          * **✅ Recommended for CI/CD**: Use \`:latest\` with \`docker build --pull\` - Ensures latest security patches
-          * **💡 Why use latest?** Base images are building blocks that benefit from automatic security updates
-          * **⚠️ Important**: Always use \`docker build --pull\` in CI to fetch the latest base image version
+          **🎯 Non-language Base Image Best Practices:**
+          * **✅ Recommended for CI/CD**: Use \`:latest\` with \`docker build --pull ...\` - Ensures latest security patches
+          * **💡 Why use :latest tag?** Non-language base images are unlikely to introduce build issues when their version changes and it ensures yoou receive the latest security patches.
+         
 
           **Dockerfile Examples:**
 
           **For Production/CI (Recommended):**
           * **AMD64**: \`FROM $registry/$repo_name/${image_base_name}-linux-amd64:latest\`
           * **ARM64**: \`FROM $registry/$repo_name/${image_base_name}-linux-arm64:latest\`
-          * **Build command**: \`docker build --pull -t your-app .\`
+          * **Build command**: \`docker build --pull ...\`
 
           **For Specific Version Requirements:**
           * **AMD64 (Exact)**: \`FROM $registry/$repo_name/${image_base_name}-linux-amd64:$version_tag\`
