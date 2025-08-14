@@ -52,18 +52,18 @@ jobs:
       - name: Extract Image Base Name and Version from Tag
         id: parse_tag
         run: |
-          # Regex updated to capture optional build metadata (like +rebuild.timestamp)
-          # Format: release/<image-name>/v<version>[-prerelease][+buildmetadata]
-          # Example: release/python-base/v1.2.3+rebuild.20231027100000
-          regex='release/([^/]+)/v(\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?)'
+          # Parse release tag format: refs/tags/release/<image-name>/v<version> or release/<image-name>/v<version>
+          # Example: refs/tags/release/nginx-base/v1.1.83 or release/python-base/v1.2.3+rebuild.20231027100000
           tag_to_parse="${{ env.TAG }}"
 
           echo "Input TAG: $tag_to_parse"
-          # Use grep -oP and sed to extract the relevant part first
-          match=$(echo "$tag_to_parse" | grep -oP "$regex" | sed 's|release/||')
-          echo "Regex match result on relevant part: $match"
-
-          if [[ $match =~ ^([^/]+)/v(.+)$ ]]; then
+          
+          # Strip refs/tags/ prefix if present
+          tag_clean=$(echo "$tag_to_parse" | sed 's|^refs/tags/||')
+          echo "Cleaned TAG: $tag_clean"
+          
+          # Check if it matches release/<image-name>/v<version> format (version includes 'v' prefix)
+          if [[ $tag_clean =~ ^release/([^/]+)/(v.+)$ ]]; then
               echo "Match found (Release Tag format)"
               image_base_name="${BASH_REMATCH[1]}"
               # Version now includes potential pre-release AND build metadata
