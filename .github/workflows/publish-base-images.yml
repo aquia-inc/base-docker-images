@@ -286,7 +286,7 @@ jobs:
 
       - name: Determine Repository Owner Type for ${{ matrix.platform }}
         id: owner_type
-        if: steps.docker_build.outputs.digest != '' && github.event_name == 'push' && github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
         env:
           OWNER_LOGIN: ${{ github.repository_owner }} 
           # GH_TOKEN is inherited from the job-level env
@@ -322,7 +322,11 @@ jobs:
           API_URL_PATH="/${API_PATH_SEGMENT}/${OWNER}/packages/container/${PACKAGE_NAME}"
           echo "Target API path: $API_URL_PATH"
 
-          max_attempts=3
+          # Wait for package to be available in GHCR API
+          echo "Waiting 10 seconds for package to be available in GHCR API..."
+          sleep 10
+
+          max_attempts=5
           attempt_num=1
           success=false
           while [ $attempt_num -le $max_attempts ]; do
