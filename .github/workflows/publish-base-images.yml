@@ -34,6 +34,53 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Need full history for git diff comparisons
+
+      - name: Check if Dockerfile changed for this image
+        id: dockerfile_check
+        run: |
+          # For non-tag pushes, always proceed
+          if [[ "${{ github.event_name }}" != "push" || "${{ github.ref_type }}" != "tag" ]]; then
+            echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
+            echo "Not a tag push, proceeding with build"
+            exit 0
+          fi
+          
+          # Parse the image name from tag first
+          tag_clean=$(echo "${{ github.ref }}" | sed 's|^refs/tags/||')
+          if [[ $tag_clean =~ ^release/([^/]+)/(v.+)$ ]]; then
+            image_base_name="${BASH_REMATCH[1]}"
+          else
+            echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
+            echo "Could not parse image name from tag, proceeding with build"
+            exit 0
+          fi
+          
+          dockerfile_path="Dockerfile.${image_base_name}"
+          echo "Checking if $dockerfile_path was modified..."
+          
+          # Get the previous tag for this image
+          prev_tag=$(git tag -l "release/${image_base_name}/v*" --sort=-version:refname | head -n 2 | tail -n 1)
+          if [ -n "$prev_tag" ]; then
+            echo "Comparing with previous tag: $prev_tag"
+            if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$"; then
+              echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
+              echo "Dockerfile $dockerfile_path was modified since $prev_tag"
+            else
+              echo "dockerfile_changed=false" >> $GITHUB_OUTPUT
+              echo "Dockerfile $dockerfile_path was NOT modified since $prev_tag - skipping build"
+            fi
+          else
+            echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
+            echo "No previous tag found, assuming Dockerfile changed"
+          fi
+
+      - name: Exit early if Dockerfile unchanged
+        if: steps.dockerfile_check.outputs.dockerfile_changed != 'true'
+        run: |
+          echo "Did not detect any modified Dockerfiles in this commit, exiting."
+          exit 0
 
       - name: Trivy - configure cache
         id: cache-trivy-db

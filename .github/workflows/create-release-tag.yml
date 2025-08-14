@@ -50,6 +50,12 @@ jobs:
           echo "changed_files=${{ steps.diff.outputs.changed_dockerfiles }}"
           echo "images_to_build=${{ steps.diff.outputs.images_to_build }}"
 
+      - name: Exit early if no Dockerfiles changed
+        if: steps.diff.outputs.images_to_build == '[]'
+        run: |
+          echo "Did not detect any modified Dockerfiles in this commit, exiting."
+          exit 0
+
   create_release_tags:
     needs: get_images_to_build
     if: ${{ needs.get_images_to_build.outputs.matrix != '[]' && needs.get_images_to_build.outputs.matrix != '' }}
