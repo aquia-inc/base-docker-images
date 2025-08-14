@@ -11,9 +11,8 @@ on:
     branches: [main]
 env:
   REGISTRY: ghcr.io
-  # Use a default tag for PRs to allow parsing logic to run without error
-  # For other events (main push, tag push), use the actual ref
-  TAG: ${{ (github.event_name == 'pull_request' && 'release/python-base/v0.0.0-pr') || github.ref }}
+  # For tag pushes, use the actual ref. For PRs, detect from modified Dockerfiles
+  TAG: ${{ github.ref }}
 
 jobs:
   publish_image:
@@ -34,6 +33,75 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Need full history for git diff comparisons
+
+      - name: Detect image for PR builds
+        id: detect_image
+        if: github.event_name == 'pull_request'
+        run: |
+          modified_dockerfile=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^Dockerfile\." | head -n 1)
+          if [ -n "$modified_dockerfile" ]; then
+            detected_image=$(echo "$modified_dockerfile" | sed 's/^Dockerfile\.//')
+            detected_tag="release/${detected_image}/v0.0.0-pr"
+            echo "TAG=$detected_tag" >> $GITHUB_ENV
+            echo "dockerfile_found=true" >> $GITHUB_OUTPUT
+            echo "Detected image from PR: $detected_image, using tag: $detected_tag"
+          else
+            echo "dockerfile_found=false" >> $GITHUB_OUTPUT
+            echo "No Dockerfile changes detected in PR, will exit early"
+          fi
+
+      - name: Exit early if no Dockerfile changes in PR
+        if: github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found != 'true'
+        run: |
+          echo "No Dockerfile changes detected in PR, exiting."
+          exit 0
+
+      - name: Check if Dockerfile changed for this image
+        id: dockerfile_check
+        run: |
+          # For non-tag pushes, always proceed
+          if [[ "${{ github.event_name }}" != "push" || "${{ github.ref_type }}" != "tag" ]]; then
+            echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
+            echo "Not a tag push, proceeding with build"
+            exit 0
+          fi
+          
+          # Parse the image name from tag first
+          tag_clean=$(echo "${{ github.ref }}" | sed 's|^refs/tags/||')
+          if [[ $tag_clean =~ ^release/([^/]+)/(v.+)$ ]]; then
+            image_base_name="${BASH_REMATCH[1]}"
+          else
+            echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
+            echo "Could not parse image name from tag, proceeding with build"
+            exit 0
+          fi
+          
+          dockerfile_path="Dockerfile.${image_base_name}"
+          echo "Checking if $dockerfile_path was modified..."
+          
+          # Get the previous tag for this image
+          prev_tag=$(git tag -l "release/${image_base_name}/v*" --sort=-version:refname | head -n 2 | tail -n 1)
+          if [ -n "$prev_tag" ]; then
+            echo "Comparing with previous tag: $prev_tag"
+            if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$"; then
+              echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
+              echo "Dockerfile $dockerfile_path was modified since $prev_tag"
+            else
+              echo "dockerfile_changed=false" >> $GITHUB_OUTPUT
+              echo "Dockerfile $dockerfile_path was NOT modified since $prev_tag - skipping build"
+            fi
+          else
+            echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
+            echo "No previous tag found, assuming Dockerfile changed"
+          fi
+
+      - name: Exit early if Dockerfile unchanged
+        if: steps.dockerfile_check.outputs.dockerfile_changed != 'true'
+        run: |
+          echo "Did not detect any modified Dockerfiles in this commit, exiting."
+          exit 0
 
       - name: Trivy - configure cache
         id: cache-trivy-db
@@ -521,7 +589,7 @@ jobs:
             # Non-language base images  
             intro_text="Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
 
-          **For non-language base images, pin to \`:latest\` tag with \`docker pull --pull=always\` in your CI** to ensure you get the latest security updates and base image improvements."
+          **For non-language base images, pin to \`:latest\` tag with \`docker pull\` in your CI** to ensure you get the latest security updates and base image improvements."
           fi
 
           body=$(cat <<EOF
@@ -583,19 +651,21 @@ jobs:
             # Non-language base images: best practices + examples
             base_practices="
 
-          **🎯 Base Image Best Practices:**
-          * **✅ Recommended for CI/CD**: Use \`:latest\` with \`--pull=always\` - Ensures latest security patches
-          * **💡 Why different from language images?** Base images focus on security/OS updates rather than runtime version compatibility
+          **🎯 Non-language Base Image Best Practices:**
+          * **✅ Recommended for CI/CD**: Use \`:latest\` with \`docker build --pull ...\` - Ensures latest security patches
+          * **💡 Why use :latest tag?** Non-language base images are unlikely to introduce build issues when their version changes and it ensures yoou receive the latest security patches.
+         
 
-          **Pull Examples:**
+          **Dockerfile Examples:**
 
           **For Production/CI (Recommended):**
-          * **AMD64**: \`docker pull --pull=always $registry/$repo_name/$image_base_name-linux-amd64:latest\`
-          * **ARM64**: \`docker pull --pull=always $registry/$repo_name/$image_base_name-linux-arm64:latest\`
+          * **AMD64**: \`FROM $registry/$repo_name/${image_base_name}-linux-amd64:latest\`
+          * **ARM64**: \`FROM $registry/$repo_name/${image_base_name}-linux-arm64:latest\`
+          * **Build command**: \`docker build --pull ...\`
 
           **For Specific Version Requirements:**
-          * **AMD64 (Exact)**: \`docker pull $registry/$repo_name/$image_base_name-linux-amd64:$version_tag\`
-          * **ARM64 (Exact)**: \`docker pull $registry/$repo_name/$image_base_name-linux-arm64:$version_tag\`"
+          * **AMD64 (Exact)**: \`FROM $registry/$repo_name/${image_base_name}-linux-amd64:$version_tag\`
+          * **ARM64 (Exact)**: \`FROM $registry/$repo_name/${image_base_name}-linux-arm64:$version_tag\`"
             body+="$base_practices"
           fi
 
