@@ -621,11 +621,18 @@ jobs:
           *   AMD64: Major=\`${MAJOR_AMD64:-N/A}\`, Minor=\`${MINOR_AMD64:-N/A}\`, Full=\`${FULL_AMD64:-N/A}\`
           *   ARM64: Major=\`${MAJOR_ARM64:-N/A}\`, Minor=\`${MINOR_ARM64:-N/A}\`, Full=\`${FULL_ARM64:-N/A}\`
 
-          **🎯 Language Runtime Pinning Best Practices:**
+          **🎯 $LANGUAGE_NAME Runtime Pinning Best Practices:**
           * **✅ Recommended for CI/CD**: Pin to major.minor (e.g., \`${MINOR_AMD64:-X.Y}\`) - Gets security patches, avoids breaking changes
-          * **⚠️ Use with caution**: \`latest\` tag - May introduce breaking changes unexpectedly  
+          * **⚠️ Use with caution**: \`:latest\` tag - May introduce breaking changes unexpectedly  
           * **⚠️ Avoid in CI**: Specific semver tags (e.g., \`$version_tag\`) - Misses important security updates
           * **⚠️ High risk**: Major-only tags (e.g., \`${MAJOR_AMD64:-X}\`) - May include breaking changes within major versions
+
+          **Dockerfile Examples:**
+
+          **For Production/CI (Recommended):**
+          * **AMD64**: \`FROM $registry/$repo_name/${image_base_name}-linux-amd64:${MINOR_AMD64:-latest}\`
+          * **ARM64**: \`FROM $registry/$repo_name/${image_base_name}-linux-arm64:${MINOR_ARM64:-latest}\`
+          * **Build command**: \`docker build --pull ...\`
 
           **Pull Examples:**
 
@@ -634,10 +641,10 @@ jobs:
 
             # Add recommended major.minor examples
             if [ -n "$MINOR_AMD64" ]; then
-              body+=$(printf '\n* **AMD64**: \`docker pull %s/%s/%s-linux-amd64:%s\`' "$registry" "$repo_name" "$image_base_name" "$MINOR_AMD64")
+              body+=$(printf '\n* **AMD64 (Recommended)**: \`docker pull %s/%s/%s-linux-amd64:%s\`' "$registry" "$repo_name" "$image_base_name" "$MINOR_AMD64")
             fi
             if [ -n "$MINOR_ARM64" ]; then
-              body+=$(printf '\n* **ARM64**: \`docker pull %s/%s/%s-linux-arm64:%s\`' "$registry" "$repo_name" "$image_base_name" "$MINOR_ARM64")
+              body+=$(printf '\n* **ARM64 (Recommended)**: \`docker pull %s/%s/%s-linux-arm64:%s\`' "$registry" "$repo_name" "$image_base_name" "$MINOR_ARM64")
             fi
 
             body+=$'\n\n          **For Development/Testing:**'
