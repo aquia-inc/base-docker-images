@@ -763,7 +763,11 @@ jobs:
               fi
             fi
             body+=$'\n\n**CLI Verification:**'
-            body+=$(printf '\n\`\`\`bash\n# Verify with GitHub CLI\ngh attestation verify oci://%s/%s/%s-linux-amd64:%s --owner %s\ngh attestation verify oci://%s/%s/%s-linux-arm64:%s --owner %s\n\`\`\`' "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-latest}" "${repo_name%/*}" "$registry" "$repo_name" "$image_base_name" "${MINOR_ARM64:-latest}" "${repo_name%/*}")
+            body+=$'\n```bash'
+            body+=$'\n# Verify with GitHub CLI'
+            body+=$(printf '\ngh attestation verify oci://%s/%s/%s-linux-amd64:%s --repo %s' "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-latest}" "$repo_name")
+            body+=$(printf '\ngh attestation verify oci://%s/%s/%s-linux-arm64:%s --repo %s' "$registry" "$repo_name" "$image_base_name" "${MINOR_ARM64:-latest}" "$repo_name")
+            body+=$'\n```'
           else
             # Non-language base images: best practices + examples
             base_practices="
@@ -783,31 +787,31 @@ jobs:
           **🔐 Build Provenance & Supply Chain Security:**"
           
           if [ -n "$sigstore_amd64" ] || [ -n "$sigstore_arm64" ]; then
-            base_practices+=$'\n\n          **Sigstore Transparency Log:**'
+            base_practices+=$'\n\n**Sigstore Transparency Log:**'
             if [ -n "$sigstore_amd64" ]; then
-              base_practices+=$(printf '\n          * **AMD64**: [%s](%s)' "View in Sigstore" "$sigstore_amd64")
+              base_practices+=$(printf '\n* **AMD64**: [%s](%s)' "View in Sigstore" "$sigstore_amd64")
             fi
             if [ -n "$sigstore_arm64" ]; then
-              base_practices+=$(printf '\n          * **ARM64**: [%s](%s)' "View in Sigstore" "$sigstore_arm64")
+              base_practices+=$(printf '\n* **ARM64**: [%s](%s)' "View in Sigstore" "$sigstore_arm64")
             fi
           fi
           
           if [ -n "$github_attestation_amd64" ] || [ -n "$github_attestation_arm64" ]; then
-            base_practices+=$'\n\n          **GitHub Attestations:**'
+            base_practices+=$'\n\n**GitHub Attestations:**'
             if [ -n "$github_attestation_amd64" ]; then
-              base_practices+=$(printf '\n          * **AMD64**: [%s](%s)' "View Attestation" "$github_attestation_amd64")
+              base_practices+=$(printf '\n* **AMD64**: [%s](%s)' "View Attestation" "$github_attestation_amd64")
             fi
             if [ -n "$github_attestation_arm64" ]; then
-              base_practices+=$(printf '\n          * **ARM64**: [%s](%s)' "View Attestation" "$github_attestation_arm64")
+              base_practices+=$(printf '\n* **ARM64**: [%s](%s)' "View Attestation" "$github_attestation_arm64")
             fi
           fi
           
-          base_practices+=$'\n\n          **CLI Verification:**'
-          base_practices+=$'\n          ```bash'
-          base_practices+=$'\n          # Verify with GitHub CLI'
-          base_practices+=$(printf '\n          gh attestation verify oci://%s/%s/%s-linux-amd64:latest --owner %s' "$registry" "$repo_name" "$image_base_name" "${repo_name%/*}")
-          base_practices+=$(printf '\n          gh attestation verify oci://%s/%s/%s-linux-arm64:latest --owner %s' "$registry" "$repo_name" "$image_base_name" "${repo_name%/*}")
-          base_practices+=$'\n          ```'
+          base_practices+=$'\n\n**CLI Verification:**'
+          base_practices+=$'\n```bash'
+          base_practices+=$'\n# Verify with GitHub CLI'
+          base_practices+=$(printf '\ngh attestation verify oci://%s/%s/%s-linux-amd64:latest --repo %s' "$registry" "$repo_name" "$image_base_name" "$repo_name")
+          base_practices+=$(printf '\ngh attestation verify oci://%s/%s/%s-linux-arm64:latest --repo %s' "$registry" "$repo_name" "$image_base_name" "$repo_name")
+          base_practices+=$'\n```'
             body+="$base_practices"
           fi
 
