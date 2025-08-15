@@ -650,6 +650,7 @@ jobs:
             body+=$'\n\n**For Development/Testing:**'
             body+=$(printf '\n* **AMD64 (Latest)**: \`docker pull %s/%s/%s-linux-amd64:latest\`' "$registry" "$repo_name" "$image_base_name")
             body+=$(printf '\n* **ARM64 (Latest)**: \`docker pull %s/%s/%s-linux-arm64:latest\`' "$registry" "$repo_name" "$image_base_name")
+
           else
             # Non-language base images: best practices + examples
             base_practices="
