@@ -2,9 +2,10 @@
 # Using Wolfi-Alpine base image instead of Wolfi because it has better tooling for building OpenSSL
 FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:0e879f3bfdc6e07723828fd1b04d41178fa1687ac14e1e8c880dce2515b13e90
 
-# Install openssl dependencies
+# Install openssl dependencies  
 RUN apk update && \
     apk add --no-cache \
+    gcompat \
     linux-headers \
     pcre-dev \
     wget \
@@ -14,8 +15,8 @@ RUN apk update && \
     gcc \
     libgcc \
     zlib-dev \
-    g++ && \
-    (apk add --no-cache ca-certificates 2>/dev/null || true) && \
+    g++ \
+    ca-certificates && \
     which gcc && which make && which g++ && which wget
 
 # Set up the build environment
