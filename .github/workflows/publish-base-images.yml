@@ -793,9 +793,9 @@ jobs:
             body+=$'\n\n**🔐 Public Verification (No authentication required):**'
             body+=$'\n```bash'
             body+=$'\n# Install cosign: https://docs.sigstore.dev/cosign/installation'
-            body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:%s' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-latest}")
+            body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:%s | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-latest}")
             body+=$'\n'
-            body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-arm64:%s' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_ARM64:-latest}")
+            body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-arm64:%s | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_ARM64:-latest}")
             body+=$'\n```'
           else
             # Non-language base images: best practices + examples
@@ -838,9 +838,9 @@ jobs:
           base_practices+=$'\n\n**🔐 Public Verification (No authentication required):**'
           base_practices+=$'\n```bash'
           base_practices+=$'\n# Install cosign: https://docs.sigstore.dev/cosign/installation'
-          base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:latest' "$repo_name" "$registry" "$repo_name" "$image_base_name")
+          base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
           base_practices+=$'\n'
-          base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-arm64:latest' "$repo_name" "$registry" "$repo_name" "$image_base_name")
+          base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-arm64:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
           base_practices+=$'\n```'
             body+="$base_practices"
           fi
