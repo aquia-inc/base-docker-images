@@ -3,19 +3,19 @@
 FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:0e879f3bfdc6e07723828fd1b04d41178fa1687ac14e1e8c880dce2515b13e90
 
 # Install openssl dependencies
-RUN apk update && apk add --no-cache \
-# build-base \
-linux-headers \
-pcre-dev \
-wget \
-ca-certificates \
-perl \
-libssl3 \
-make \
-gcc \
-libgcc \
-zlib-dev \
-g++
+RUN apk update && \
+    apk add --no-cache --force-broken-world \
+    linux-headers \
+    pcre-dev \
+    wget \
+    ca-certificates \
+    perl \
+    libssl3 \
+    make \
+    gcc \
+    libgcc \
+    zlib-dev \
+    g++
 
 # Set up the build environment
 WORKDIR /usr/src
