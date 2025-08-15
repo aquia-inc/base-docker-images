@@ -650,10 +650,6 @@ jobs:
             body+=$'\n\n**For Development/Testing:**'
             body+=$(printf '\n* **AMD64 (Latest)**: \`docker pull %s/%s/%s-linux-amd64:latest\`' "$registry" "$repo_name" "$image_base_name")
             body+=$(printf '\n* **ARM64 (Latest)**: \`docker pull %s/%s/%s-linux-arm64:latest\`' "$registry" "$repo_name" "$image_base_name")
-
-            body+=$'\n\n**For Specific Version Requirements:**'
-            body+=$(printf '\n* **AMD64 (Exact)**: \`docker pull %s/%s/%s-linux-amd64:%s\`' "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-$version_tag}")
-            body+=$(printf '\n* **ARM64 (Exact)**: \`docker pull %s/%s/%s-linux-arm64:%s\`' "$registry" "$repo_name" "$image_base_name" "${MINOR_ARM64:-$version_tag}")
           else
             # Non-language base images: best practices + examples
             base_practices="
@@ -668,11 +664,7 @@ jobs:
           **For Production/CI (Recommended):**
           * **AMD64**: \`FROM $registry/$repo_name/${image_base_name}-linux-amd64:latest\`
           * **ARM64**: \`FROM $registry/$repo_name/${image_base_name}-linux-arm64:latest\`
-          * **Build command**: \`docker build --pull ...\`
-
-          **For Specific Version Requirements:**
-          * **AMD64 (Exact)**: \`FROM $registry/$repo_name/${image_base_name}-linux-amd64:$version_tag\`
-          * **ARM64 (Exact)**: \`FROM $registry/$repo_name/${image_base_name}-linux-arm64:$version_tag\`"
+          * **Build command**: \`docker build --pull ...\`"
             body+="$base_practices"
           fi
 
