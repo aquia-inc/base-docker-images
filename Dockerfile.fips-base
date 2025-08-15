@@ -4,7 +4,7 @@ FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:0e879f3bfdc6e07723828fd1b04d411
 
 # Install openssl dependencies
 RUN apk update && \
-    apk add --no-cache --force-broken-world \
+    (apk add --no-cache \
     linux-headers \
     pcre-dev \
     wget \
@@ -15,7 +15,8 @@ RUN apk update && \
     gcc \
     libgcc \
     zlib-dev \
-    g++
+    g++ || true) && \
+    which gcc && which make && which g++
 
 # Set up the build environment
 WORKDIR /usr/src
