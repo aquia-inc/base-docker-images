@@ -29,8 +29,8 @@ WORKDIR /usr/src/nginx
 RUN ./configure --prefix=/usr/local/nginx \
                 --with-compat \
                 --add-dynamic-module=/usr/src/extra_module && \
-    make -j$(nproc) modules && \
-    make -j$(nproc) install
+    make -j$(($(nproc)/2)) modules && \
+    make -j$(($(nproc)/2)) install
 
 # Clean up
 RUN rm -rf nginx nginx.tar.gz extra_module extra_module.tar.gz
