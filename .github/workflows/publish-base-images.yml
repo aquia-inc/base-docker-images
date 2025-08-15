@@ -253,6 +253,15 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      - name: Upload provenance artifact for ${{ matrix.platform }}
+        uses: actions/upload-artifact@v4
+        if: steps.extract_logindex.outputs.provenance_file_path != '' && github.event_name == 'push' && github.ref_type == 'tag'
+        with:
+          name: provenance-file-${{ steps.sanitize_platform.outputs.suffix }}
+          path: ${{ steps.extract_logindex.outputs.provenance_file_path }}
+          retention-days: 1
+          if-no-files-found: warn
+
       - name: Check if env.versions file exists (Local check)
         id: check_env_file
         if: steps.get_versions.outputs.extraction_success == 'true'
@@ -345,6 +354,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.image_name.outputs.platform_image_name }}
 
       - name: Attest build provenance for ${{ matrix.platform }}
+        id: attest_provenance
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
         with:
@@ -352,6 +362,52 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}
           subject-digest: ${{ steps.docker_build.outputs.digest }}
           push-to-registry: true
+
+      - name: Extract Sigstore logIndex for ${{ matrix.platform }}
+        id: extract_logindex
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.attest_provenance.outputs.bundle-path != ''
+        run: |
+          echo "Attestation URL: ${{ steps.attest_provenance.outputs.attestation-url }}"
+          echo "Bundle path: ${{ steps.attest_provenance.outputs.bundle-path }}"
+          
+          # Save provenance information to file
+          output_file="env.provenance.${{ steps.sanitize_platform.outputs.suffix }}"
+          
+          # Extract logIndex from the attestation bundle
+          if [ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ]; then
+            LOG_INDEX=$(jq -r '.tlogEntries[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}")
+            if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
+              echo "logindex=$LOG_INDEX" >> $GITHUB_OUTPUT
+              echo "sigstore_url=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> $GITHUB_OUTPUT
+              echo "Found Sigstore logIndex: $LOG_INDEX"
+              echo "Sigstore URL: https://search.sigstore.dev/?logIndex=$LOG_INDEX"
+              
+              # Save to file for release page generation
+              echo "GITHUB_ATTESTATION_URL=${{ steps.attest_provenance.outputs.attestation-url }}" > "$output_file"
+              echo "SIGSTORE_URL=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> "$output_file"
+              echo "LOG_INDEX=$LOG_INDEX" >> "$output_file"
+            else
+              echo "logindex=" >> $GITHUB_OUTPUT
+              echo "sigstore_url=" >> $GITHUB_OUTPUT
+              echo "No logIndex found in attestation bundle"
+              
+              # Save GitHub attestation URL only
+              echo "GITHUB_ATTESTATION_URL=${{ steps.attest_provenance.outputs.attestation-url }}" > "$output_file"
+              echo "SIGSTORE_URL=" >> "$output_file"
+              echo "LOG_INDEX=" >> "$output_file"
+            fi
+          else
+            echo "logindex=" >> $GITHUB_OUTPUT
+            echo "sigstore_url=" >> $GITHUB_OUTPUT
+            echo "Attestation bundle file not found"
+            
+            # Create empty file
+            echo "GITHUB_ATTESTATION_URL=" > "$output_file"
+            echo "SIGSTORE_URL=" >> "$output_file"
+            echo "LOG_INDEX=" >> "$output_file"
+          fi
+          
+          echo "provenance_file_path=$output_file" >> $GITHUB_OUTPUT
 
       - name: Output SHA256 digest for ${{ matrix.platform }}
         if: github.event_name == 'push' && github.ref_type == 'tag'
@@ -499,6 +555,22 @@ jobs:
           name: versions-file-linux-arm64
           path: .
 
+      - name: Download AMD64 provenance artifact
+        id: download_provenance_amd64
+        continue-on-error: true
+        uses: actions/download-artifact@v5
+        with:
+          name: provenance-file-linux-amd64
+          path: .
+
+      - name: Download ARM64 provenance artifact
+        id: download_provenance_arm64
+        continue-on-error: true
+        uses: actions/download-artifact@v5
+        with:
+          name: provenance-file-linux-arm64
+          path: .
+
       - name: Create GitHub Release Body
         id: release_body
         run: |
@@ -554,6 +626,26 @@ jobs:
               jdk_full_arm64=$(get_version_value "env.versions.linux-arm64" "java")
           else
               echo "ARM64 versions artifact not downloaded or download failed."
+          fi
+
+          # Read provenance information if files exist
+          sigstore_amd64="" github_attestation_amd64=""
+          sigstore_arm64="" github_attestation_arm64=""
+          
+          if [[ "${{ steps.download_provenance_amd64.outcome }}" == "success" ]]; then
+              echo "Reading AMD64 provenance file..."
+              sigstore_amd64=$(get_version_value "env.provenance.linux-amd64" "SIGSTORE_URL")
+              github_attestation_amd64=$(get_version_value "env.provenance.linux-amd64" "GITHUB_ATTESTATION_URL")
+          else
+              echo "AMD64 provenance artifact not downloaded or download failed."
+          fi
+          
+          if [[ "${{ steps.download_provenance_arm64.outcome }}" == "success" ]]; then
+              echo "Reading ARM64 provenance file..."
+              sigstore_arm64=$(get_version_value "env.provenance.linux-arm64" "SIGSTORE_URL")
+              github_attestation_arm64=$(get_version_value "env.provenance.linux-arm64" "GITHUB_ATTESTATION_URL")
+          else
+              echo "ARM64 provenance artifact not downloaded or download failed."
           fi
 
           # --- Consolidate version info using generic variables ---
@@ -650,6 +742,28 @@ jobs:
             body+=$'\n\n**For Development/Testing:**'
             body+=$(printf '\n* **AMD64 (Latest)**: \`docker pull %s/%s/%s-linux-amd64:latest\`' "$registry" "$repo_name" "$image_base_name")
             body+=$(printf '\n* **ARM64 (Latest)**: \`docker pull %s/%s/%s-linux-arm64:latest\`' "$registry" "$repo_name" "$image_base_name")
+            body+=$'\n\n**🔐 Build Provenance & Supply Chain Security:**'
+
+            if [ -n "$sigstore_amd64" ] || [ -n "$sigstore_arm64" ]; then
+              body+=$'\n\n**Sigstore Transparency Log:**'
+              if [ -n "$sigstore_amd64" ]; then
+                body+=$(printf '\n* **AMD64**: [%s](%s)' "View in Sigstore" "$sigstore_amd64")
+              fi
+              if [ -n "$sigstore_arm64" ]; then
+                body+=$(printf '\n* **ARM64**: [%s](%s)' "View in Sigstore" "$sigstore_arm64")
+              fi
+            fi
+            if [ -n "$github_attestation_amd64" ] || [ -n "$github_attestation_arm64" ]; then
+              body+=$'\n\n**GitHub Attestations:**'
+              if [ -n "$github_attestation_amd64" ]; then
+                body+=$(printf '\n* **AMD64**: [%s](%s)' "View Attestation" "$github_attestation_amd64")
+              fi
+              if [ -n "$github_attestation_arm64" ]; then
+                body+=$(printf '\n* **ARM64**: [%s](%s)' "View Attestation" "$github_attestation_arm64")
+              fi
+            fi
+            body+=$'\n\n**CLI Verification:**'
+            body+=$(printf '\n```bash\n# Verify with GitHub CLI\ngh attestation verify oci://%s/%s/%s-linux-amd64:%s --owner %s\ngh attestation verify oci://%s/%s/%s-linux-arm64:%s --owner %s\n```' "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-latest}" "${repo_name%/*}" "$registry" "$repo_name" "$image_base_name" "${MINOR_ARM64:-latest}" "${repo_name%/*}")
 
           else
             # Non-language base images: best practices + examples
@@ -665,7 +779,36 @@ jobs:
           **For Production/CI (Recommended):**
           * **AMD64**: \`FROM $registry/$repo_name/${image_base_name}-linux-amd64:latest\`
           * **ARM64**: \`FROM $registry/$repo_name/${image_base_name}-linux-arm64:latest\`
-          * **Build command**: \`docker build --pull ...\`"
+          * **Build command**: \`docker build --pull ...\`
+
+          **🔐 Build Provenance & Supply Chain Security:**"
+          
+          if [ -n "$sigstore_amd64" ] || [ -n "$sigstore_arm64" ]; then
+            base_practices+=$'\n\n          **Sigstore Transparency Log:**'
+            if [ -n "$sigstore_amd64" ]; then
+              base_practices+=$(printf '\n          * **AMD64**: [%s](%s)' "View in Sigstore" "$sigstore_amd64")
+            fi
+            if [ -n "$sigstore_arm64" ]; then
+              base_practices+=$(printf '\n          * **ARM64**: [%s](%s)' "View in Sigstore" "$sigstore_arm64")
+            fi
+          fi
+          
+          if [ -n "$github_attestation_amd64" ] || [ -n "$github_attestation_arm64" ]; then
+            base_practices+=$'\n\n          **GitHub Attestations:**'
+            if [ -n "$github_attestation_amd64" ]; then
+              base_practices+=$(printf '\n          * **AMD64**: [%s](%s)' "View Attestation" "$github_attestation_amd64")
+            fi
+            if [ -n "$github_attestation_arm64" ]; then
+              base_practices+=$(printf '\n          * **ARM64**: [%s](%s)' "View Attestation" "$github_attestation_arm64")
+            fi
+          fi
+          
+          base_practices+=$'\n\n          **CLI Verification:**
+          \`\`\`bash
+          # Verify with GitHub CLI
+          gh attestation verify oci://'$registry'/'$repo_name'/'${image_base_name}'-linux-amd64:latest --owner '${repo_name%/*}'
+          gh attestation verify oci://'$registry'/'$repo_name'/'${image_base_name}'-linux-arm64:latest --owner '${repo_name%/*}'
+          \`\`\`"
             body+="$base_practices"
           fi
 
