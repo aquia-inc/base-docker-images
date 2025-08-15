@@ -255,7 +255,7 @@ jobs:
 
       - name: Upload provenance artifact for ${{ matrix.platform }}
         uses: actions/upload-artifact@v4
-        if: steps.extract_logindex.outputs.provenance_file_path != '' && github.event_name == 'push' && github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         with:
           name: provenance-file-${{ steps.sanitize_platform.outputs.suffix }}
           path: ${{ steps.extract_logindex.outputs.provenance_file_path }}
@@ -365,7 +365,7 @@ jobs:
 
       - name: Extract Sigstore logIndex for ${{ matrix.platform }}
         id: extract_logindex
-        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.attest_provenance.outputs.bundle-path != ''
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
           echo "Attestation URL: ${{ steps.attest_provenance.outputs.attestation-url }}"
           echo "Bundle path: ${{ steps.attest_provenance.outputs.bundle-path }}"
@@ -374,7 +374,7 @@ jobs:
           output_file="env.provenance.${{ steps.sanitize_platform.outputs.suffix }}"
           
           # Extract logIndex from the attestation bundle
-          if [ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ]; then
+          if [ -n "${{ steps.attest_provenance.outputs.bundle-path }}" ] && [ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ]; then
             LOG_INDEX=$(jq -r '.tlogEntries[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}")
             if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
               echo "logindex=$LOG_INDEX" >> $GITHUB_OUTPUT
