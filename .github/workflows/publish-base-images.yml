@@ -255,7 +255,7 @@ jobs:
 
       - name: Upload provenance artifact for ${{ matrix.platform }}
         uses: actions/upload-artifact@v4
-        if: steps.extract_logindex.outputs.provenance_file_path != '' && github.event_name == 'push' && github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         with:
           name: provenance-file-${{ steps.sanitize_platform.outputs.suffix }}
           path: ${{ steps.extract_logindex.outputs.provenance_file_path }}
@@ -365,7 +365,7 @@ jobs:
 
       - name: Extract Sigstore logIndex for ${{ matrix.platform }}
         id: extract_logindex
-        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.attest_provenance.outputs.bundle-path != ''
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
           echo "Attestation URL: ${{ steps.attest_provenance.outputs.attestation-url }}"
           echo "Bundle path: ${{ steps.attest_provenance.outputs.bundle-path }}"
@@ -374,7 +374,8 @@ jobs:
           output_file="env.provenance.${{ steps.sanitize_platform.outputs.suffix }}"
           
           # Extract logIndex from the attestation bundle
-          if [ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ]; then
+
+          if [ -n "${{ steps.attest_provenance.outputs.bundle-path }}" ] && [ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ]; then
             LOG_INDEX=$(jq -r '.tlogEntries[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}")
             if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
               echo "logindex=$LOG_INDEX" >> $GITHUB_OUTPUT
@@ -767,7 +768,6 @@ jobs:
             body+=$(printf '\ngh attestation verify oci://%s/%s/%s-linux-amd64:%s --repo %s' "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-latest}" "$repo_name")
             body+=$(printf '\ngh attestation verify oci://%s/%s/%s-linux-arm64:%s --repo %s' "$registry" "$repo_name" "$image_base_name" "${MINOR_ARM64:-latest}" "$repo_name")
             body+=$'\n```'
-
           else
             # Non-language base images: best practices + examples
             base_practices="
@@ -811,7 +811,7 @@ jobs:
           base_practices+=$(printf '\ngh attestation verify oci://%s/%s/%s-linux-amd64:latest --repo %s' "$registry" "$repo_name" "$image_base_name" "$repo_name")
           base_practices+=$(printf '\ngh attestation verify oci://%s/%s/%s-linux-arm64:latest --repo %s' "$registry" "$repo_name" "$image_base_name" "$repo_name")
           base_practices+=$'\n```'
-          body+="$base_practices"
+            body+="$base_practices"
           fi
 
           echo "Setting BODY_TEXT environment variable..."
