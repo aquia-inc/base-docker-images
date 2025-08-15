@@ -1,21 +1,24 @@
 ### OPENSSL WITH FIPS BUILD ###
 # Using Wolfi-Alpine base image instead of Wolfi because it has better tooling for building OpenSSL
-FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:90b315145e4da594622f7ad4d6c707adc07c45cf36767cfa7db3c9cea65d460b
+FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:0e879f3bfdc6e07723828fd1b04d41178fa1687ac14e1e8c880dce2515b13e90
 
 # Install openssl dependencies
-RUN apk update && apk add --no-cache \
-# build-base \
-linux-headers \
-pcre-dev \
-wget \
-ca-certificates \
-perl \
-libssl3 \
-make \
-gcc \
-libgcc \
-zlib-dev \
-g++
+RUN set -e && \
+    apk update && \
+    (apk add --no-cache \
+    gcompat \
+    linux-headers \
+    pcre-dev \
+    wget \
+    perl \
+    libssl3 \
+    make \
+    gcc \
+    libgcc \
+    zlib-dev \
+    g++ \
+    ca-certificates; exit 0) && \
+    which gcc && which make && which g++ && which wget
 
 # Set up the build environment
 WORKDIR /usr/src
@@ -28,10 +31,10 @@ RUN wget -q https://www.openssl.org/source/openssl-3.0.9.tar.gz && tar -zxvf ope
 
 RUN cd openssl-3.0.9 && \
     ./Configure enable-fips --prefix=/usr/local/ssl --openssldir=/usr/local/ssl no-ssl3 no-legacy no-comp no-idea no-dtls no-dtls1 no-err no-psk no-srp no-ec2m no-weak-ssl-ciphers -DOPENSSL_USE_BUILD_DATE && \
-    make -j$(nproc) && \
-    make -j$(nproc) install_sw && \
-    make -j$(nproc) install_ssldirs && \
-    make -j$(nproc) install_fips
+    make -j$(($(nproc)/2)) && \
+    make -j$(($(nproc)/2)) install_sw && \
+    make -j$(($(nproc)/2)) install_ssldirs && \
+    make -j$(($(nproc)/2)) install_fips
 
 # Ensure that the FIPS module is correctly installed by trying both lib and lib64 paths
 RUN /usr/local/ssl/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module /usr/local/ssl/lib/ossl-modules/fips.so || \
