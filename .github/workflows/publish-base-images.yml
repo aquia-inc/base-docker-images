@@ -401,9 +401,13 @@ jobs:
           output_file="env.provenance.${{ steps.sanitize_platform.outputs.suffix }}"
           
           # Extract logIndex from the attestation bundle
-
           if [ -n "${{ steps.attest_provenance.outputs.bundle-path }}" ] && [ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ]; then
-            LOG_INDEX=$(jq -r '.tlogEntries[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}")
+            # Debug: Show bundle structure
+            echo "Bundle structure keys:"
+            jq -r 'keys' "${{ steps.attest_provenance.outputs.bundle-path }}" || echo "Failed to get keys"
+            
+            # Try different paths to extract logIndex (bundle structure may vary)
+            LOG_INDEX=$(jq -r '.verificationMaterial.tlogEntries[0].logIndex // .verificationMaterial.x509CertificateChain.certificates[0].logIndex // .tlogEntries[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}")
             if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
               echo "logindex=$LOG_INDEX" >> $GITHUB_OUTPUT
               echo "sigstore_url=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> $GITHUB_OUTPUT
