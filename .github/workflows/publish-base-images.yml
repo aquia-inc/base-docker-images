@@ -647,13 +647,13 @@ jobs:
               body+=$(printf '\n* **ARM64 (Recommended)**: \`docker pull %s/%s/%s-linux-arm64:%s\`' "$registry" "$repo_name" "$image_base_name" "$MINOR_ARM64")
             fi
 
-            body+=$'\n\n          **For Development/Testing:**'
+            body+=$'\n\n**For Development/Testing:**'
             body+=$(printf '\n* **AMD64 (Latest)**: \`docker pull %s/%s/%s-linux-amd64:latest\`' "$registry" "$repo_name" "$image_base_name")
             body+=$(printf '\n* **ARM64 (Latest)**: \`docker pull %s/%s/%s-linux-arm64:latest\`' "$registry" "$repo_name" "$image_base_name")
 
-            body+=$'\n\n          **For Specific Version Requirements:**'
-            body+=$(printf '\n* **AMD64 (Exact)**: \`docker pull %s/%s/%s-linux-amd64:%s\`' "$registry" "$repo_name" "$image_base_name" "$version_tag")
-            body+=$(printf '\n* **ARM64 (Exact)**: \`docker pull %s/%s/%s-linux-arm64:%s\`' "$registry" "$repo_name" "$image_base_name" "$version_tag")
+            body+=$'\n\n**For Specific Version Requirements:**'
+            body+=$(printf '\n* **AMD64 (Exact)**: \`docker pull %s/%s/%s-linux-amd64:%s\`' "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-$version_tag}")
+            body+=$(printf '\n* **ARM64 (Exact)**: \`docker pull %s/%s/%s-linux-arm64:%s\`' "$registry" "$repo_name" "$image_base_name" "${MINOR_ARM64:-$version_tag}")
           else
             # Non-language base images: best practices + examples
             base_practices="
