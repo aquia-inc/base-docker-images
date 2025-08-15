@@ -28,10 +28,10 @@ RUN wget -q https://www.openssl.org/source/openssl-3.0.9.tar.gz && tar -zxvf ope
 
 RUN cd openssl-3.0.9 && \
     ./Configure enable-fips --prefix=/usr/local/ssl --openssldir=/usr/local/ssl no-ssl3 no-legacy no-comp no-idea no-dtls no-dtls1 no-err no-psk no-srp no-ec2m no-weak-ssl-ciphers -DOPENSSL_USE_BUILD_DATE && \
-    make -j$(nproc) && \
-    make -j$(nproc) install_sw && \
-    make -j$(nproc) install_ssldirs && \
-    make -j$(nproc) install_fips
+    make -j$(($(nproc)/2)) && \
+    make -j$(($(nproc)/2)) install_sw && \
+    make -j$(($(nproc)/2)) install_ssldirs && \
+    make -j$(($(nproc)/2)) install_fips
 
 # Ensure that the FIPS module is correctly installed by trying both lib and lib64 paths
 RUN /usr/local/ssl/bin/openssl fipsinstall -out /usr/local/ssl/fipsmodule.cnf -module /usr/local/ssl/lib/ossl-modules/fips.so || \
