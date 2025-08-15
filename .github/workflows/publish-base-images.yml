@@ -742,8 +742,8 @@ jobs:
             body+=$'\n\n**For Development/Testing:**'
             body+=$(printf '\n* **AMD64 (Latest)**: \`docker pull %s/%s/%s-linux-amd64:latest\`' "$registry" "$repo_name" "$image_base_name")
             body+=$(printf '\n* **ARM64 (Latest)**: \`docker pull %s/%s/%s-linux-arm64:latest\`' "$registry" "$repo_name" "$image_base_name")
-            
             body+=$'\n\n**🔐 Build Provenance & Supply Chain Security:**'
+
             if [ -n "$sigstore_amd64" ] || [ -n "$sigstore_arm64" ]; then
               body+=$'\n\n**Sigstore Transparency Log:**'
               if [ -n "$sigstore_amd64" ]; then
@@ -808,6 +808,7 @@ jobs:
           base_practices+=$(printf '\n          gh attestation verify oci://%s/%s/%s-linux-amd64:latest --owner %s' "$registry" "$repo_name" "$image_base_name" "${repo_name%/*}")
           base_practices+=$(printf '\n          gh attestation verify oci://%s/%s/%s-linux-arm64:latest --owner %s' "$registry" "$repo_name" "$image_base_name" "${repo_name%/*}")
           base_practices+=$'\n          ```'
+
             body+="$base_practices"
           fi
 
