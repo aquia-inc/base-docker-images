@@ -1,0 +1,39 @@
+name: 'Setup Docker Environment'
+description: 'Sets up Docker buildx, QEMU, and logs into GHCR'
+inputs:
+  registry:
+    description: 'Container registry URL'
+    required: true
+    default: 'ghcr.io'
+  username:
+    description: 'Registry username'
+    required: true
+  password:
+    description: 'Registry password/token'
+    required: true
+outputs:
+  cache-key:
+    description: 'Generated cache key for builds'
+    value: ${{ steps.cache-key.outputs.key }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Login to Container Registry
+      uses: docker/login-action@v3.5.0
+      with:
+        registry: ${{ inputs.registry }}
+        username: ${{ inputs.username }}
+        password: ${{ inputs.password }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Generate cache key
+      id: cache-key
+      shell: bash
+      run: |
+        echo "key=${{ github.repository }}-docker-${{ runner.os }}" >> $GITHUB_OUTPUT
