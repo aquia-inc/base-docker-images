@@ -195,6 +195,26 @@ jobs:
           size=$(docker images --format "table {{.Size}}" "$image_tag" | tail -n +2)
           echo "Docker image size for ${{ matrix.platform }}: $size"
 
+      - name: Install Container Structure Test
+        run: |
+          curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
+          chmod +x container-structure-test-linux-amd64
+          sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
+
+      - name: Run Container Structure Tests for ${{ matrix.platform }}
+        run: |
+          image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
+          test_config="tests/container-structure/${image_base_name}.yaml"
+          image_tag="${{ github.repository }}/${{ steps.image_name.outputs.platform_image_name }}:test"
+          
+          if [ -f "$test_config" ]; then
+            echo "Running container structure tests for $image_base_name..."
+            container-structure-test test --image "$image_tag" --config "$test_config"
+          else
+            echo "No structure tests found for $image_base_name (expected: $test_config)"
+            echo "Skipping container structure tests"
+          fi
+
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
         uses: aquasecurity/trivy-action@master
         with:
