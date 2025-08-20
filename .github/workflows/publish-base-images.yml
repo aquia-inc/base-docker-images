@@ -126,7 +126,40 @@ jobs:
           size=$(docker images --format "table {{.Size}}" "$image_tag" | tail -n +2)
           echo "Docker image size for ${{ matrix.platform }}: $size"
 
-      - name: Run container structure tests
+      - name: Install Container Structure Test
+        run: |
+          curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
+          chmod +x container-structure-test-linux-amd64
+          sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
+
+      - name: Run Container Structure Tests for ${{ matrix.platform }}
+        run: |
+          image_base_name="${{ steps.context.outputs.image-base-name }}"
+          test_config="tests/container-structure/${image_base_name}.yaml"
+          image_tag="${{ github.repository }}/${{ steps.context.outputs.image-name }}:test"
+          
+          if [ -f "$test_config" ]; then
+            echo "Running container structure tests for $image_base_name..."
+            container-structure-test test --image "$image_tag" --config "$test_config"
+          else
+            echo "No structure tests found for $image_base_name (expected: $test_config)"
+            echo "Skipping container structure tests"
+          fi
+
+      - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          format: table
+          # output: "trivy-results-${{ steps.sanitize_platform.outputs.suffix }}.sarif"
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH,MEDIUM"
+
+      - name: Get installed package versions for ${{ matrix.platform }}
+        id: get_versions
         run: |
           # Download container-structure-test if not available
           if ! command -v container-structure-test &> /dev/null; then

@@ -1,0 +1,34 @@
+schemaVersion: 2.0.0
+
+# Test Node.js base image functionality
+commandTests:
+  - name: "Node.js version check"
+    command: "node"
+    args: ["--version"]
+    expectedOutput: ["v20."]
+    
+  - name: "NPM is available"
+    command: "npm"
+    args: ["--version"]
+    expectedOutput: ["10."]
+    
+  - name: "User is nonroot"
+    command: "whoami"
+    expectedOutput: ["nonroot"]
+
+fileExistenceTests:
+  - name: "Version file exists"
+    path: "/tmp/versions.txt" 
+    shouldExist: true
+
+fileContentTests:
+  - name: "Version file contains Node.js version"
+    path: "/tmp/versions.txt"
+    expectedContents: ["nodejs=20."]
+    
+  - name: "Version file contains major tag"
+    path: "/tmp/versions.txt"
+    expectedContents: ["nodejs_major_tag=20"]
+
+metadataTest:
+  user: "nonroot"
