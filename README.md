@@ -61,7 +61,7 @@ Images are considered hardened when they do not contain fixed CVE vulnerabilitie
 
 ### Recommended Version Pinning
 
-The images are tagged with [Semantic Versioning](https://semver.org/) and also with the installed language's major (i.e. `python-base:3`) and major + minor (i.e. `python-base:3.13, `go-base:1.25`) versions (currently implemented for Python, Node, OpenJDK, and Go).
+The images are tagged with [Semantic Versioning](https://semver.org/) and also with the installed language's major (i.e. `python-base:3`) and major + minor (i.e. `python-base:3.13`, `go-base:1.25`) versions (currently implemented for Python, Node, OpenJDK, and Go).
 
 If you want to ensure that your image's installed language is not updated to a potentially non-backwards-compatible version, you can pin the version of the image you are using to the specific version of the language you want - i.e. `python-base:3.13`.
 
@@ -71,7 +71,7 @@ On the other hand, pinning your image to `python-base:3` for example, allows you
 
 Both choices have tradeoffs and is a decision you need to make based on your project's needs.
 
-The non-language-specific images, such as the `nginx-base` and `wolfi-base` images can be pinned to `:latest`, as they are unlikely to bring backwards-incompatible changes to your workloads.
+The non-language-specific images, such as the `nginx-base`, `fips-base`, and `wolfi-base` images can be pinned to `:latest`, as they are unlikely to bring backwards-incompatible changes to your workloads.
 
 ## How to Use
 
