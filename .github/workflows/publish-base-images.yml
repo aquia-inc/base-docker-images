@@ -106,6 +106,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+          platform: ${{ matrix.platform }}
 
       - name: Build Docker Image for ${{ matrix.platform }} (Test)
         id: build_test
