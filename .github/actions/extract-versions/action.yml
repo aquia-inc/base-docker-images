@@ -1,0 +1,72 @@
+name: 'Extract Language Versions'
+description: 'Extracts language versions from built container images'
+inputs:
+  image-base-name:
+    description: 'Base image name (e.g., python-base)'
+    required: true
+  image-tag:
+    description: 'Full image tag to extract versions from'
+    required: true
+  platform:
+    description: 'Platform for the container'
+    required: true
+  platform-suffix:
+    description: 'Platform suffix for file naming'
+    required: true
+outputs:
+  versions-file:
+    description: 'Path to the generated versions file'
+    value: ${{ steps.extract.outputs.versions_file }}
+  extraction-success:
+    description: 'true if extraction succeeded, false otherwise'
+    value: ${{ steps.extract.outputs.extraction_success }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Extract versions from container
+      id: extract
+      shell: bash
+      run: |
+        image_base_name="${{ inputs.image-base-name }}"
+        test_tag="${{ inputs.image-tag }}"
+        platform="${{ inputs.platform }}"
+        platform_suffix="${{ inputs.platform-suffix }}"
+        output_file="env.versions.${platform_suffix}"
+        extraction_status="false"
+
+        echo "=== Version Extraction ==="
+        echo "Image base name: $image_base_name"
+        echo "Test tag: $test_tag"
+        echo "Platform: $platform"
+        echo "Output file: $output_file"
+
+        # Only extract versions for language-specific images
+        if [[ "$image_base_name" == "python-base" || "$image_base_name" == "nodejs-base" || "$image_base_name" == "openjdk17-base" || "$image_base_name" == "go-base" ]]; then
+            echo "Attempting to extract versions from $test_tag for $image_base_name"
+            
+            # Extract versions from the container
+            if docker run --rm --platform "$platform" "$test_tag" sh -c 'cat /tmp/versions.txt && exit 0 || exit 1' > "$output_file"; then
+                if [ -s "$output_file" ]; then
+                    echo "Versions extracted successfully to $output_file"
+                    echo "Contents:"
+                    cat "$output_file"
+                    extraction_status="true"
+                else
+                    echo "Warning: Command succeeded but extracted versions file '$output_file' is empty."
+                    rm -f "$output_file"
+                fi
+            else
+                echo "Warning: Failed to execute 'cat /tmp/versions.txt' in container $test_tag. Exit code: $?"
+                rm -f "$output_file"
+            fi
+        else
+            echo "No version extraction needed for $image_base_name."
+        fi
+
+        echo "extraction_success=$extraction_status" >> $GITHUB_OUTPUT
+        if [[ "$extraction_status" == "true" ]]; then
+          echo "versions_file=$output_file" >> $GITHUB_OUTPUT
+        else
+          echo "versions_file=" >> $GITHUB_OUTPUT
+        fi

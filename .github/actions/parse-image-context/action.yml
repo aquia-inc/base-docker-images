@@ -1,0 +1,85 @@
+name: 'Parse Image Context'
+description: 'Parses tag information and constructs image names and metadata'
+inputs:
+  tag:
+    description: 'Git tag or ref to parse (e.g., refs/tags/release/python-base/v1.2.3)'
+    required: true
+  platform:
+    description: 'Target platform (e.g., linux/amd64)'
+    required: true
+  fallback-image:
+    description: 'Fallback image name for non-release builds'
+    required: false
+    default: 'python-base'
+outputs:
+  image-base-name:
+    description: 'Base image name (e.g., python-base)'
+    value: ${{ steps.parse.outputs.image_base_name }}
+  platform-suffix:
+    description: 'Platform suffix (e.g., linux-amd64)'
+    value: ${{ steps.parse.outputs.platform_suffix }}
+  image-name:
+    description: 'Full platform-specific image name (e.g., python-base-linux-amd64)'
+    value: ${{ steps.parse.outputs.image_name }}
+  version:
+    description: 'Parsed version (e.g., v1.2.3)'
+    value: ${{ steps.parse.outputs.version }}
+  version-no-build:
+    description: 'Version without build metadata'
+    value: ${{ steps.parse.outputs.version_no_build }}
+  is-release-tag:
+    description: 'true if this is a release tag, false otherwise'
+    value: ${{ steps.parse.outputs.is_release_tag }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Parse tag and construct image context
+      id: parse
+      shell: bash
+      run: |
+        tag_to_parse="${{ inputs.tag }}"
+        platform="${{ inputs.platform }}"
+        
+        echo "Input TAG: $tag_to_parse"
+        echo "Input PLATFORM: $platform"
+        
+        # Sanitize platform name for use in image names
+        platform_suffix=$(echo "$platform" | tr '/' '-')
+        echo "platform_suffix=$platform_suffix" >> $GITHUB_OUTPUT
+        
+        # Strip refs/tags/ prefix if present
+        tag_clean=$(echo "$tag_to_parse" | sed 's|^refs/tags/||')
+        echo "Cleaned TAG: $tag_clean"
+        
+        # Check if it matches release/<image-name>/v<version> format
+        if [[ $tag_clean =~ ^release/([^/]+)/(v.+)$ ]]; then
+            echo "Match found (Release Tag format)"
+            image_base_name="${BASH_REMATCH[1]}"
+            version="${BASH_REMATCH[2]}"
+            version_no_build=$(echo "$version" | sed 's/\+.*//')
+            is_release_tag="true"
+            
+            echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
+            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "version_no_build=$version_no_build" >> $GITHUB_OUTPUT
+            echo "is_release_tag=$is_release_tag" >> $GITHUB_OUTPUT
+            echo "Parsed: image_base_name=$image_base_name, version=$version"
+        else
+            # Not a release tag - use fallback
+            echo "Not a release tag build. Using fallback values."
+            image_base_name="${{ inputs.fallback-image }}"
+            version="dev"
+            is_release_tag="false"
+            
+            echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
+            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "version_no_build=$version" >> $GITHUB_OUTPUT
+            echo "is_release_tag=$is_release_tag" >> $GITHUB_OUTPUT
+            echo "Using fallback: image_base_name=$image_base_name, version=$version"
+        fi
+        
+        # Construct full platform-specific image name
+        image_name="${image_base_name}-${platform_suffix}"
+        echo "image_name=$image_name" >> $GITHUB_OUTPUT
+        echo "Constructed image name: $image_name"

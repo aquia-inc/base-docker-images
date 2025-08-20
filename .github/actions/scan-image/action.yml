@@ -1,0 +1,76 @@
+name: 'Scan Image with Trivy'
+description: 'Scans container image for vulnerabilities using Trivy'
+inputs:
+  image-tag:
+    description: 'Image tag to scan'
+    required: true
+  severities:
+    description: 'Vulnerability severities to check'
+    required: false
+    default: 'CRITICAL,HIGH,MEDIUM'
+  exit-code:
+    description: 'Exit code to use when vulnerabilities are found'
+    required: false
+    default: '1'
+  ignore-unfixed:
+    description: 'Ignore unfixed vulnerabilities'
+    required: false
+    default: 'true'
+outputs:
+  scan-result:
+    description: 'Result of the scan: passed, failed, or error'
+    value: ${{ steps.scan.outputs.scan_result }}
+  vulnerabilities-found:
+    description: 'true if vulnerabilities were found, false otherwise'
+    value: ${{ steps.scan.outputs.vulnerabilities_found }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Trivy cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/trivy
+        key: ${{ runner.os }}-trivy-db-${{ inputs.image-tag }}
+        restore-keys: |
+          ${{ runner.os }}-trivy-db-
+
+    - name: Run Trivy vulnerability scanner
+      id: scan
+      shell: bash
+      run: |
+        echo "=== Trivy Security Scan ==="
+        echo "Image: ${{ inputs.image-tag }}"
+        echo "Severities: ${{ inputs.severities }}"
+        echo "Exit code: ${{ inputs.exit-code }}"
+        echo "Ignore unfixed: ${{ inputs.ignore-unfixed }}"
+        
+        scan_result="unknown"
+        vulnerabilities_found="false"
+        
+        # Run Trivy scan
+        if trivy image \
+          --ignore-unfixed=${{ inputs.ignore-unfixed }} \
+          --exit-code=${{ inputs.exit-code }} \
+          --severity=${{ inputs.severities }} \
+          --format=table \
+          "${{ inputs.image-tag }}"; then
+          echo "✅ No vulnerabilities found at specified severity levels"
+          scan_result="passed"
+          vulnerabilities_found="false"
+        else
+          exit_code=$?
+          if [ $exit_code -eq ${{ inputs.exit-code }} ]; then
+            echo "⚠️  Vulnerabilities found at specified severity levels"
+            scan_result="failed" 
+            vulnerabilities_found="true"
+          else
+            echo "❌ Trivy scan encountered an error (exit code: $exit_code)"
+            scan_result="error"
+            vulnerabilities_found="false"
+          fi
+        fi
+        
+        echo "scan_result=$scan_result" >> $GITHUB_OUTPUT
+        echo "vulnerabilities_found=$vulnerabilities_found" >> $GITHUB_OUTPUT
+        echo "Final result: $scan_result (vulnerabilities: $vulnerabilities_found)"
