@@ -51,23 +51,25 @@ This repository is a work in progress, but the produced images are considered st
 
 Images are considered hardened when they do not contain fixed CVE vulnerabilities of the following severities: CRITICAL, HIGH, MEDIUM. They are based on [wolfi-base](<https://edu.chainguard.dev/open-source/wolfi/overview/>) from Chainguard. We use Renovate to automatically update each of these base images to the most recently published image ([`latest`](https://edu.chainguard.dev/chainguard/chainguard-images/reference/wolfi-base/tags_history/)).
 
-* Go
-* NodeJS
-* Python 3.13
-* OpenJDK-17, with Maven 3.9.5
-* Wolfi Base
-* Wolfi Base with [FIPS (beta*)](#beta-images)
-* nginx
+## Current Language Versions
+
+* **Go**: 1.25.x (from chainguard/go:latest)
+* **Node.js**: 24.6.x with npm 11.5.x (from wolfi-base with nodejs/npm packages)
+* **Python**: 3.13.x (from wolfi-base with python3 package)
+* **OpenJDK**: 17.x with Maven 3.9.8 (from wolfi-base with openjdk-17 package)
+* **Wolfi Base**: Latest minimal Linux distribution
+* **FIPS Base**: Custom OpenSSL 3.0.9 with FIPS validation ([beta](#beta-images))
+* **Nginx**: 1.29.x with headers-more module (custom build)
 
 ### Recommended Version Pinning
 
-The images are tagged with [Semantic Versioning](https://semver.org/) and also with the installed language's major (i.e. `python-base:3`) and major + minor (i.e. `python-base:3.13`, `go-base:1.25`) versions (currently implemented for Python, Node, OpenJDK, and Go).
+The images are tagged with [Semantic Versioning](https://semver.org/) and also with the installed language's major (i.e. `python-base:3`, `nodejs-base:24`) and major + minor (i.e. `python-base:3.13`, `go-base:1.25`, `nodejs-base:24.6`) versions (currently implemented for Python, Node.js, OpenJDK, and Go).
 
-If you want to ensure that your image's installed language is not updated to a potentially non-backwards-compatible version, you can pin the version of the image you are using to the specific version of the language you want - i.e. `python-base:3.13`.
+If you want to ensure that your image's installed language is not updated to a potentially non-backwards-compatible version, you can pin the version of the image you are using to the specific version of the language you want - i.e. `python-base:3.13` or `nodejs-base:24.6`.
 
-Note, however, that due to the limitations of our using Chainguard's free tier, we can only keep the latest wolfi-base image up-to-date, so once wolfi-base moves to python 3.14 for example, the python-base:3.13 will no longer be automatically patched by our workflows.
+Note, however, that due to the limitations of our using Chainguard's free tier, we can only keep the latest wolfi-base image up-to-date, so once wolfi-base moves to python 3.14 or nodejs 25 for example, the python-base:3.13 or nodejs-base:24.6 will no longer be automatically patched by our workflows.
 
-On the other hand, pinning your image to `python-base:3` for example, allows you to receive all Python 3 security updates, but it will also force you to upgrade to the next minor version whenever wolfi-base is updated to that version of Python.
+On the other hand, pinning your image to `python-base:3` or `nodejs-base:24` for example, allows you to receive all security updates within that major version, but it will also force you to upgrade to the next minor version whenever wolfi-base is updated to that version of the language.
 
 Both choices have tradeoffs and is a decision you need to make based on your project's needs.
 

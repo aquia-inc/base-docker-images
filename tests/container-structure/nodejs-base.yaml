@@ -5,16 +5,17 @@ commandTests:
   - name: "Node.js version check"
     command: "node"
     args: ["--version"]
-    expectedOutput: ["v20."]
+    expectedOutput: ["v24."]
     
   - name: "NPM is available"
     command: "npm"
     args: ["--version"]
-    expectedOutput: ["10."]
+    expectedOutput: ["11."]
     
-  - name: "User is nonroot"
-    command: "whoami"
-    expectedOutput: ["nonroot"]
+  - name: "User is nobody"
+    command: "id"
+    args: ["-un"]
+    expectedOutput: ["nobody"]
 
 fileExistenceTests:
   - name: "Version file exists"
@@ -24,11 +25,11 @@ fileExistenceTests:
 fileContentTests:
   - name: "Version file contains Node.js version"
     path: "/tmp/versions.txt"
-    expectedContents: ["nodejs=20."]
+    expectedContents: ["node=24."]
     
   - name: "Version file contains major tag"
     path: "/tmp/versions.txt"
-    expectedContents: ["nodejs_major_tag=20"]
+    expectedContents: ["node_major_tag=24"]
 
 metadataTest:
-  user: "nonroot"
+  user: "nobody"
