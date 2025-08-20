@@ -128,6 +128,41 @@ jobs:
 
       - name: Run container structure tests
         run: |
+          curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
+          chmod +x container-structure-test-linux-amd64
+          sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
+
+      - name: Run Container Structure Tests for ${{ matrix.platform }}
+        run: |
+          image_base_name="${{ steps.context.outputs.image-base-name }}"
+          test_config="tests/container-structure/${image_base_name}.yaml"
+          image_tag="${{ github.repository }}/${{ steps.context.outputs.image-name }}:test"
+          
+          # Run tests if config exists
+          test_config="tests/container-structure/${{ steps.context.outputs.image-base-name }}.yaml"
+          if [ -f "$test_config" ]; then
+            echo "Running container structure tests with config: $test_config"
+            container-structure-test test \
+              --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
+              --config "$test_config"
+          else
+            echo "No container structure test config found at $test_config, skipping tests"
+          fi
+
+      - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
+        uses: aquasecurity/trivy-action@77137e9dc3ab1b329b7c8a38c2eb7475850a14e8
+        with:
+          scan-type: image
+          image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH,MEDIUM"
+
+      - name: Get installed package versions for ${{ matrix.platform }}
+        id: get_versions
+        run: |
           # Download container-structure-test if not available
           if ! command -v container-structure-test &> /dev/null; then
             echo "Downloading container-structure-test..."
@@ -147,13 +182,19 @@ jobs:
             echo "No container structure test config found at $test_config, skipping tests"
           fi
 
-      - name: Scan image for vulnerabilities
-        uses: ./.github/actions/scan-image
+      - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
+        uses: aquasecurity/trivy-action@77137e9dc3ab1b329b7c8a38c2eb7475850a14e8
         with:
-          image-tag: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          scan-type: image
+          image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH,MEDIUM"
 
       - name: Extract language versions
-        id: get_versions
+        id: extract_versions
         uses: ./.github/actions/extract-versions
         with:
           image-base-name: ${{ steps.context.outputs.image-base-name }}
@@ -163,18 +204,18 @@ jobs:
 
       - name: Upload versions artifact for ${{ matrix.platform }}
         uses: actions/upload-artifact@v4
-        if: steps.get_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
+        if: steps.extract_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
         with:
           name: versions-file-${{ steps.context.outputs.platform-suffix }}
-          path: ${{ steps.get_versions.outputs.versions-file }}
+          path: ${{ steps.extract_versions.outputs.versions-file }}
           retention-days: 1
           if-no-files-found: error
 
       - name: Check if env.versions file exists (Local check)
         id: check_env_file
-        if: steps.get_versions.outputs.extraction-success == 'true'
+        if: steps.extract_versions.outputs.extraction-success == 'true'
         run: |
-          if [ -f "${{ steps.get_versions.outputs.versions-file }}" ]; then
+          if [ -f "${{ steps.extract_versions.outputs.versions-file }}" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "Versions file exists"
           else
@@ -184,7 +225,7 @@ jobs:
 
       - name: Rename versions file to .env (Local Env)
         if: steps.check_env_file.outputs.exists == 'true'
-        run: mv "${{ steps.get_versions.outputs.versions-file }}" .env
+        run: mv "${{ steps.extract_versions.outputs.versions-file }}" .env
 
       - name: Read package versions for ${{ matrix.platform }} (Local Env)
         if: steps.check_env_file.outputs.exists == 'true'
