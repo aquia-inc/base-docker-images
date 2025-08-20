@@ -24,7 +24,7 @@ fileExistenceTests:
 fileContentTests:
   - name: "Version file contains Node.js version"
     path: "/tmp/versions.txt"
-    expectedContents: ["nodejs=20\."]
+    expectedContents: ["nodejs=20."]
     
   - name: "Version file contains major tag"
     path: "/tmp/versions.txt"

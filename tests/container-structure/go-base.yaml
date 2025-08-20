@@ -32,7 +32,7 @@ fileExistenceTests:
 fileContentTests:
   - name: "Version file contains Go version"
     path: "/tmp/versions.txt"
-    expectedContents: ["go=1.25.*"]
+    expectedContents: ["go=1.25."]
     
   - name: "Version file contains major tag"
     path: "/tmp/versions.txt" 

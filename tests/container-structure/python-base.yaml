@@ -24,7 +24,7 @@ fileExistenceTests:
 fileContentTests:
   - name: "Version file contains Python version"
     path: "/tmp/versions.txt"
-    expectedContents: ["python=3\."]
+    expectedContents: ["python=3."]
     
   - name: "Version file contains major tag"
     path: "/tmp/versions.txt"

@@ -24,7 +24,7 @@ fileExistenceTests:
 fileContentTests:
   - name: "Version file contains Java version"
     path: "/tmp/versions.txt"
-    expectedContents: ["java=17\."]
+    expectedContents: ["java=17."]
     
   - name: "Version file contains major tag"
     path: "/tmp/versions.txt"
