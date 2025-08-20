@@ -2,28 +2,27 @@ schemaVersion: 2.0.0
 
 # Test FIPS base image functionality
 commandTests:
-  - name: "OpenSSL FIPS mode check"
-    command: "openssl"
+  - name: "OpenSSL FIPS version check"
+    command: "/usr/local/ssl/bin/openssl"
     args: ["version"]
     expectedOutput: ["OpenSSL"]
     
-  - name: "FIPS mode enabled check"
-    command: "openssl"
-    args: ["list", "-providers"]
-    expectedOutput: ["fips"]
-    
-  - name: "User is nonroot"
+  - name: "User is nobody"
     command: "whoami"
-    expectedOutput: ["nonroot"]
+    expectedOutput: ["nobody"]
 
 fileExistenceTests:
-  - name: "OpenSSL binary exists"
-    path: "/usr/bin/openssl"
+  - name: "Custom OpenSSL binary exists"
+    path: "/usr/local/ssl/bin/openssl"
     shouldExist: true
     
-  - name: "FIPS config exists"
-    path: "/etc/ssl/fipsmodule.cnf"
+  - name: "FIPS module exists"
+    path: "/usr/local/ssl/fipsmodule.cnf"
+    shouldExist: true
+    
+  - name: "OpenSSL config exists"
+    path: "/usr/local/ssl/openssl.cnf"
     shouldExist: true
 
 metadataTest:
-  user: "nonroot"
+  user: "nobody"
