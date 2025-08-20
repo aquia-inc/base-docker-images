@@ -1,0 +1,15 @@
+FROM cgr.dev/chainguard/go:latest@sha256:0ab8e5b7e0519e5a88ff6815202db1db31c61f4c06c0e6f1953797b788d6d4cc
+
+USER nonroot
+WORKDIR /workspace
+
+# Extract Go version information and save to /tmp/versions.txt
+SHELL ["/bin/sh", "-o", "pipefail", "-c"]
+RUN go version > /tmp/go_version.txt && \
+    GO_VERSION=$(go version | cut -d' ' -f3 | sed 's/go//') && \
+    echo "go=${GO_VERSION}" > /tmp/versions.txt && \
+    GO_MAJOR=$(echo "${GO_VERSION}" | cut -d'.' -f1) && \
+    GO_MINOR="${GO_MAJOR}.$(echo "${GO_VERSION}" | cut -d'.' -f2)" && \
+    echo "go_major_tag=${GO_MAJOR}" >> /tmp/versions.txt && \
+    echo "go_minor_tag=${GO_MINOR}" >> /tmp/versions.txt && \
+    cat /tmp/versions.txt
