@@ -11,6 +11,10 @@ inputs:
   password:
     description: 'Registry password/token'
     required: true
+  platform:
+    description: 'Target platform (e.g., linux/amd64)'
+    required: false
+    default: 'unknown'
 outputs:
   cache-key:
     description: 'Generated cache key for builds'
@@ -31,9 +35,12 @@ runs:
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
+      with:
+        platforms: all
 
     - name: Generate cache key
       id: cache-key
       shell: bash
       run: |
-        echo "key=${{ github.repository }}-docker-${{ runner.os }}" >> $GITHUB_OUTPUT
+        platform_safe=$(echo "${{ inputs.platform }}" | sed 's/\//-/g')
+        echo "key=${{ github.repository }}-docker-${{ runner.os }}-${platform_safe}" >> $GITHUB_OUTPUT
