@@ -126,7 +126,7 @@ jobs:
           size=$(docker images --format "table {{.Size}}" "$image_tag" | tail -n +2)
           echo "Docker image size for ${{ matrix.platform }}: $size"
 
-      - name: Install Container Structure Test
+      - name: Run container structure tests
         run: |
           curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
           chmod +x container-structure-test-linux-amd64
@@ -138,16 +138,19 @@ jobs:
           test_config="tests/container-structure/${image_base_name}.yaml"
           image_tag="${{ github.repository }}/${{ steps.context.outputs.image-name }}:test"
           
+          # Run tests if config exists
+          test_config="tests/container-structure/${{ steps.context.outputs.image-base-name }}.yaml"
           if [ -f "$test_config" ]; then
-            echo "Running container structure tests for $image_base_name..."
-            container-structure-test test --image "$image_tag" --config "$test_config"
+            echo "Running container structure tests with config: $test_config"
+            container-structure-test test \
+              --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
+              --config "$test_config"
           else
-            echo "No structure tests found for $image_base_name (expected: $test_config)"
-            echo "Skipping container structure tests"
+            echo "No container structure test config found at $test_config, skipping tests"
           fi
 
-      - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@master
+      - name: Scan image for vulnerabilities
+        uses: ./.github/actions/scan-image
         with:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
