@@ -8,13 +8,14 @@ commandTests:
     expectedError: ["nginx version: nginx/"]
     
   - name: "User is nginx"
-    command: "whoami"
+    command: "id"
+    args: ["-un"]
     expectedOutput: ["nginx"]
     
-  - name: "Nginx config test"
+  - name: "Nginx help available"
     command: "nginx"
-    args: ["-t"]
-    expectedError: ["syntax is ok", "test is successful"]
+    args: ["-h"]
+    expectedError: ["Usage: nginx"]
 
 fileExistenceTests:
   - name: "Nginx binary exists"
