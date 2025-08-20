@@ -1,0 +1,47 @@
+schemaVersion: 2.0.0
+
+# Test Go base image functionality
+commandTests:
+  - name: "Go version check"
+    command: "go"
+    args: ["version"]
+    expectedOutput: ["go1.25"]
+    
+  - name: "User is nonroot"
+    command: "whoami"
+    expectedOutput: ["nonroot"]
+    
+  - name: "Workspace directory exists"
+    command: "pwd"
+    expectedOutput: ["/workspace"]
+    
+  - name: "Go environment variables"
+    command: "go"
+    args: ["env", "GOVERSION"]
+    expectedOutput: ["1.25"]
+
+fileExistenceTests:
+  - name: "Version file exists"
+    path: "/tmp/versions.txt"
+    shouldExist: true
+    
+  - name: "Go version file exists"  
+    path: "/tmp/go_version.txt"
+    shouldExist: true
+
+fileContentTests:
+  - name: "Version file contains Go version"
+    path: "/tmp/versions.txt"
+    expectedContents: ["go=1.25."]
+    
+  - name: "Version file contains major tag"
+    path: "/tmp/versions.txt" 
+    expectedContents: ["go_major_tag=1"]
+    
+  - name: "Version file contains minor tag"
+    path: "/tmp/versions.txt"
+    expectedContents: ["go_minor_tag=1.25"]
+
+metadataTest:
+  user: "nonroot"
+  workdir: "/workspace"

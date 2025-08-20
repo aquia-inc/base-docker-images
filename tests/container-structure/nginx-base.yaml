@@ -1,0 +1,29 @@
+schemaVersion: 2.0.0
+
+# Test Nginx base image functionality
+commandTests:
+  - name: "Nginx version check"
+    command: "nginx"
+    args: ["-v"]
+    expectedError: ["nginx version: nginx/"]
+    
+  - name: "User is nginx"
+    command: "whoami"
+    expectedOutput: ["nginx"]
+    
+  - name: "Nginx config test"
+    command: "nginx"
+    args: ["-t"]
+    expectedError: ["syntax is ok", "test is successful"]
+
+fileExistenceTests:
+  - name: "Nginx binary exists"
+    path: "/usr/sbin/nginx"
+    shouldExist: true
+    
+  - name: "Nginx config exists"
+    path: "/etc/nginx/nginx.conf"
+    shouldExist: true
+
+metadataTest:
+  user: "nginx"
