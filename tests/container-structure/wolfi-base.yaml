@@ -1,0 +1,29 @@
+schemaVersion: 2.0.0
+
+# Test Wolfi base image functionality
+commandTests:
+  - name: "Alpine package manager available"
+    command: "apk"
+    args: ["--version"]
+    expectedOutput: ["apk-tools"]
+    
+  - name: "User is nonroot"
+    command: "whoami"
+    expectedOutput: ["nonroot"]
+    
+  - name: "Shell is available"
+    command: "sh"
+    args: ["-c", "echo 'test'"]
+    expectedOutput: ["test"]
+
+fileExistenceTests:
+  - name: "Package manager exists"
+    path: "/sbin/apk"
+    shouldExist: true
+    
+  - name: "Basic shell exists"
+    path: "/bin/sh"
+    shouldExist: true
+
+metadataTest:
+  user: "nonroot"
