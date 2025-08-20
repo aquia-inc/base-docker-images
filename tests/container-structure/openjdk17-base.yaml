@@ -1,0 +1,34 @@
+schemaVersion: 2.0.0
+
+# Test OpenJDK base image functionality
+commandTests:
+  - name: "Java version check"
+    command: "java"
+    args: ["-version"]
+    expectedError: ["openjdk version \"17."]
+    
+  - name: "Maven is available"
+    command: "mvn"
+    args: ["--version"] 
+    expectedOutput: ["Apache Maven"]
+    
+  - name: "User is nonroot"
+    command: "whoami"
+    expectedOutput: ["nonroot"]
+
+fileExistenceTests:
+  - name: "Version file exists"
+    path: "/tmp/versions.txt"
+    shouldExist: true
+
+fileContentTests:
+  - name: "Version file contains Java version"
+    path: "/tmp/versions.txt"
+    expectedContents: ["java=17\."]
+    
+  - name: "Version file contains major tag"
+    path: "/tmp/versions.txt"
+    expectedContents: ["java_major_tag=17"]
+
+metadataTest:
+  user: "nonroot"
