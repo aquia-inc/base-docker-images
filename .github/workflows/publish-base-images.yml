@@ -186,7 +186,7 @@ jobs:
           image-tag: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
 
       - name: Extract language versions
-        id: get_versions
+        id: extract_versions
         uses: ./.github/actions/extract-versions
         with:
           image-base-name: ${{ steps.context.outputs.image-base-name }}
@@ -196,18 +196,18 @@ jobs:
 
       - name: Upload versions artifact for ${{ matrix.platform }}
         uses: actions/upload-artifact@v4
-        if: steps.get_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
+        if: steps.extract_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
         with:
           name: versions-file-${{ steps.context.outputs.platform-suffix }}
-          path: ${{ steps.get_versions.outputs.versions-file }}
+          path: ${{ steps.extract_versions.outputs.versions-file }}
           retention-days: 1
           if-no-files-found: error
 
       - name: Check if env.versions file exists (Local check)
         id: check_env_file
-        if: steps.get_versions.outputs.extraction-success == 'true'
+        if: steps.extract_versions.outputs.extraction-success == 'true'
         run: |
-          if [ -f "${{ steps.get_versions.outputs.versions-file }}" ]; then
+          if [ -f "${{ steps.extract_versions.outputs.versions-file }}" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "Versions file exists"
           else
@@ -217,7 +217,7 @@ jobs:
 
       - name: Rename versions file to .env (Local Env)
         if: steps.check_env_file.outputs.exists == 'true'
-        run: mv "${{ steps.get_versions.outputs.versions-file }}" .env
+        run: mv "${{ steps.extract_versions.outputs.versions-file }}" .env
 
       - name: Read package versions for ${{ matrix.platform }} (Local Env)
         if: steps.check_env_file.outputs.exists == 'true'
