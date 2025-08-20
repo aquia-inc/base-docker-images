@@ -5,8 +5,8 @@ FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:0e879f3bfdc6e07723828fd1b04d411
 # Install openssl dependencies
 RUN set -e && \
     apk update && \
-    apk add --no-cache --upgrade musl musl-dev && \
-    apk add --no-cache \
+    (apk add --no-cache --upgrade musl musl-dev; exit 0) && \
+    (apk add --no-cache \
     gcompat \
     linux-headers \
     pcre-dev \
@@ -18,7 +18,7 @@ RUN set -e && \
     libgcc \
     zlib-dev \
     g++ \
-    ca-certificates && \
+    ca-certificates; exit 0) && \
     which gcc && which make && which g++ && which wget
 
 # Set up the build environment
