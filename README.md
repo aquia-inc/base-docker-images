@@ -11,7 +11,15 @@ This repository is a work in progress, but the produced images are considered st
 
 ## Available Images
 
-[![Latest Release](https://img.shields.io/github/v/release/aquia-inc/base-docker-images?label=Latest%20Release&style=for-the-badge&logo=github)](https://github.com/aquia-inc/base-docker-images/releases/latest) [![Release Date](https://img.shields.io/github/release-date/aquia-inc/base-docker-images?label=Release%20Date&style=for-the-badge&logo=github)](https://github.com/aquia-inc/base-docker-images/releases/latest)
+[![FIPS Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/fips-base/*&label=fips-base&style=for-the-badge&logo=docker&color=blue)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64)
+[![Go Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/go-base/*&label=go-base&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-amd64)
+[![Nginx Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/nginx-base/*&label=nginx-base&style=for-the-badge&logo=nginx&color=009639)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-amd64)
+
+[![Node.js Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/nodejs-base/*&label=nodejs-base&style=for-the-badge&logo=nodedotjs&color=339933)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-base-linux-amd64)
+[![OpenJDK Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/openjdk17-base/*&label=openjdk17-base&style=for-the-badge&logo=openjdk&color=ED8B00)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base-linux-amd64)
+[![Python Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/python-base/*&label=python-base&style=for-the-badge&logo=python&color=3776AB)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fpython-base-linux-amd64)
+
+[![Wolfi Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/wolfi-base/*&label=wolfi-base&style=for-the-badge&logo=linux&color=FCC624)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-amd64)
 
 ### Latest linux/amd64 Releases
 
