@@ -25,11 +25,11 @@ fileExistenceTests:
 fileContentTests:
   - name: "Version file contains Node.js version"
     path: "/tmp/versions.txt"
-    expectedContents: ["node=24."]
+    expectedContents: ["nodejs=24."]
     
   - name: "Version file contains major tag"
     path: "/tmp/versions.txt"
-    expectedContents: ["node_major_tag=24"]
+    expectedContents: ["nodejs_major_tag=24"]
 
 metadataTest:
   user: "nobody"
