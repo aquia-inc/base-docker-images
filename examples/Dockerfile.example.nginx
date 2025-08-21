@@ -1,5 +1,6 @@
 # Example: Building a frontend app with nodejs-base and serving with nginx-base
 # NOTE: Replace :latest with current version tag from https://github.com/aquia-inc/base-docker-images/releases
+
 FROM ghcr.io/aquia-inc/base-docker-images/nodejs-base:latest AS builder
 
 # Set the working directory for the build
