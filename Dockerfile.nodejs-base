@@ -18,6 +18,7 @@ RUN NODE_VERSION=$(node --version | sed 's/v//') && \
     echo "nodejs_major_tag=$(echo $NODE_VERSION | cut -d'.' -f1)" > /tmp/versions.txt && \
     echo "nodejs_minor_tag=$(echo $NODE_VERSION | cut -d'.' -f1-2)" >> /tmp/versions.txt && \
     echo "nodejs=$NODE_VERSION" >> /tmp/versions.txt
+
 RUN cat /tmp/versions.txt
 
 USER nobody
