@@ -5,6 +5,7 @@ FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:0e879f3bfdc6e07723828fd1b04d411
 # Install openssl dependencies
 RUN set -e && \
     apk update && \
+    (apk add --no-cache --upgrade musl musl-dev; exit 0) && \
     (apk add --no-cache \
     gcompat \
     linux-headers \
