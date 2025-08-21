@@ -209,9 +209,3 @@ For example:
   git tag -a release/python-base/v0.0.2 -m "Rebuild to pickup fix for CVE-2023-43804 urllib3 MEDIUM"
   git push origin release/python-base/v0.0.2
   ```
-
-## Notes
-
-* Any workflows that we want to trigger other workflows [cannot use the default GITHUB_TOKEN](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow), so we are using a Deploy Key for the [Create Release Tag](.github/workflows/create-release-tag.yml#L64) workflow. A Deploy Key is [preferable](https://medium.com/prompt/trigger-another-github-workflow-without-using-a-personal-access-token-f594c21373ef) to a Personal Access Token, since it can be repository-scoped and not tied to a specific user.
-
-* The [Publish Base Image](.github/workflows/publish-base-immages.yml) workflow is triggered by the [Create Release Tag](.github/workflows/create-release-tag.ym) workflow.  
