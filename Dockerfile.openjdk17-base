@@ -1,6 +1,6 @@
 # Use a minimal, security-focused base image (Wolfi)
 # Pinned digest ensures reproducibility and supply chain security
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:1fd981aa0bcefd8da87ce55a9ae907862fcb6835c658fdb284867117fb0268ce
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:d7032b02de971d3ef61b8e90bbd7c9e16e7889db9391f38ceb5482089dd35c2e
 
 # Define versions as arguments for easier updates and clarity
 ARG MAVEN_VERSION=3.9.8-r0
@@ -9,8 +9,6 @@ ARG OPENJDK_PACKAGE=openjdk-17
 # Install necessary packages, common build tools, create non-root user, and perform cleanup
 # --upgrade ensures latest packages for security (including dependencies)
 RUN apk update && \
-    # Rationale: Removing/re-adding SSL libs ensures specific patched versions are installed, addressing potential CVEs.
-    apk del libcrypto3 libssl3 && \
     apk add --no-cache --upgrade \
         # Core Java/Maven stack
         ${OPENJDK_PACKAGE} \

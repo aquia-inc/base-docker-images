@@ -3,6 +3,8 @@
 
 This repository contains Dockerfiles and releases of hardened Aquia Base Docker Images.
 
+[![Latest Repository Release](https://img.shields.io/github/v/release/aquia-inc/base-docker-images?label=Latest%20Repository%20Release&style=for-the-badge&logo=github)](https://github.com/aquia-inc/base-docker-images/releases/latest) [![Repository Release Date](https://img.shields.io/github/release-date/aquia-inc/base-docker-images?label=Repository%20Release%20Date&style=for-the-badge&logo=calendar)](https://github.com/aquia-inc/base-docker-images/releases/latest)
+
 ![Many Dockerfiles](dockerfiledotfinaldotv2dotfinallyfinal-v0-l7sfec8j2v5e1.png.webp)
 
 ## WiP
@@ -11,16 +13,20 @@ This repository is a work in progress, but the produced images are considered st
 
 ## Available Images
 
-[![FIPS Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/fips-base/*&label=fips-base&style=for-the-badge&logo=docker&color=blue)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64)
-[![Go Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/go-base/*&label=go-base&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-amd64)
-[![Nginx Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/nginx-base/*&label=nginx-base&style=for-the-badge&logo=nginx&color=009639)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-amd64)
+[![FIPS Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/fips-base/*&label=fips-base&style=for-the-badge&logo=lock&color=red)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64) 
 
-[![Node.js Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/nodejs-base/*&label=nodejs-base&style=for-the-badge&logo=nodedotjs&color=339933)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-base-linux-amd64)
-[![OpenJDK Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/openjdk17-base/*&label=openjdk17-base&style=for-the-badge&logo=openjdk&color=ED8B00)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base-linux-amd64)
-[![Python Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/python-base/*&label=python-base&style=for-the-badge&logo=python&color=3776AB)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fpython-base-linux-amd64)
+[![Go Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/go-base/*&label=go-base&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-amd64) 
 
-[![Wolfi Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/wolfi-base/*&label=wolfi-base&style=for-the-badge&logo=linux&color=FCC624)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-amd64)
+[![Nginx Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/nginx-base/*&label=nginx-base&style=for-the-badge&logo=nginx&color=009639)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-amd64) 
 
+[![Node.js Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/nodejs-base/*&label=nodejs-base&style=for-the-badge&logo=nodedotjs&color=339933)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-base-linux-amd64) 
+
+[![OpenJDK Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/openjdk17-base/*&label=openjdk17-base&style=for-the-badge&logo=openjdk&color=ED8B00)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base-linux-amd64) 
+
+[![Python Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/python-base/*&label=python-base&style=for-the-badge&logo=python&color=3776AB)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fpython-base-linux-amd64) 
+
+[![Wolfi Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/wolfi-base/*&label=wolfi-base&style=for-the-badge&logo=linux&color=FCC624)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-amd64) 
+ 
 ### Latest linux/amd64 Releases
 
 * [fips-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64)
@@ -45,27 +51,29 @@ This repository is a work in progress, but the produced images are considered st
 
 Images are considered hardened when they do not contain fixed CVE vulnerabilities of the following severities: CRITICAL, HIGH, MEDIUM. They are based on [wolfi-base](<https://edu.chainguard.dev/open-source/wolfi/overview/>) from Chainguard. We use Renovate to automatically update each of these base images to the most recently published image ([`latest`](https://edu.chainguard.dev/chainguard/chainguard-images/reference/wolfi-base/tags_history/)).
 
-* Go
-* NodeJS
-* Python 3.13
-* OpenJDK-17, with Maven 3.9.5
-* Wolfi Base
-* Wolfi Base with [FIPS (beta*)](#beta-images)
-* nginx
+## Current Language Versions
+
+* **Go**: 1.25.x (from chainguard/go:latest)
+* **Node.js**: 24.6.x with npm 11.5.x (from wolfi-base with nodejs/npm packages)
+* **Python**: 3.13.x (from wolfi-base with python3 package)
+* **OpenJDK**: 17.x with Maven 3.9.8 (from wolfi-base with openjdk-17 package)
+* **Wolfi Base**: Latest minimal Linux distribution
+* **FIPS Base**: Custom OpenSSL 3.0.9 with FIPS validation ([beta](#beta-images))
+* **Nginx**: 1.29.x with headers-more module (custom build)
 
 ### Recommended Version Pinning
 
-The images are tagged with [Semantic Versioning](https://semver.org/) and also with the installed language's major (i.e. `python-base:3`) and major + minor (i.e. `python-base:3.13, `go-base:1.25`) versions (currently implemented for Python, Node, OpenJDK, and Go).
+The images are tagged with [Semantic Versioning](https://semver.org/) and also with the installed language's major (i.e. `python-base:3`, `nodejs-base:24`) and major + minor (i.e. `python-base:3.13`, `go-base:1.25`, `nodejs-base:24.6`) versions (currently implemented for Python, Node.js, OpenJDK, and Go).
 
-If you want to ensure that your image's installed language is not updated to a potentially non-backwards-compatible version, you can pin the version of the image you are using to the specific version of the language you want - i.e. `python-base:3.13`.
+If you want to ensure that your image's installed language is not updated to a potentially non-backwards-compatible version, you can pin the version of the image you are using to the specific version of the language you want - i.e. `python-base:3.13` or `nodejs-base:24.6`.
 
-Note, however, that due to the limitations of our using Chainguard's free tier, we can only keep the latest wolfi-base image up-to-date, so once wolfi-base moves to python 3.14 for example, the python-base:3.13 will no longer be automatically patched by our workflows.
+Note, however, that due to the limitations of our using Chainguard's free tier, we can only keep the latest wolfi-base image up-to-date, so once wolfi-base moves to python 3.14 or nodejs 25 for example, the python-base:3.13 or nodejs-base:24.6 will no longer be automatically patched by our workflows.
 
-On the other hand, pinning your image to `python-base:3` for example, allows you to receive all Python 3 security updates, but it will also force you to upgrade to the next minor version whenever wolfi-base is updated to that version of Python.
+On the other hand, pinning your image to `python-base:3` or `nodejs-base:24` for example, allows you to receive all security updates within that major version, but it will also force you to upgrade to the next minor version whenever wolfi-base is updated to that version of the language.
 
 Both choices have tradeoffs and is a decision you need to make based on your project's needs.
 
-The non-language-specific images, such as the `nginx-base` and `wolfi-base` images can be pinned to `:latest`, as they are unlikely to bring backwards-incompatible changes to your workloads.
+The non-language-specific images, such as the `nginx-base`, `fips-base`, and `wolfi-base` images can be pinned to `:latest`, as they are unlikely to bring backwards-incompatible changes to your workloads.
 
 ## How to Use
 
@@ -201,9 +209,3 @@ For example:
   git tag -a release/python-base/v0.0.2 -m "Rebuild to pickup fix for CVE-2023-43804 urllib3 MEDIUM"
   git push origin release/python-base/v0.0.2
   ```
-
-## Notes
-
-* Any workflows that we want to trigger other workflows [cannot use the default GITHUB_TOKEN](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow), so we are using a Deploy Key for the [Create Release Tag](.github/workflows/create-release-tag.yml#L64) workflow. A Deploy Key is [preferable](https://medium.com/prompt/trigger-another-github-workflow-without-using-a-personal-access-token-f594c21373ef) to a Personal Access Token, since it can be repository-scoped and not tied to a specific user.
-
-* The [Publish Base Image](.github/workflows/publish-base-immages.yml) workflow is triggered by the [Create Release Tag](.github/workflows/create-release-tag.ym) workflow.  

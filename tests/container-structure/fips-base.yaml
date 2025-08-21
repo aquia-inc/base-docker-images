@@ -1,0 +1,28 @@
+schemaVersion: 2.0.0
+
+# Test FIPS base image functionality
+commandTests:
+  - name: "OpenSSL FIPS version check"
+    command: "/usr/local/ssl/bin/openssl"
+    args: ["version"]
+    expectedOutput: ["OpenSSL"]
+    
+  - name: "User is nobody"
+    command: "whoami"
+    expectedOutput: ["nobody"]
+
+fileExistenceTests:
+  - name: "Custom OpenSSL binary exists"
+    path: "/usr/local/ssl/bin/openssl"
+    shouldExist: true
+    
+  - name: "FIPS module exists"
+    path: "/usr/local/ssl/fipsmodule.cnf"
+    shouldExist: true
+    
+  - name: "OpenSSL config exists"
+    path: "/usr/local/ssl/openssl.cnf"
+    shouldExist: true
+
+metadataTest:
+  user: "nobody"
