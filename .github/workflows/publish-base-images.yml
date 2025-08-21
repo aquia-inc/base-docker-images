@@ -540,12 +540,39 @@ jobs:
           
           # Extract logIndex from the attestation bundle
           if [ -n "${{ steps.attest_provenance.outputs.bundle-path }}" ] && [ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ]; then
-            # Debug: Show bundle structure
+            # Debug: Show bundle structure and content
             echo "Bundle structure keys:"
             jq -r 'keys' "${{ steps.attest_provenance.outputs.bundle-path }}" || echo "Failed to get keys"
+            echo "Full bundle content (first 10 lines):"
+            head -10 "${{ steps.attest_provenance.outputs.bundle-path }}" || echo "Failed to read bundle"
             
-            # Try different paths to extract logIndex (bundle structure may vary)
-            LOG_INDEX=$(jq -r '.verificationMaterial.tlogEntries[0].logIndex // .verificationMaterial.x509CertificateChain.certificates[0].logIndex // .tlogEntries[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}")
+            # Try multiple paths to extract logIndex with improved logic
+            LOG_INDEX=""
+            
+            # Path 1: Standard Sigstore bundle format
+            LOG_INDEX=$(jq -r '.verificationMaterial.tlogEntries[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null)
+            if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
+              echo "Found logIndex via path 1 (verificationMaterial.tlogEntries): $LOG_INDEX"
+            else
+              # Path 2: Alternative bundle format
+              LOG_INDEX=$(jq -r '.tlogEntries[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null)
+              if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
+                echo "Found logIndex via path 2 (tlogEntries): $LOG_INDEX"
+              else
+                # Path 3: Nested in x509 certificate chain
+                LOG_INDEX=$(jq -r '.verificationMaterial.x509CertificateChain.certificates[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null)
+                if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
+                  echo "Found logIndex via path 3 (x509CertificateChain): $LOG_INDEX"
+                else
+                  # Path 4: Check if it's wrapped in a different structure
+                  LOG_INDEX=$(jq -r '.bundle.verificationMaterial.tlogEntries[0].logIndex // .envelope.verificationMaterial.tlogEntries[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null)
+                  if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
+                    echo "Found logIndex via path 4 (nested bundle/envelope): $LOG_INDEX"
+                  fi
+                fi
+              fi
+            fi
+            
             if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
               echo "logindex=$LOG_INDEX" >> $GITHUB_OUTPUT
               echo "sigstore_url=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> $GITHUB_OUTPUT
@@ -557,14 +584,43 @@ jobs:
               echo "SIGSTORE_URL=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> "$output_file"
               echo "LOG_INDEX=$LOG_INDEX" >> "$output_file"
             else
-              echo "logindex=" >> $GITHUB_OUTPUT
-              echo "sigstore_url=" >> $GITHUB_OUTPUT
               echo "No logIndex found in attestation bundle"
               
-              # Save GitHub attestation URL only
-              echo "GITHUB_ATTESTATION_URL=${{ steps.attest_provenance.outputs.attestation-url }}" > "$output_file"
-              echo "SIGSTORE_URL=" >> "$output_file"
-              echo "LOG_INDEX=" >> "$output_file"
+              # Fallback: Try to extract logIndex from attestation URL if available
+              ATTESTATION_URL="${{ steps.attest_provenance.outputs.attestation-url }}"
+              if [ -n "$ATTESTATION_URL" ]; then
+                echo "Trying to extract logIndex from attestation URL: $ATTESTATION_URL"
+                # GitHub attestation URLs may contain logIndex parameters
+                URL_LOG_INDEX=$(echo "$ATTESTATION_URL" | grep -o 'logIndex=[0-9]\+' | cut -d'=' -f2 || echo "")
+                if [ -n "$URL_LOG_INDEX" ]; then
+                  echo "Found logIndex in URL: $URL_LOG_INDEX"
+                  echo "logindex=$URL_LOG_INDEX" >> $GITHUB_OUTPUT
+                  echo "sigstore_url=https://search.sigstore.dev/?logIndex=$URL_LOG_INDEX" >> $GITHUB_OUTPUT
+                  
+                  # Save to file for release page generation
+                  echo "GITHUB_ATTESTATION_URL=$ATTESTATION_URL" > "$output_file"
+                  echo "SIGSTORE_URL=https://search.sigstore.dev/?logIndex=$URL_LOG_INDEX" >> "$output_file"
+                  echo "LOG_INDEX=$URL_LOG_INDEX" >> "$output_file"
+                else
+                  echo "No logIndex found in attestation URL either"
+                  echo "logindex=" >> $GITHUB_OUTPUT
+                  echo "sigstore_url=" >> $GITHUB_OUTPUT
+                  
+                  # Save GitHub attestation URL only
+                  echo "GITHUB_ATTESTATION_URL=$ATTESTATION_URL" > "$output_file"
+                  echo "SIGSTORE_URL=" >> "$output_file"
+                  echo "LOG_INDEX=" >> "$output_file"
+                fi
+              else
+                echo "No attestation URL available"
+                echo "logindex=" >> $GITHUB_OUTPUT
+                echo "sigstore_url=" >> $GITHUB_OUTPUT
+                
+                # Save empty values
+                echo "GITHUB_ATTESTATION_URL=" > "$output_file"
+                echo "SIGSTORE_URL=" >> "$output_file"
+                echo "LOG_INDEX=" >> "$output_file"
+              fi
             fi
           else
             echo "logindex=" >> $GITHUB_OUTPUT
