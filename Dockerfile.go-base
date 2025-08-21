@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/go:latest@sha256:0ab8e5b7e0519e5a88ff6815202db1db31c61f4c06c0e6f1953797b788d6d4cc
+FROM cgr.dev/chainguard/go:latest@sha256:f8bfc4830b8e268ab2cd5af6f5da67ef8252e8b3408e064326a8ec5d237e8810
 
 # Test workflow trigger  
 USER nonroot
