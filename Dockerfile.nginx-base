@@ -1,6 +1,5 @@
 # Using the custom NGINX image from chainguard
-FROM cgr.dev/chainguard/nginx:latest-dev@sha256:184f717a5ddaf6cffc10412abe862582ca25e482cde395c35981e05cd47c5bf3 AS builder
-
+FROM cgr.dev/chainguard/nginx:latest-dev@sha256:b8861650649f189bd6c68b31d0a5a4c0eeea1dac625cac2bfe8e83e102407a08 AS builder
 
 # Switching to root user for package installation
 USER root
@@ -10,7 +9,7 @@ RUN apk update && apk --no-cache add -u perl wget build-base pcre-dev zlib-dev c
 
 # Define NGINX and additional compatible module versions
 # https://github.com/openresty/headers-more-nginx-module/?tab=readme-ov-file#compatibility
-ARG NGINX_VERSION=1.29.0
+ARG NGINX_VERSION=1.29.1
 ARG MORE_HEADERS_VERSION=0.37
 
 WORKDIR /usr/src/
@@ -42,7 +41,7 @@ USER nginx
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
 # Start the second stage of the Dockerfile
-FROM cgr.dev/chainguard/nginx:latest@sha256:77e0c98849e188397c60899478cf63576fcc555c8f5cb8185bcfd899c25d6534
+FROM cgr.dev/chainguard/nginx:latest@sha256:0b928991f927105c184aa1b97b040e713501f0870dde662d2ff311325972f57b
 
 # Copy compiled modules only if the directory exists
 COPY --from=builder /usr/local/nginx/modules/*.so /var/lib/nginx/modules/

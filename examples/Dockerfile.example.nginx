@@ -1,25 +1,27 @@
-# ATO-hardened with nodejs-20.9.0, yarn-1.22.21, npm-10.2.4
+# Example: Building a frontend app with nodejs-base and serving with nginx-base
+# NOTE: Replace :latest with current version tag from https://github.com/aquia-inc/base-docker-images/releases
 FROM ghcr.io/aquia-inc/base-docker-images/nodejs-base:latest AS builder
 
-# Set the base working directory inside the container
-WORKDIR /myapp
+# Set the working directory for the build
+WORKDIR /build
 
-# Copy the application's source files to the working directory
-COPY . .
+# Copy package.json first for better Docker layer caching
+COPY frontend-app/package.json ./
+RUN npm install
 
-ENV PATH="$PATH:/usr/local/bin:/usr/bin:/usr/lib/node_modules"
+# Copy source files and build the application
+COPY frontend-app/ ./
+RUN npm run build
 
-# Install dependencies and build the application
-RUN npm install \
-    && npm run build
-
-#Layer 2: nginx
+# Runtime stage: nginx serving the built frontend
+# NOTE: Replace :latest with current version tag from https://github.com/aquia-inc/base-docker-images/releases
 FROM ghcr.io/aquia-inc/base-docker-images/nginx-base:latest
-USER nginx
 
+# Copy nginx configuration that matches our frontend app structure
 COPY default.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /myapp/dist /usr/share/nginx/html
 
-# Uncomment if you want to run nginx on port <1025
-# USER root
+# Copy built static files from the builder stage
+COPY --from=builder /build/dist /usr/share/nginx/html
 
+# Run as nginx user (port 8080 doesn't require root)
+USER nginx
