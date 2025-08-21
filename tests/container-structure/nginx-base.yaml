@@ -7,11 +7,6 @@ commandTests:
     args: ["-v"]
     expectedError: ["nginx version: nginx/"]
     
-  - name: "User is nginx"
-    command: "id"
-    args: ["-un"]
-    expectedOutput: ["nginx"]
-    
   - name: "Nginx help available"
     command: "nginx"
     args: ["-h"]

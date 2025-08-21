@@ -9,8 +9,6 @@ ARG OPENJDK_PACKAGE=openjdk-17
 # Install necessary packages, common build tools, create non-root user, and perform cleanup
 # --upgrade ensures latest packages for security (including dependencies)
 RUN apk update && \
-    # Rationale: Removing/re-adding SSL libs ensures specific patched versions are installed, addressing potential CVEs.
-    apk del libcrypto3 libssl3 && \
     apk add --no-cache --upgrade \
         # Core Java/Maven stack
         ${OPENJDK_PACKAGE} \
