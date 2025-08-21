@@ -1,0 +1,15 @@
+{
+  "name": "frontend-app-example",
+  "version": "1.0.0",
+  "description": "Simple frontend app example for nginx serving",
+  "scripts": {
+    "build": "mkdir -p dist && cp src/*.html dist/ && cp src/*.js dist/ && cp src/*.css dist/ && echo 'Build completed successfully'",
+    "dev": "echo 'Development server would run here'"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "keywords": ["frontend", "nginx", "example"],
+  "author": "Aquia",
+  "license": "MIT"
+}
