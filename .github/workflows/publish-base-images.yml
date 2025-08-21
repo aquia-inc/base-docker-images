@@ -347,6 +347,186 @@ jobs:
             go.version.full=${{ env.go }}
             org.opencontainers.image.architecture=${{ matrix.platform }}
 
+      - name: Auto-fix nginx compatibility (nginx-base only)
+        if: steps.parse_tag.outputs.image_base_name == 'nginx-base'
+        id: nginx-autofix
+        run: |
+          # Get versions (fixed grep for cross-platform compatibility)
+          CHAINGUARD_VERSION=$(docker run --rm --entrypoint="" cgr.dev/chainguard/nginx:latest nginx -v 2>&1 | grep -o 'nginx/[0-9][0-9.]*' | cut -d'/' -f2)
+          DOCKERFILE_VERSION=$(grep 'ARG NGINX_VERSION=' Dockerfile.nginx-base | cut -d'=' -f2)
+          CURRENT_HEADERS=$(grep 'ARG MORE_HEADERS_VERSION=' Dockerfile.nginx-base | cut -d'=' -f2)
+          
+          echo "Chainguard nginx: $CHAINGUARD_VERSION"
+          echo "Dockerfile nginx: $DOCKERFILE_VERSION" 
+          echo "Current headers-more: v$CURRENT_HEADERS"
+          
+          if [ "$CHAINGUARD_VERSION" != "$DOCKERFILE_VERSION" ]; then
+            echo "🔄 Nginx version mismatch detected - applying auto-fix"
+            
+            # Bump headers-more version by 0.01 (fixed calculation)
+            NEW_HEADERS=$(echo "$CURRENT_HEADERS + 0.01" | bc -l | awk '{printf "%.2f", $0}' | sed 's/\.00$//')
+            
+            echo "Auto-updating versions:"
+            echo "  nginx: $DOCKERFILE_VERSION → $CHAINGUARD_VERSION"
+            echo "  headers-more: v$CURRENT_HEADERS → v$NEW_HEADERS"
+            
+            # Backup original Dockerfile
+            cp Dockerfile.nginx-base Dockerfile.nginx-base.backup
+            
+            # Update Dockerfile
+            sed -i "s/ARG NGINX_VERSION=.*/ARG NGINX_VERSION=$CHAINGUARD_VERSION/" Dockerfile.nginx-base
+            sed -i "s/ARG MORE_HEADERS_VERSION=.*/ARG MORE_HEADERS_VERSION=$NEW_HEADERS/" Dockerfile.nginx-base
+            
+            # Test the build with --pull flag (with timeout for CI)
+            echo "Testing updated configuration..."
+            BUILD_SUCCESS=false
+            
+            # Use timeout if available (Linux CI), otherwise rely on GitHub Actions timeout
+            if command -v timeout >/dev/null 2>&1; then
+              TIMEOUT_CMD="timeout 300"
+            else
+              TIMEOUT_CMD=""
+            fi
+            
+            if $TIMEOUT_CMD docker build --pull -q -t test-nginx-updated -f Dockerfile.nginx-base . 2>build-error.log; then
+              echo "✅ Build phase successful"
+              
+              # Test module loading
+              if docker run --rm --entrypoint="" test-nginx-updated nginx -t 2>module-error.log; then
+                echo "✅ Module loading successful"
+                BUILD_SUCCESS=true
+              else
+                echo "❌ Module loading failed"
+                cat module-error.log
+              fi
+            else
+              echo "❌ Build phase failed"
+              cat build-error.log
+            fi
+            
+            if [ "$BUILD_SUCCESS" = "true" ]; then
+              echo "✅ Auto-fix successful - committing changes"
+              
+              # Commit the change
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git add Dockerfile.nginx-base
+              git commit -m "Auto-fix: Update nginx to $CHAINGUARD_VERSION with headers-more v$NEW_HEADERS
+
+          🤖 Automated compatibility fix
+          - nginx: $DOCKERFILE_VERSION → $CHAINGUARD_VERSION  
+          - headers-more: v$CURRENT_HEADERS → v$NEW_HEADERS
+
+          Build and module loading tested successfully with --pull flag."
+              
+              echo "auto_fix_applied=true" >> $GITHUB_OUTPUT
+              echo "fix_successful=true" >> $GITHUB_OUTPUT
+              
+              # Clean up
+              rm -f Dockerfile.nginx-base.backup build-error.log module-error.log
+              docker rmi -f test-nginx-updated 2>/dev/null || true
+              
+            else
+              echo "❌ Auto-fix failed - restoring original Dockerfile"
+              mv Dockerfile.nginx-base.backup Dockerfile.nginx-base
+              
+              echo "fix_successful=false" >> $GITHUB_OUTPUT
+              echo "auto_fix_applied=true" >> $GITHUB_OUTPUT
+              echo "chainguard_version=$CHAINGUARD_VERSION" >> $GITHUB_OUTPUT
+              echo "dockerfile_version=$DOCKERFILE_VERSION" >> $GITHUB_OUTPUT
+              echo "current_headers=$CURRENT_HEADERS" >> $GITHUB_OUTPUT
+              echo "attempted_headers=$NEW_HEADERS" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "✅ Nginx versions match - no fix needed"
+            echo "auto_fix_applied=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create issue for failed auto-fix (nginx-base only)
+        if: steps.parse_tag.outputs.image_base_name == 'nginx-base' && steps.nginx-autofix.outputs.auto_fix_applied == 'true' && steps.nginx-autofix.outputs.fix_successful == 'false'
+        run: |
+          echo "🚨 Creating GitHub issue for failed auto-fix"
+          
+          # Collect error information
+          BUILD_ERRORS=""
+          MODULE_ERRORS=""
+          
+          if [ -f build-error.log ]; then
+            BUILD_ERRORS=$(cat build-error.log)
+          fi
+          
+          if [ -f module-error.log ]; then
+            MODULE_ERRORS=$(cat module-error.log)
+          fi
+          
+          # Create detailed issue
+          gh issue create \
+            --title "🚨 Nginx auto-fix failed: nginx ${{ steps.nginx-autofix.outputs.chainguard_version }} + headers-more v${{ steps.nginx-autofix.outputs.attempted_headers }}" \
+            --body "## Auto-fix Failure Summary
+
+          **The automated nginx compatibility fix has failed and requires manual intervention.**
+
+          ### Version Details
+          - **Chainguard nginx version**: ${{ steps.nginx-autofix.outputs.chainguard_version }}
+          - **Our dockerfile version**: ${{ steps.nginx-autofix.outputs.dockerfile_version }}
+          - **Current headers-more**: v${{ steps.nginx-autofix.outputs.current_headers }}
+          - **Attempted headers-more**: v${{ steps.nginx-autofix.outputs.attempted_headers }}
+
+          ### What Failed
+          The automatic +0.01 version bump strategy failed during the nginx-base build process (tested with \`--pull\` flag).
+
+          ### Build Errors
+          \`\`\`
+          $BUILD_ERRORS
+          \`\`\`
+
+          ### Module Loading Errors  
+          \`\`\`
+          $MODULE_ERRORS
+          \`\`\`
+
+          ### Manual Action Required
+          1. **Check compatibility matrix**: Visit [headers-more compatibility docs](https://github.com/openresty/headers-more-nginx-module#compatibility)
+          2. **Research available versions**: Check [available tags](https://github.com/openresty/headers-more-nginx-module/tags)
+          3. **Test manually with --pull**: 
+             \`\`\`bash
+             docker build --pull -t test-nginx -f Dockerfile.nginx-base .
+             docker run --rm --entrypoint=\"\" test-nginx nginx -t
+             \`\`\`
+          4. **Update Dockerfile**: Modify \`Dockerfile.nginx-base\` with working combination
+          5. **Consider alternatives**: If no compatible version exists, research alternative nginx modules
+
+          ### Workflow Information
+          - **Workflow**: ${{ github.workflow }}
+          - **Run ID**: ${{ github.run_id }}
+          - **Commit**: ${{ github.sha }}
+          - **Triggered by**: ${{ github.event_name }}
+
+          ### Next Steps
+          - [ ] Research compatible headers-more version for nginx ${{ steps.nginx-autofix.outputs.chainguard_version }}
+          - [ ] Test proposed combination locally with \`--pull\` flag
+          - [ ] Update Dockerfile.nginx-base with working versions
+          - [ ] Consider improving auto-fix strategy if this becomes frequent
+
+          **This issue was automatically created by the nginx compatibility workflow.**" \
+            --label "bug,nginx,auto-fix-failed,needs-manual-intervention" \
+            --assignee "${{ github.actor }}"
+
+      - name: Fail build on auto-fix failure (nginx-base only)
+        if: steps.parse_tag.outputs.image_base_name == 'nginx-base' && steps.nginx-autofix.outputs.auto_fix_applied == 'true' && steps.nginx-autofix.outputs.fix_successful == 'false'
+        run: |
+          echo "💥 BUILD FAILURE: Nginx auto-fix unsuccessful"
+          echo ""
+          echo "The nginx-base image cannot be built with the current configuration."
+          echo "A GitHub issue has been created for manual resolution."
+          echo ""
+          echo "Build will not proceed to prevent publishing a broken image."
+          
+          # Clean up temporary files
+          rm -f build-error.log module-error.log
+          
+          exit 1
+
       - name: Build and push Docker image for ${{ matrix.platform }}
         id: docker_build
         uses: docker/build-push-action@v6
