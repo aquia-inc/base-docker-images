@@ -1,4 +1,3 @@
-# ATO-hardened with nodejs-20.9.0, yarn-1.22.21, npm-10.2.4
 FROM ghcr.io/aquia-inc/base-docker-images/nodejs-base:latest AS builder
 
 # Set the base working directory inside the container
