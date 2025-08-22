@@ -1174,7 +1174,7 @@ jobs:
   create_multiarch_manifests:
     needs: [publish_image, create_release]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success' && needs.create_release.result == 'success'
     permissions:
       contents: read
       packages: write
