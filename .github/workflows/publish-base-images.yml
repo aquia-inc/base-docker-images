@@ -356,7 +356,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
           tags: |
             # Standard tags: version, latest, dev-<sha>
-            type=semver,pattern={{version}},value=${{ steps.context.outputs.version }},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=raw,value=${{ steps.context.outputs.version }},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
             type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
             type=raw,value=dev-${{ github.sha }},enable=${{ github.event_name != 'push' || github.ref_type != 'tag' }}
 
@@ -1252,6 +1252,17 @@ jobs:
           amd64_image="$registry/$image_base_name-linux-amd64"
           arm64_image="$registry/$image_base_name-linux-arm64"
           universal_image="$registry/$image_base_name"
+          
+          echo "Checking if source images exist:"
+          echo "AMD64: $amd64_image:$version"
+          docker manifest inspect "$amd64_image:$version" >/dev/null && echo "✅ AMD64 image exists" || echo "❌ AMD64 image missing"
+          echo "ARM64: $arm64_image:$version"
+          docker manifest inspect "$arm64_image:$version" >/dev/null && echo "✅ ARM64 image exists" || echo "❌ ARM64 image missing"
+          
+          echo "AMD64: $amd64_image:latest"
+          docker manifest inspect "$amd64_image:latest" >/dev/null && echo "✅ AMD64 latest exists" || echo "❌ AMD64 latest missing"
+          echo "ARM64: $arm64_image:latest"
+          docker manifest inspect "$arm64_image:latest" >/dev/null && echo "✅ ARM64 latest exists" || echo "❌ ARM64 latest missing"
           
           # Create unified manifest for semver version
           echo "Creating manifest for $universal_image:$version"
