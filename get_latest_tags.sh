@@ -17,6 +17,9 @@ increment_version() {
 echo "Current latest tags and proposed new versions:"
 echo "=============================================="
 
+# Fetch latest tags from origin
+git fetch origin --tags >/dev/null 2>&1
+
 # Get latest tag for each image type and calculate new version
 for image in fips-base go-base nginx-base nodejs-base python-base wolfi-base openjdk17-base; do
   latest=$(git tag -l "release/$image/v*" | sort -V | tail -1)

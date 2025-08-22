@@ -328,6 +328,23 @@ jobs:
               ;;
           esac
 
+      - name: Create version tags artifact
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
+        run: |
+          mkdir -p version_artifacts
+          echo "major_tag=${{ steps.version_tags.outputs.major_tag }}" > version_artifacts/version_tags.env
+          echo "minor_tag=${{ steps.version_tags.outputs.minor_tag }}" >> version_artifacts/version_tags.env
+          echo "has_version_tags=${{ steps.version_tags.outputs.has_version_tags }}" >> version_artifacts/version_tags.env
+
+      - name: Upload version tags as artifact
+        uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
+        with:
+          name: version-tags-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
+          path: version_artifacts/version_tags.env
+          retention-days: 1
+          if-no-files-found: warn
+
       - name: Generate build timestamp
         id: build_timestamp
         run: echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
@@ -1153,3 +1170,151 @@ jobs:
           prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  create_multiarch_manifests:
+    needs: [publish_image, create_release]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Parse tag information
+        id: parse_tag
+        run: |
+          tag="${{ github.ref_name }}"
+          if [[ $tag =~ ^release/([^/]+)/(v.+)$ ]]; then
+            image_base_name="${BASH_REMATCH[1]}"
+            version="${BASH_REMATCH[2]}"
+            echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
+            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "Parsed: image=$image_base_name, version=$version"
+          else
+            echo "Invalid tag format: $tag"
+            exit 1
+          fi
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version tags from artifacts
+        id: version_info
+        run: |
+          # Download version artifacts if they exist
+          image_name="${{ steps.parse_tag.outputs.image_base_name }}"
+          
+          # Try to download version artifacts from both platforms
+          mkdir -p version_artifacts
+          
+          # Check if artifacts exist and download them
+          for platform in linux-amd64 linux-arm64; do
+            artifact_name="version-tags-$image_name-$platform"
+            echo "Checking for artifact: $artifact_name"
+            
+            # Download artifact if it exists (will fail silently if not found)
+            if gh run download ${{ github.run_id }} -n "$artifact_name" -D "version_artifacts/" 2>/dev/null || true; then
+              echo "Downloaded version artifact for $platform"
+              if [ -f "version_artifacts/version_tags.env" ]; then
+                source "version_artifacts/version_tags.env"
+                echo "major_tag=$major_tag" >> $GITHUB_OUTPUT
+                echo "minor_tag=$minor_tag" >> $GITHUB_OUTPUT
+                echo "has_version_tags=true" >> $GITHUB_OUTPUT
+                echo "Found version tags: major=$major_tag, minor=$minor_tag"
+                break
+              fi
+            fi
+          done
+          
+          # If no version tags found, mark as false
+          if [ ! -f "version_artifacts/version_tags.env" ]; then
+            echo "has_version_tags=false" >> $GITHUB_OUTPUT
+            echo "No version tags found"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create multi-arch manifests
+        run: |
+          image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
+          version="${{ steps.parse_tag.outputs.version }}"
+          registry="${{ env.REGISTRY }}/${{ github.repository }}"
+          
+          echo "Creating multi-arch manifests for $image_base_name"
+          
+          # Base images for manifest creation
+          amd64_image="$registry/$image_base_name-linux-amd64"
+          arm64_image="$registry/$image_base_name-linux-arm64"
+          universal_image="$registry/$image_base_name"
+          
+          # Create unified manifest for semver version
+          echo "Creating manifest for $universal_image:$version"
+          docker manifest create "$universal_image:$version" \
+            "$amd64_image:$version" \
+            "$arm64_image:$version"
+          docker manifest push "$universal_image:$version"
+          
+          # Create unified manifest for latest
+          echo "Creating manifest for $universal_image:latest"
+          docker manifest create "$universal_image:latest" \
+            "$amd64_image:latest" \
+            "$arm64_image:latest"
+          docker manifest push "$universal_image:latest"
+          
+          # Create version-specific manifests if available
+          if [[ "${{ steps.version_info.outputs.has_version_tags }}" == "true" ]]; then
+            major_tag="${{ steps.version_info.outputs.major_tag }}"
+            minor_tag="${{ steps.version_info.outputs.minor_tag }}"
+            
+            if [[ -n "$major_tag" ]]; then
+              echo "Creating manifest for $universal_image:$major_tag"
+              docker manifest create "$universal_image:$major_tag" \
+                "$amd64_image:$major_tag" \
+                "$arm64_image:$major_tag"
+              docker manifest push "$universal_image:$major_tag"
+            fi
+            
+            if [[ -n "$minor_tag" ]]; then
+              echo "Creating manifest for $universal_image:$minor_tag"
+              docker manifest create "$universal_image:$minor_tag" \
+                "$amd64_image:$minor_tag" \
+                "$arm64_image:$minor_tag"
+              docker manifest push "$universal_image:$minor_tag"
+            fi
+          fi
+          
+          echo "✅ Multi-arch manifests created successfully"
+
+      - name: Verify multi-arch manifests
+        run: |
+          image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
+          version="${{ steps.parse_tag.outputs.version }}"
+          registry="${{ env.REGISTRY }}/${{ github.repository }}"
+          universal_image="$registry/$image_base_name"
+          
+          echo "Verifying multi-arch manifests:"
+          
+          # Verify semver and latest tags
+          for tag in "$version" "latest"; do
+            echo "Checking $universal_image:$tag"
+            docker manifest inspect "$universal_image:$tag" | jq '.manifests[].platform'
+          done
+          
+          # Verify version tags if they exist
+          if [[ "${{ steps.version_info.outputs.has_version_tags }}" == "true" ]]; then
+            major_tag="${{ steps.version_info.outputs.major_tag }}"
+            minor_tag="${{ steps.version_info.outputs.minor_tag }}"
+            
+            for tag in "$major_tag" "$minor_tag"; do
+              if [[ -n "$tag" ]]; then
+                echo "Checking $universal_image:$tag"
+                docker manifest inspect "$universal_image:$tag" | jq '.manifests[].platform'
+              fi
+            done
+          fi
