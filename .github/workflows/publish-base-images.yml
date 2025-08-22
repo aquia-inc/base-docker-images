@@ -1264,18 +1264,37 @@ jobs:
           echo "ARM64: $arm64_image:latest"
           docker manifest inspect "$arm64_image:latest" >/dev/null && echo "✅ ARM64 latest exists" || echo "❌ ARM64 latest missing"
           
-          # Create unified manifest for semver version
+          # Get digests for specific platforms
+          echo "Getting platform-specific digests..."
+          amd64_digest=$(docker manifest inspect "$amd64_image:$version" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
+          arm64_digest=$(docker manifest inspect "$arm64_image:$version" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
+          
+          amd64_latest_digest=$(docker manifest inspect "$amd64_image:latest" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
+          arm64_latest_digest=$(docker manifest inspect "$arm64_image:latest" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
+          
+          echo "AMD64 version digest: $amd64_digest"
+          echo "ARM64 version digest: $arm64_digest"
+          echo "AMD64 latest digest: $amd64_latest_digest"
+          echo "ARM64 latest digest: $arm64_latest_digest"
+          
+          # Create unified manifest for semver version using digests
           echo "Creating manifest for $universal_image:$version"
+          docker manifest create "$universal_image:$version" \
+            "$amd64_image@$amd64_digest" \
+            "$arm64_image@$arm64_digest" || \
           docker manifest create --amend "$universal_image:$version" \
-            "$amd64_image:$version" \
-            "$arm64_image:$version"
+            "$amd64_image@$amd64_digest" \
+            "$arm64_image@$arm64_digest"
           docker manifest push "$universal_image:$version"
           
-          # Create unified manifest for latest
+          # Create unified manifest for latest using digests
           echo "Creating manifest for $universal_image:latest"
+          docker manifest create "$universal_image:latest" \
+            "$amd64_image@$amd64_latest_digest" \
+            "$arm64_image@$arm64_latest_digest" || \
           docker manifest create --amend "$universal_image:latest" \
-            "$amd64_image:latest" \
-            "$arm64_image:latest"
+            "$amd64_image@$amd64_latest_digest" \
+            "$arm64_image@$arm64_latest_digest"
           docker manifest push "$universal_image:latest"
           
           # Create version-specific manifests if available
@@ -1285,17 +1304,31 @@ jobs:
             
             if [[ -n "$major_tag" ]]; then
               echo "Creating manifest for $universal_image:$major_tag"
+              # Get digests for major tag
+              major_amd64_digest=$(docker manifest inspect "$amd64_image:$major_tag" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
+              major_arm64_digest=$(docker manifest inspect "$arm64_image:$major_tag" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
+              
+              docker manifest create "$universal_image:$major_tag" \
+                "$amd64_image@$major_amd64_digest" \
+                "$arm64_image@$major_arm64_digest" || \
               docker manifest create --amend "$universal_image:$major_tag" \
-                "$amd64_image:$major_tag" \
-                "$arm64_image:$major_tag"
+                "$amd64_image@$major_amd64_digest" \
+                "$arm64_image@$major_arm64_digest"
               docker manifest push "$universal_image:$major_tag"
             fi
             
             if [[ -n "$minor_tag" ]]; then
               echo "Creating manifest for $universal_image:$minor_tag"
+              # Get digests for minor tag  
+              minor_amd64_digest=$(docker manifest inspect "$amd64_image:$minor_tag" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
+              minor_arm64_digest=$(docker manifest inspect "$arm64_image:$minor_tag" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
+              
+              docker manifest create "$universal_image:$minor_tag" \
+                "$amd64_image@$minor_amd64_digest" \
+                "$arm64_image@$minor_arm64_digest" || \
               docker manifest create --amend "$universal_image:$minor_tag" \
-                "$amd64_image:$minor_tag" \
-                "$arm64_image:$minor_tag"
+                "$amd64_image@$minor_amd64_digest" \
+                "$arm64_image@$minor_arm64_digest"
               docker manifest push "$universal_image:$minor_tag"
             fi
           fi
