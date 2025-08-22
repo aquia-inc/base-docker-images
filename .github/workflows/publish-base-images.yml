@@ -1266,14 +1266,14 @@ jobs:
           
           # Create unified manifest for semver version
           echo "Creating manifest for $universal_image:$version"
-          docker manifest create "$universal_image:$version" \
+          docker manifest create --amend "$universal_image:$version" \
             "$amd64_image:$version" \
             "$arm64_image:$version"
           docker manifest push "$universal_image:$version"
           
           # Create unified manifest for latest
           echo "Creating manifest for $universal_image:latest"
-          docker manifest create "$universal_image:latest" \
+          docker manifest create --amend "$universal_image:latest" \
             "$amd64_image:latest" \
             "$arm64_image:latest"
           docker manifest push "$universal_image:latest"
@@ -1285,7 +1285,7 @@ jobs:
             
             if [[ -n "$major_tag" ]]; then
               echo "Creating manifest for $universal_image:$major_tag"
-              docker manifest create "$universal_image:$major_tag" \
+              docker manifest create --amend "$universal_image:$major_tag" \
                 "$amd64_image:$major_tag" \
                 "$arm64_image:$major_tag"
               docker manifest push "$universal_image:$major_tag"
@@ -1293,7 +1293,7 @@ jobs:
             
             if [[ -n "$minor_tag" ]]; then
               echo "Creating manifest for $universal_image:$minor_tag"
-              docker manifest create "$universal_image:$minor_tag" \
+              docker manifest create --amend "$universal_image:$minor_tag" \
                 "$amd64_image:$minor_tag" \
                 "$arm64_image:$minor_tag"
               docker manifest push "$universal_image:$minor_tag"
