@@ -1,6 +1,6 @@
 # Use a minimal, security-focused base image (Wolfi)
 # Pinned digest ensures reproducibility and supply chain security
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:898e4f30d920607c58acc01eabdfc9ac0725fb83b780d695542b3c3a3d265e48
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:c15643c480330cc703bc100378c97b51dbc7c6480ab335b926945f2d24ed878b
 
 # Define versions as arguments for easier updates and clarity
 ARG MAVEN_VERSION=3.9.8-r0
