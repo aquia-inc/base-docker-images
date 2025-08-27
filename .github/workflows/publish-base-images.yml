@@ -682,40 +682,59 @@ jobs:
               echo "SIGSTORE_URL=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> "$output_file"
               echo "LOG_INDEX=$LOG_INDEX" >> "$output_file"
             else
-              echo "No logIndex found in attestation bundle"
+              echo "No logIndex found in attestation bundle via standard paths"
               
-              # Fallback: Try to extract logIndex from attestation URL if available
+              # Enhanced fallback: Try to extract from attestation URL and alternative bundle parsing
               ATTESTATION_URL="${{ steps.attest_provenance.outputs.attestation-url }}"
+              
+              # Fallback 1: Extract logIndex from attestation URL if available
+              URL_LOG_INDEX=""
               if [ -n "$ATTESTATION_URL" ]; then
                 echo "Trying to extract logIndex from attestation URL: $ATTESTATION_URL"
-                # GitHub attestation URLs may contain logIndex parameters
                 URL_LOG_INDEX=$(echo "$ATTESTATION_URL" | grep -o 'logIndex=[0-9]\+' | cut -d'=' -f2 || echo "")
                 if [ -n "$URL_LOG_INDEX" ]; then
                   echo "Found logIndex in URL: $URL_LOG_INDEX"
-                  echo "logindex=$URL_LOG_INDEX" >> $GITHUB_OUTPUT
-                  echo "sigstore_url=https://search.sigstore.dev/?logIndex=$URL_LOG_INDEX" >> $GITHUB_OUTPUT
-                  
-                  # Save to file for release page generation
-                  echo "GITHUB_ATTESTATION_URL=$ATTESTATION_URL" > "$output_file"
-                  echo "SIGSTORE_URL=https://search.sigstore.dev/?logIndex=$URL_LOG_INDEX" >> "$output_file"
-                  echo "LOG_INDEX=$URL_LOG_INDEX" >> "$output_file"
-                else
-                  echo "No logIndex found in attestation URL either"
-                  echo "logindex=" >> $GITHUB_OUTPUT
-                  echo "sigstore_url=" >> $GITHUB_OUTPUT
-                  
-                  # Save GitHub attestation URL only
-                  echo "GITHUB_ATTESTATION_URL=$ATTESTATION_URL" > "$output_file"
-                  echo "SIGSTORE_URL=" >> "$output_file"
-                  echo "LOG_INDEX=" >> "$output_file"
+                  LOG_INDEX="$URL_LOG_INDEX"
                 fi
+              fi
+              
+              # Fallback 2: Try cosign-style bundle parsing if available
+              if [ -z "$LOG_INDEX" ] && [ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ]; then
+                echo "Attempting alternative bundle parsing with cosign-style paths"
+                # Try to find any numeric logIndex value in the bundle
+                LOG_INDEX=$(jq -r '.. | objects | select(has("logIndex")) | .logIndex' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null | head -1)
+                if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
+                  echo "Found logIndex via recursive search: $LOG_INDEX"
+                else
+                  # Try looking for logId which might be the same
+                  LOG_INDEX=$(jq -r '.. | objects | select(has("logId")) | .logId' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null | head -1)
+                  if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
+                    echo "Found logId (treating as logIndex): $LOG_INDEX"
+                  fi
+                fi
+              fi
+              
+              # Set outputs based on what we found
+              if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
+                echo "logindex=$LOG_INDEX" >> $GITHUB_OUTPUT
+                echo "sigstore_url=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> $GITHUB_OUTPUT
+                echo "Successfully recovered logIndex: $LOG_INDEX"
+                
+                # Save to file for release page generation
+                echo "GITHUB_ATTESTATION_URL=$ATTESTATION_URL" > "$output_file"
+                echo "SIGSTORE_URL=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> "$output_file"
+                echo "LOG_INDEX=$LOG_INDEX" >> "$output_file"
               else
-                echo "No attestation URL available"
+                echo "Unable to extract logIndex from any source"
                 echo "logindex=" >> $GITHUB_OUTPUT
                 echo "sigstore_url=" >> $GITHUB_OUTPUT
                 
-                # Save empty values
-                echo "GITHUB_ATTESTATION_URL=" > "$output_file"
+                # Save GitHub attestation URL only
+                if [ -n "$ATTESTATION_URL" ]; then
+                  echo "GITHUB_ATTESTATION_URL=$ATTESTATION_URL" > "$output_file"
+                else
+                  echo "GITHUB_ATTESTATION_URL=" > "$output_file"
+                fi
                 echo "SIGSTORE_URL=" >> "$output_file"
                 echo "LOG_INDEX=" >> "$output_file"
               fi
