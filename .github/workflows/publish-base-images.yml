@@ -699,8 +699,12 @@ jobs:
               fi
               
               # Fallback 2: Try cosign-style bundle parsing if available
+              echo "DEBUG: Bundle path: ${{ steps.attest_provenance.outputs.bundle-path }}"
+              echo "DEBUG: Bundle exists: $([ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ] && echo 'YES' || echo 'NO')"
               if [ -z "$LOG_INDEX" ] && [ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ]; then
                 echo "Attempting alternative bundle parsing with cosign-style paths"
+                echo "DEBUG: Bundle content structure:"
+                jq -r 'keys' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null || echo "Failed to parse bundle as JSON"
                 # Try to find any numeric logIndex value in the bundle
                 LOG_INDEX=$(jq -r '.. | objects | select(has("logIndex")) | .logIndex' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null | head -1)
                 if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
