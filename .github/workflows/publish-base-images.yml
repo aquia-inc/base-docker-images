@@ -151,7 +151,7 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@77137e9dc3ab1b329b7c8a38c2eb7475850a14e8
+        uses: aquasecurity/trivy-action@f9424c10c36e288d5fa79bd3dfd1aeb2d6eae808
         with:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
@@ -184,7 +184,7 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@77137e9dc3ab1b329b7c8a38c2eb7475850a14e8
+        uses: aquasecurity/trivy-action@f9424c10c36e288d5fa79bd3dfd1aeb2d6eae808
         with:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
@@ -212,28 +212,138 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-      - name: Check if env.versions file exists (Local check)
-        id: check_env_file
-        if: steps.extract_versions.outputs.extraction-success == 'true'
+      - name: Calculate version tags for all image types
+        id: version_tags
         run: |
-          if [ -f "${{ steps.extract_versions.outputs.versions-file }}" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Versions file exists"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Versions file does not exist"
-          fi
+          image_name="${{ steps.context.outputs.image-base-name }}"
+          
+          echo "Processing image: $image_name"
+          
+          # Initialize outputs
+          echo "has_version_tags=false" >> $GITHUB_OUTPUT
+          echo "major_tag=" >> $GITHUB_OUTPUT
+          echo "minor_tag=" >> $GITHUB_OUTPUT
+          echo "tool_version=" >> $GITHUB_OUTPUT
+          
+          case "$image_name" in
+            # Language images - extract runtime versions from /tmp/versions.txt
+            "python-base"|"nodejs-base"|"openjdk17-base"|"go-base")
+              echo "Language image detected, extracting runtime versions..."
+              
+              if docker run --rm --platform ${{ matrix.platform }} \
+                 "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
+                 sh -c 'cat /tmp/versions.txt' > versions.txt 2>/dev/null; then
+                
+                echo "Successfully extracted versions.txt:"
+                cat versions.txt
+                
+                # Parse based on image type
+                case "$image_name" in
+                  "python-base")
+                    MAJOR_TAG=$(grep "python_major_tag=" versions.txt | cut -d'=' -f2)
+                    MINOR_TAG=$(grep "python_minor_tag=" versions.txt | cut -d'=' -f2)
+                    ;;
+                  "nodejs-base")
+                    MAJOR_TAG=$(grep "nodejs_major_tag=" versions.txt | cut -d'=' -f2)
+                    MINOR_TAG=$(grep "nodejs_minor_tag=" versions.txt | cut -d'=' -f2)
+                    ;;
+                  "openjdk17-base")
+                    MAJOR_TAG=$(grep "java_major_tag=" versions.txt | cut -d'=' -f2)
+                    MINOR_TAG=$(grep "java_minor_tag=" versions.txt | cut -d'=' -f2)
+                    ;;
+                  "go-base")
+                    MAJOR_TAG=$(grep "go_major_tag=" versions.txt | cut -d'=' -f2)
+                    MINOR_TAG=$(grep "go_minor_tag=" versions.txt | cut -d'=' -f2)
+                    ;;
+                esac
+                
+                if [ -n "$MAJOR_TAG" ] && [ -n "$MINOR_TAG" ]; then
+                  echo "major_tag=$MAJOR_TAG" >> $GITHUB_OUTPUT
+                  echo "minor_tag=$MINOR_TAG" >> $GITHUB_OUTPUT
+                  echo "has_version_tags=true" >> $GITHUB_OUTPUT
+                  echo "✅ Runtime version tags: major=$MAJOR_TAG, minor=$MINOR_TAG"
+                fi
+                rm -f versions.txt
+              else
+                echo "⚠️  Failed to extract versions.txt from container"
+              fi
+              ;;
+              
+            # Specialized tool images - extract tool versions directly
+            "fips-base")
+              echo "FIPS image detected, extracting OpenSSL version..."
+              
+              if OPENSSL_VERSION=$(docker run --rm --platform ${{ matrix.platform }} \
+                 "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
+                 /usr/local/ssl/bin/openssl version 2>/dev/null | awk '{print $2}'); then
+                
+                echo "OpenSSL version: $OPENSSL_VERSION"
+                
+                # Extract major.minor (e.g., 3.0.9 -> 3.0)
+                OPENSSL_MAJOR=$(echo "$OPENSSL_VERSION" | cut -d'.' -f1)
+                OPENSSL_MINOR=$(echo "$OPENSSL_VERSION" | cut -d'.' -f1-2)
+                
+                if [ -n "$OPENSSL_MAJOR" ] && [ -n "$OPENSSL_MINOR" ]; then
+                  echo "major_tag=openssl$OPENSSL_MAJOR" >> $GITHUB_OUTPUT
+                  echo "minor_tag=openssl$OPENSSL_MINOR" >> $GITHUB_OUTPUT
+                  echo "tool_version=$OPENSSL_VERSION" >> $GITHUB_OUTPUT
+                  echo "has_version_tags=true" >> $GITHUB_OUTPUT
+                  echo "✅ OpenSSL version tags: major=openssl$OPENSSL_MAJOR, minor=openssl$OPENSSL_MINOR"
+                fi
+              else
+                echo "⚠️  Failed to extract OpenSSL version"
+              fi
+              ;;
+              
+            "nginx-base")
+              echo "Nginx image detected, extracting Nginx version..."
+              
+              # Extract nginx version using direct binary call
+              if NGINX_VERSION=$(docker run --rm --platform ${{ matrix.platform }} \
+                 --entrypoint="/usr/sbin/nginx" \
+                 "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
+                 -v 2>&1 | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1); then
+                
+                echo "Nginx version: $NGINX_VERSION"
+                
+                # Extract major.minor (e.g., 1.29.1 -> 1.29)
+                NGINX_MAJOR=$(echo "$NGINX_VERSION" | cut -d'.' -f1)
+                NGINX_MINOR=$(echo "$NGINX_VERSION" | cut -d'.' -f1-2)
+                
+                if [ -n "$NGINX_MAJOR" ] && [ -n "$NGINX_MINOR" ]; then
+                  echo "major_tag=nginx$NGINX_MAJOR" >> $GITHUB_OUTPUT
+                  echo "minor_tag=nginx$NGINX_MINOR" >> $GITHUB_OUTPUT
+                  echo "tool_version=$NGINX_VERSION" >> $GITHUB_OUTPUT
+                  echo "has_version_tags=true" >> $GITHUB_OUTPUT
+                  echo "✅ Nginx version tags: major=nginx$NGINX_MAJOR, minor=nginx$NGINX_MINOR"
+                fi
+              else
+                echo "⚠️  Failed to extract Nginx version"
+              fi
+              ;;
+              
+            # Base images - no version tags needed
+            *)
+              echo "Base image ($image_name) - no version tags needed"
+              ;;
+          esac
 
-      - name: Rename versions file to .env (Local Env)
-        if: steps.check_env_file.outputs.exists == 'true'
-        run: mv "${{ steps.extract_versions.outputs.versions-file }}" .env
+      - name: Create version tags artifact
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
+        run: |
+          mkdir -p version_artifacts
+          echo "major_tag=${{ steps.version_tags.outputs.major_tag }}" > version_artifacts/version_tags.env
+          echo "minor_tag=${{ steps.version_tags.outputs.minor_tag }}" >> version_artifacts/version_tags.env
+          echo "has_version_tags=${{ steps.version_tags.outputs.has_version_tags }}" >> version_artifacts/version_tags.env
 
-      - name: Read package versions for ${{ matrix.platform }} (Local Env)
-        if: steps.check_env_file.outputs.exists == 'true'
-        id: dotenv_local
-        uses: xom9ikk/dotenv@v2.3.0
+      - name: Upload version tags as artifact
+        uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
         with:
-          path: .
+          name: version-tags-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
+          path: version_artifacts/version_tags.env
+          retention-days: 1
+          if-no-files-found: warn
 
       - name: Generate build timestamp
         id: build_timestamp
@@ -246,25 +356,13 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
           tags: |
             # Standard tags: version, latest, dev-<sha>
-            type=semver,pattern={{version}},value=${{ steps.context.outputs.version }},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=raw,value=${{ steps.context.outputs.version }},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
             type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
             type=raw,value=dev-${{ github.sha }},enable=${{ github.event_name != 'push' || github.ref_type != 'tag' }}
 
-            # Python Major/Minor tags
-            type=raw,value={{env.python_major_tag}},enable=${{ steps.context.outputs.image-base-name == 'python-base' && env.python_major_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
-            type=raw,value={{env.python_minor_tag}},enable=${{ steps.context.outputs.image-base-name == 'python-base' && env.python_minor_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
-
-            # Node.js Major/Minor tags
-            type=raw,value={{env.nodejs_major_tag}},enable=${{ steps.context.outputs.image-base-name == 'nodejs-base' && env.nodejs_major_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
-            type=raw,value={{env.nodejs_minor_tag}},enable=${{ steps.context.outputs.image-base-name == 'nodejs-base' && env.nodejs_minor_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
-
-            # OpenJDK Major/Minor tags
-            type=raw,value={{env.java_major_tag}},enable=${{ steps.context.outputs.image-base-name == 'openjdk17-base' && env.java_major_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
-            type=raw,value={{env.java_minor_tag}},enable=${{ steps.context.outputs.image-base-name == 'openjdk17-base' && env.java_minor_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
-
-            # Go Major/Minor tags
-            type=raw,value={{env.go_major_tag}},enable=${{ steps.context.outputs.image-base-name == 'go-base' && env.go_major_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
-            type=raw,value={{env.go_minor_tag}},enable=${{ steps.context.outputs.image-base-name == 'go-base' && env.go_minor_tag != '' && github.event_name == 'push' && github.ref_type == 'tag' }}
+            # Universal version tags for all image types
+            type=raw,value=${{ steps.version_tags.outputs.major_tag }},enable=${{ steps.version_tags.outputs.has_version_tags == 'true' && github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=raw,value=${{ steps.version_tags.outputs.minor_tag }},enable=${{ steps.version_tags.outputs.has_version_tags == 'true' && github.event_name == 'push' && github.ref_type == 'tag' }}
           labels: |
             # See https://github.com/opencontainers/image-spec/blob/main/annotations.md
             org.opencontainers.image.title=${{ steps.context.outputs.image-name }} (${{ matrix.platform }})
@@ -584,40 +682,63 @@ jobs:
               echo "SIGSTORE_URL=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> "$output_file"
               echo "LOG_INDEX=$LOG_INDEX" >> "$output_file"
             else
-              echo "No logIndex found in attestation bundle"
+              echo "No logIndex found in attestation bundle via standard paths"
               
-              # Fallback: Try to extract logIndex from attestation URL if available
+              # Enhanced fallback: Try to extract from attestation URL and alternative bundle parsing
               ATTESTATION_URL="${{ steps.attest_provenance.outputs.attestation-url }}"
+              
+              # Fallback 1: Extract logIndex from attestation URL if available
+              URL_LOG_INDEX=""
               if [ -n "$ATTESTATION_URL" ]; then
                 echo "Trying to extract logIndex from attestation URL: $ATTESTATION_URL"
-                # GitHub attestation URLs may contain logIndex parameters
                 URL_LOG_INDEX=$(echo "$ATTESTATION_URL" | grep -o 'logIndex=[0-9]\+' | cut -d'=' -f2 || echo "")
                 if [ -n "$URL_LOG_INDEX" ]; then
                   echo "Found logIndex in URL: $URL_LOG_INDEX"
-                  echo "logindex=$URL_LOG_INDEX" >> $GITHUB_OUTPUT
-                  echo "sigstore_url=https://search.sigstore.dev/?logIndex=$URL_LOG_INDEX" >> $GITHUB_OUTPUT
-                  
-                  # Save to file for release page generation
-                  echo "GITHUB_ATTESTATION_URL=$ATTESTATION_URL" > "$output_file"
-                  echo "SIGSTORE_URL=https://search.sigstore.dev/?logIndex=$URL_LOG_INDEX" >> "$output_file"
-                  echo "LOG_INDEX=$URL_LOG_INDEX" >> "$output_file"
-                else
-                  echo "No logIndex found in attestation URL either"
-                  echo "logindex=" >> $GITHUB_OUTPUT
-                  echo "sigstore_url=" >> $GITHUB_OUTPUT
-                  
-                  # Save GitHub attestation URL only
-                  echo "GITHUB_ATTESTATION_URL=$ATTESTATION_URL" > "$output_file"
-                  echo "SIGSTORE_URL=" >> "$output_file"
-                  echo "LOG_INDEX=" >> "$output_file"
+                  LOG_INDEX="$URL_LOG_INDEX"
                 fi
+              fi
+              
+              # Fallback 2: Try cosign-style bundle parsing if available
+              echo "DEBUG: Bundle path: ${{ steps.attest_provenance.outputs.bundle-path }}"
+              echo "DEBUG: Bundle exists: $([ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ] && echo 'YES' || echo 'NO')"
+              if [ -z "$LOG_INDEX" ] && [ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ]; then
+                echo "Attempting alternative bundle parsing with cosign-style paths"
+                echo "DEBUG: Bundle content structure:"
+                jq -r 'keys' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null || echo "Failed to parse bundle as JSON"
+                # Try to find any numeric logIndex value in the bundle
+                LOG_INDEX=$(jq -r '.. | objects | select(has("logIndex")) | .logIndex' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null | head -1)
+                if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
+                  echo "Found logIndex via recursive search: $LOG_INDEX"
+                else
+                  # Try looking for logId which might be the same
+                  LOG_INDEX=$(jq -r '.. | objects | select(has("logId")) | .logId' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null | head -1)
+                  if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
+                    echo "Found logId (treating as logIndex): $LOG_INDEX"
+                  fi
+                fi
+              fi
+              
+              # Set outputs based on what we found
+              if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
+                echo "logindex=$LOG_INDEX" >> $GITHUB_OUTPUT
+                echo "sigstore_url=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> $GITHUB_OUTPUT
+                echo "Successfully recovered logIndex: $LOG_INDEX"
+                
+                # Save to file for release page generation
+                echo "GITHUB_ATTESTATION_URL=$ATTESTATION_URL" > "$output_file"
+                echo "SIGSTORE_URL=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> "$output_file"
+                echo "LOG_INDEX=$LOG_INDEX" >> "$output_file"
               else
-                echo "No attestation URL available"
+                echo "Unable to extract logIndex from any source"
                 echo "logindex=" >> $GITHUB_OUTPUT
                 echo "sigstore_url=" >> $GITHUB_OUTPUT
                 
-                # Save empty values
-                echo "GITHUB_ATTESTATION_URL=" > "$output_file"
+                # Save GitHub attestation URL only
+                if [ -n "$ATTESTATION_URL" ]; then
+                  echo "GITHUB_ATTESTATION_URL=$ATTESTATION_URL" > "$output_file"
+                else
+                  echo "GITHUB_ATTESTATION_URL=" > "$output_file"
+                fi
                 echo "SIGSTORE_URL=" >> "$output_file"
                 echo "LOG_INDEX=" >> "$output_file"
               fi
@@ -1072,3 +1193,195 @@ jobs:
           prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  create_multiarch_manifests:
+    needs: [publish_image, create_release]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success' && needs.create_release.result == 'success'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Parse tag information
+        id: parse_tag
+        run: |
+          tag="${{ github.ref_name }}"
+          if [[ $tag =~ ^release/([^/]+)/(v.+)$ ]]; then
+            image_base_name="${BASH_REMATCH[1]}"
+            version="${BASH_REMATCH[2]}"
+            echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
+            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "Parsed: image=$image_base_name, version=$version"
+          else
+            echo "Invalid tag format: $tag"
+            exit 1
+          fi
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version tags from artifacts
+        id: version_info
+        run: |
+          # Download version artifacts if they exist
+          image_name="${{ steps.parse_tag.outputs.image_base_name }}"
+          
+          # Try to download version artifacts from both platforms
+          mkdir -p version_artifacts
+          
+          # Check if artifacts exist and download them
+          for platform in linux-amd64 linux-arm64; do
+            artifact_name="version-tags-$image_name-$platform"
+            echo "Checking for artifact: $artifact_name"
+            
+            # Download artifact if it exists (will fail silently if not found)
+            if gh run download ${{ github.run_id }} -n "$artifact_name" -D "version_artifacts/" 2>/dev/null || true; then
+              echo "Downloaded version artifact for $platform"
+              if [ -f "version_artifacts/version_tags.env" ]; then
+                source "version_artifacts/version_tags.env"
+                echo "major_tag=$major_tag" >> $GITHUB_OUTPUT
+                echo "minor_tag=$minor_tag" >> $GITHUB_OUTPUT
+                echo "has_version_tags=true" >> $GITHUB_OUTPUT
+                echo "Found version tags: major=$major_tag, minor=$minor_tag"
+                break
+              fi
+            fi
+          done
+          
+          # If no version tags found, mark as false
+          if [ ! -f "version_artifacts/version_tags.env" ]; then
+            echo "has_version_tags=false" >> $GITHUB_OUTPUT
+            echo "No version tags found"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create multi-arch manifests
+        run: |
+          image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
+          version="${{ steps.parse_tag.outputs.version }}"
+          registry="${{ env.REGISTRY }}/${{ github.repository }}"
+          
+          echo "Creating multi-arch manifests for $image_base_name"
+          
+          # Base images for manifest creation
+          amd64_image="$registry/$image_base_name-linux-amd64"
+          arm64_image="$registry/$image_base_name-linux-arm64"
+          universal_image="$registry/$image_base_name"
+          
+          echo "Checking if source images exist:"
+          echo "AMD64: $amd64_image:$version"
+          docker manifest inspect "$amd64_image:$version" >/dev/null && echo "✅ AMD64 image exists" || echo "❌ AMD64 image missing"
+          echo "ARM64: $arm64_image:$version"
+          docker manifest inspect "$arm64_image:$version" >/dev/null && echo "✅ ARM64 image exists" || echo "❌ ARM64 image missing"
+          
+          echo "AMD64: $amd64_image:latest"
+          docker manifest inspect "$amd64_image:latest" >/dev/null && echo "✅ AMD64 latest exists" || echo "❌ AMD64 latest missing"
+          echo "ARM64: $arm64_image:latest"
+          docker manifest inspect "$arm64_image:latest" >/dev/null && echo "✅ ARM64 latest exists" || echo "❌ ARM64 latest missing"
+          
+          # Get digests for specific platforms
+          echo "Getting platform-specific digests..."
+          amd64_digest=$(docker manifest inspect "$amd64_image:$version" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
+          arm64_digest=$(docker manifest inspect "$arm64_image:$version" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
+          
+          amd64_latest_digest=$(docker manifest inspect "$amd64_image:latest" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
+          arm64_latest_digest=$(docker manifest inspect "$arm64_image:latest" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
+          
+          echo "AMD64 version digest: $amd64_digest"
+          echo "ARM64 version digest: $arm64_digest"
+          echo "AMD64 latest digest: $amd64_latest_digest"
+          echo "ARM64 latest digest: $arm64_latest_digest"
+          
+          # Create unified manifest for semver version using digests
+          echo "Creating manifest for $universal_image:$version"
+          docker manifest create "$universal_image:$version" \
+            "$amd64_image@$amd64_digest" \
+            "$arm64_image@$arm64_digest" || \
+          docker manifest create --amend "$universal_image:$version" \
+            "$amd64_image@$amd64_digest" \
+            "$arm64_image@$arm64_digest"
+          docker manifest push "$universal_image:$version"
+          
+          # Create unified manifest for latest using digests
+          echo "Creating manifest for $universal_image:latest"
+          docker manifest create "$universal_image:latest" \
+            "$amd64_image@$amd64_latest_digest" \
+            "$arm64_image@$arm64_latest_digest" || \
+          docker manifest create --amend "$universal_image:latest" \
+            "$amd64_image@$amd64_latest_digest" \
+            "$arm64_image@$arm64_latest_digest"
+          docker manifest push "$universal_image:latest"
+          
+          # Create version-specific manifests if available
+          if [[ "${{ steps.version_info.outputs.has_version_tags }}" == "true" ]]; then
+            major_tag="${{ steps.version_info.outputs.major_tag }}"
+            minor_tag="${{ steps.version_info.outputs.minor_tag }}"
+            
+            if [[ -n "$major_tag" ]]; then
+              echo "Creating manifest for $universal_image:$major_tag"
+              # Get digests for major tag
+              major_amd64_digest=$(docker manifest inspect "$amd64_image:$major_tag" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
+              major_arm64_digest=$(docker manifest inspect "$arm64_image:$major_tag" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
+              
+              docker manifest create "$universal_image:$major_tag" \
+                "$amd64_image@$major_amd64_digest" \
+                "$arm64_image@$major_arm64_digest" || \
+              docker manifest create --amend "$universal_image:$major_tag" \
+                "$amd64_image@$major_amd64_digest" \
+                "$arm64_image@$major_arm64_digest"
+              docker manifest push "$universal_image:$major_tag"
+            fi
+            
+            if [[ -n "$minor_tag" ]]; then
+              echo "Creating manifest for $universal_image:$minor_tag"
+              # Get digests for minor tag  
+              minor_amd64_digest=$(docker manifest inspect "$amd64_image:$minor_tag" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
+              minor_arm64_digest=$(docker manifest inspect "$arm64_image:$minor_tag" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
+              
+              docker manifest create "$universal_image:$minor_tag" \
+                "$amd64_image@$minor_amd64_digest" \
+                "$arm64_image@$minor_arm64_digest" || \
+              docker manifest create --amend "$universal_image:$minor_tag" \
+                "$amd64_image@$minor_amd64_digest" \
+                "$arm64_image@$minor_arm64_digest"
+              docker manifest push "$universal_image:$minor_tag"
+            fi
+          fi
+          
+          echo "✅ Multi-arch manifests created successfully"
+
+      - name: Verify multi-arch manifests
+        run: |
+          image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
+          version="${{ steps.parse_tag.outputs.version }}"
+          registry="${{ env.REGISTRY }}/${{ github.repository }}"
+          universal_image="$registry/$image_base_name"
+          
+          echo "Verifying multi-arch manifests:"
+          
+          # Verify semver and latest tags
+          for tag in "$version" "latest"; do
+            echo "Checking $universal_image:$tag"
+            docker manifest inspect "$universal_image:$tag" | jq '.manifests[].platform'
+          done
+          
+          # Verify version tags if they exist
+          if [[ "${{ steps.version_info.outputs.has_version_tags }}" == "true" ]]; then
+            major_tag="${{ steps.version_info.outputs.major_tag }}"
+            minor_tag="${{ steps.version_info.outputs.minor_tag }}"
+            
+            for tag in "$major_tag" "$minor_tag"; do
+              if [[ -n "$tag" ]]; then
+                echo "Checking $universal_image:$tag"
+                docker manifest inspect "$universal_image:$tag" | jq '.manifests[].platform'
+              fi
+            done
+          fi
