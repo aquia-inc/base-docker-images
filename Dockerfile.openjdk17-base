@@ -1,5 +1,3 @@
-# Use a minimal, security-focused base image (Wolfi)
-# Pinned digest ensures reproducibility and supply chain security
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:c85f493847f2a370df7f351676bbbbc89096c139394a1dca6a4b05f5f1108d3a
 
 # Define versions as arguments for easier updates and clarity
