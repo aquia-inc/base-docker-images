@@ -40,6 +40,12 @@
   "labels": [
     "renovate"
   ],
+  {
+  "lockFileMaintenance": {
+      "enabled": true,
+      "automerge": true
+    }
+  }.
   "packageRules": [
     {
       "matchCategories": [
