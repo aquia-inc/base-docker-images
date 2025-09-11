@@ -13,4 +13,4 @@ RUN go version > /tmp/go_version.txt && \
     GO_MINOR="${GO_MAJOR}.$(echo "${GO_VERSION}" | cut -d'.' -f2)" && \
     echo "go_major_tag=${GO_MAJOR}" >> /tmp/versions.txt && \
     echo "go_minor_tag=${GO_MINOR}" >> /tmp/versions.txt && \
-    cat /tmp/versions.txt
+    head /tmp/versions.txt

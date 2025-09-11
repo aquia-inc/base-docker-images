@@ -173,10 +173,10 @@ jobs:
             echo "Test tag: $test_tag"
             extraction_status="false"
 
-            if [[ "$image_base_name" == "python-base" || "$image_base_name" == "nodejs-base" || "$image_base_name" == "openjdk17-base" ]]; then
+            if [[ "$image_base_name" == "python-base" || "$image_base_name" == "nodejs-base" || "$image_base_name" == "openjdk17-base" || "$image_base_name" == "go-base" ]]; then
                 echo "Attempting to extract versions from $test_tag for $platform_image_name"
                 # This command should now work because QEMU is set up
-                if docker run --rm --platform ${{ matrix.platform }} "$test_tag" sh -c 'cat /tmp/versions.txt && exit 0 || exit 1' > "$output_file"; then
+                if docker run --rm --platform ${{ matrix.platform }} "$test_tag" sh -c 'head /tmp/versions.txt && exit 0 || exit 1' > "$output_file"; then
                     if [ -s "$output_file" ]; then
                         echo "Versions extracted successfully to $output_file"
                         extraction_status="true"
@@ -382,6 +382,21 @@ jobs:
           path: version_artifacts/version_tags.env
           retention-days: 1
           if-no-files-found: warn
+
+      - name: Extract versions from build output for ${{ matrix.platform }}
+        if: >-
+          steps.context.outputs.image-base-name == 'go-base' ||
+          steps.context.outputs.image-base-name == 'python-base' ||
+          steps.context.outputs.image-base-name == 'nodejs-base' ||
+          steps.context.outputs.image-base-name == 'openjdk17-base'
+        run: |
+          # Extract version info from the built image directly
+          docker run --rm --platform ${{ matrix.platform }} \
+            "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
+            sh -c 'head /tmp/versions.txt' | while IFS='=' read -r key value; do
+              echo "${key}=${value}" >> $GITHUB_ENV
+              echo "Set: ${key}=${value}"
+            done
 
       - name: Generate build timestamp
         id: build_timestamp
