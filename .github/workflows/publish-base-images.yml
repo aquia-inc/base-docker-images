@@ -270,7 +270,7 @@ jobs:
               
               if docker run --rm --platform ${{ matrix.platform }} \
                  "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-                 sh -c 'cat /tmp/versions.txt' > versions.txt 2>/dev/null; then
+                 sh -c 'head /tmp/versions.txt' > versions.txt 2>/dev/null; then
                 
                 echo "Successfully extracted versions.txt:"
                 cat versions.txt
