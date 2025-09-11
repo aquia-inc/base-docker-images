@@ -46,7 +46,7 @@ runs:
             echo "Attempting to extract versions from $test_tag for $image_base_name"
             
             # Extract versions from the container
-            if docker run --rm --platform "$platform" "$test_tag" sh -c 'test -f /tmp/versions.txt && head /tmp/versions.txt' > "$output_file" 2>/dev/null; then
+            if docker run --rm --platform "$platform" "$test_tag" sh -c 'test -f /tmp/versions.txt && while read line; do echo "$line"; done < /tmp/versions.txt' > "$output_file" 2>/dev/null; then
                 if [ -s "$output_file" ]; then
                     echo "Versions extracted successfully to $output_file"
                     echo "Contents:"
@@ -62,7 +62,7 @@ runs:
                     rm -f "$output_file"
                 fi
             else
-                echo "Warning: Failed to execute 'head /tmp/versions.txt' in container $test_tag. Exit code: $?"
+                echo "Warning: Failed to execute version extraction in container $test_tag. Exit code: $?"
                 rm -f "$output_file"
             fi
         else
