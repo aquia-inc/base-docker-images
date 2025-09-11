@@ -604,11 +604,17 @@ jobs:
           
           echo "Generating SBOM for: $image_ref"
           
+          # Use platform-specific scanning to handle cross-platform issues
+          platform_flag=""
+          if [[ "${{ matrix.platform }}" == "linux/arm64" ]]; then
+            platform_flag="--platform=linux/arm64"
+          fi
+          
           # Generate SPDX format SBOM
-          syft "$image_ref" -o "spdx-json=${base}.spdx.json"
+          syft "$image_ref" $platform_flag -o "spdx-json=${base}.spdx.json"
           
           # Generate CycloneDX format SBOM  
-          syft "$image_ref" -o "cyclonedx-json=${base}.cyclonedx.json"
+          syft "$image_ref" $platform_flag -o "cyclonedx-json=${base}.cyclonedx.json"
           
           echo "sbom_spdx_file=${base}.spdx.json" >> $GITHUB_OUTPUT
           echo "sbom_cyclonedx_file=${base}.cyclonedx.json" >> $GITHUB_OUTPUT
