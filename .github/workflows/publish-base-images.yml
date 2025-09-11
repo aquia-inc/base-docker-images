@@ -690,7 +690,7 @@ jobs:
             echo "Rekor UUID: $REKOR_UUID"
           fi
 
-      - name: Attach SBOM to container image for ${{ matrix.platform }}
+      - name: Attest SBOM for ${{ matrix.platform }}
         if: >-
           github.event_name == 'push' && 
           github.ref_type == 'tag' && 
@@ -702,15 +702,12 @@ jobs:
           image_ref="${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}@${{ steps.docker_build.outputs.digest }}"
           spdx_sbom="${{ steps.generate_sbom.outputs.sbom_spdx_file }}"
           
-          echo "Attaching SBOM to: $image_ref"
+          echo "Creating SBOM attestation for: $image_ref"
           
-          # Attach SPDX SBOM to the container image
-          cosign attach sbom --sbom "$spdx_sbom" "$image_ref"
+          # Create SBOM attestation (modern approach)
+          cosign attest --yes --predicate "$spdx_sbom" --type spdxjson "$image_ref"
           
-          # Sign the SBOM attachment
-          cosign sign --yes "${image_ref}.sbom"
-          
-          echo "✅ SBOM attached and signed"
+          echo "✅ SBOM attestation created and signed"
           
       - name: Attest build provenance for ${{ matrix.platform }}
         id: attest_provenance
