@@ -52,6 +52,11 @@ runs:
                     echo "Contents:"
                     cat "$output_file"
                     extraction_status="true"
+                    
+                    # Set environment variables for metadata action
+                    while IFS='=' read -r key value; do
+                      echo "${key}=${value}" >> $GITHUB_ENV
+                    done < "$output_file"
                 else
                     echo "Warning: Command succeeded but extracted versions file '$output_file' is empty."
                     rm -f "$output_file"
