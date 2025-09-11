@@ -46,7 +46,7 @@ runs:
             echo "Attempting to extract versions from $test_tag for $image_base_name"
             
             # Extract versions from the container
-            if docker run --rm --platform "$platform" "$test_tag" sh -c 'test -f /tmp/versions.txt && while read line; do echo "$line"; done < /tmp/versions.txt' > "$output_file" 2>/dev/null; then
+            if docker run --rm --platform "$platform" --entrypoint="/bin/ash" "$test_tag" -c 'cat /tmp/versions.txt' > "$output_file" 2>/dev/null; then
                 if [ -s "$output_file" ]; then
                     echo "Versions extracted successfully to $output_file"
                     echo "Contents:"
