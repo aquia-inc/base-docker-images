@@ -14,9 +14,7 @@
   "dependencyDashboard": true,
   "dependencyDashboardAutoclose": true,
   "schedule": [
-    "after 11pm every weekday",
-    "before 5am every weekday",
-    "every weekend"
+    "at any time"
   ],
   "timezone": "America/New_York",
   "major": {
