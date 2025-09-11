@@ -165,10 +165,10 @@ jobs:
       - name: Get installed package versions for ${{ matrix.platform }}
         id: get_versions
         run: |
-            image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
-            platform_image_name="${{ steps.image_name.outputs.platform_image_name }}"
+            image_base_name="${{ steps.context.outputs.image-base-name }}"
+            platform_image_name="${{ steps.context.outputs.image-name }}"
             test_tag="${{ github.repository }}/${platform_image_name}:test"
-            output_file="env.versions.${{ steps.sanitize_platform.outputs.suffix }}"
+            output_file="env.versions.${{ steps.context.outputs.platform-suffix }}"
             echo "Output file: $output_file"
             echo "Test tag: $test_tag"
             extraction_status="false"
