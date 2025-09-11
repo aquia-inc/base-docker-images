@@ -392,8 +392,9 @@ jobs:
         run: |
           # Extract version info from the built image directly
           docker run --rm --platform ${{ matrix.platform }} \
+            --entrypoint="/bin/ash" \
             "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-            sh -c 'head /tmp/versions.txt' | while IFS='=' read -r key value; do
+            -c 'cat /tmp/versions.txt' | while IFS='=' read -r key value; do
               echo "${key}=${value}" >> $GITHUB_ENV
               echo "Set: ${key}=${value}"
             done
