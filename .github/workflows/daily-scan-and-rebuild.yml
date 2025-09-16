@@ -196,10 +196,18 @@ jobs:
               continue
             fi
 
-            # Create rebuild tag with timestamp
-            timestamp=$(date +%Y%m%d%H%M%S)
-            version_part_no_build=$(echo "$version_part" | sed 's/\+.*//')
-            new_tag="release/${base_name}/${version_part_no_build}+rebuild.${timestamp}"
+            # Increment patch version for clean semver
+            version_part_clean=$(echo "$version_part" | sed 's/\+.*//')
+            # Extract current version numbers (e.g., v1.2.3 -> 1 2 3)
+            version_nums=$(echo "$version_part_clean" | sed 's/^v//' | tr '.' ' ')
+            major=$(echo $version_nums | cut -d' ' -f1)
+            minor=$(echo $version_nums | cut -d' ' -f2)
+            patch=$(echo $version_nums | cut -d' ' -f3)
+            
+            # Increment patch version
+            new_patch=$((patch + 1))
+            new_version="v${major}.${minor}.${new_patch}"
+            new_tag="release/${base_name}/${new_version}"
 
             echo "Creating and pushing rebuild tag: $new_tag"
             git tag "$new_tag"
