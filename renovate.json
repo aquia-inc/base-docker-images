@@ -14,42 +14,55 @@
   "dependencyDashboard": true,
   "dependencyDashboardAutoclose": true,
   "schedule": [
-    "after 11pm every weekday",
-    "before 5am every weekday",
-    "every weekend"
+    "every 3 hours"
   ],
   "timezone": "America/New_York",
+  "automerge": true,
+  "platformAutomerge": true,
+  "requiredStatusChecks": ["publish_image"],
   "major": {
-    "automerge": false
-  },
+      "automerge": false
+    },
   "minor": {
     "automerge": true,
     "groupName": "minor dependencies",
-    "groupSlug": "all-minor",
-    "minimumReleaseAge": "2 days"
+    "groupSlug": "all-minor"
   },
   "patch": {
     "automerge": true,
     "groupName": "patch dependencies",
-    "groupSlug": "all-patch",
-    "minimumReleaseAge": "1 day"
+    "groupSlug": "all-patch"
   },
-  "terraform": {
-    "enabled": false
-  },
-  "labels": [
-    "renovate"
-  ],
   "lockFileMaintenance": {
     "enabled": true,
     "automerge": true
   },
+  "labels": [
+    "renovate",
+    "dependencies"
+  ],
+
+  "terraform": {
+    "enabled": false
+  },
   "packageRules": [
     {
-      "matchCategories": [
-        "docker"
-      ],
-      "pinDigests": true
+      "description": "For any APK package in a Dockerfile, only allow patch and pin updates. This enforces the 'major.minor.x' pinning strategy.",
+      "matchManagers": ["dockerfile"],
+      "matchDatasources": ["alpine-packages"],
+      "updateTypes": ["patch", "pin"]
+    },
+    {
+      "description": "For any Docker FROM image, allow minor and patch updates.",
+      "matchManagers": ["dockerfile"],
+      "matchDatasources": ["docker"],
+      "updateTypes": ["minor", "patch", "pin", "digest"]
+    },
+    {
+      "description": "Group all updates by their source Dockerfile to create logical PRs.",
+      "matchManagers": ["dockerfile"],
+      "groupName": "{{{replace '.*/' '' dep.paths.[0]}}} dependencies",
+      "groupSlug": "{{{replace '.*/' '' dep.paths.[0]}}}-dependencies"
     }
   ]
 }
