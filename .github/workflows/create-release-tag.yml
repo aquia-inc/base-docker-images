@@ -1,11 +1,11 @@
 name: Create Release Tag
 
 on:
+  # only react to changes on the main branch.
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
-
+  # workflow_dispatch for manual runs.
+  workflow_dispatch:
 permissions:
   actions: read
   contents: write
