@@ -115,6 +115,10 @@ jobs:
         id: build_test
         uses: docker/build-push-action@v6
         with:
+          # Explicitly define the build context.
+          # If the PR is from a fork, use the PR's head SHA.
+          # Otherwise, use the default context (which works for internal branches).
+          context: ${{ (github.event.pull_request.head.repo.full_name != github.repository) && format('https://github.com/{0}.git#{1}', github.event.pull_request.head.repo.full_name, github.event.pull_request.head.sha) || '.' }}
           pull: true
           file: Dockerfile.${{ steps.context.outputs.image-base-name }}
           platforms: ${{ matrix.platform }}
