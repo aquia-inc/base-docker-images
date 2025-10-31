@@ -161,8 +161,10 @@ jobs:
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH,MEDIUM"
 
-      - name: Get installed package versions for ${{ matrix.platform }}
-        id: get_versions
+
+
+      - name: Run container structure tests for ${{ matrix.platform }}
+        id: run_tests
         run: |
           # Download container-structure-test if not available
           if ! command -v container-structure-test &> /dev/null; then
@@ -232,7 +234,7 @@ jobs:
               
               if docker run --rm --platform ${{ matrix.platform }} \
                  "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-                 sh -c 'cat /tmp/versions.txt' > versions.txt 2>/dev/null; then
+                 sh -c 'head /tmp/versions.txt' > versions.txt 2>/dev/null; then
                 
                 echo "Successfully extracted versions.txt:"
                 cat versions.txt
@@ -344,6 +346,7 @@ jobs:
           path: version_artifacts/version_tags.env
           retention-days: 1
           if-no-files-found: warn
+
 
       - name: Generate build timestamp
         id: build_timestamp
@@ -589,6 +592,86 @@ jobs:
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
 
+      - name: Install Syft for SBOM generation
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | \
+            sh -s -- -b /usr/local/bin
+
+      - name: Generate SBOM for ${{ matrix.platform }}
+        id: generate_sbom
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
+        run: |
+          image_ref="${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}@${{ steps.docker_build.outputs.digest }}"
+          base="sbom-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}"
+          
+          echo "Generating SBOM for: $image_ref"
+          
+          # Use platform-specific scanning to handle cross-platform issues
+          platform_flag=""
+          if [[ "${{ matrix.platform }}" == "linux/arm64" ]]; then
+            platform_flag="--platform=linux/arm64"
+          fi
+          
+          # Generate SPDX format SBOM
+          syft "$image_ref" $platform_flag -o "spdx-json=${base}.spdx.json"
+          
+          # Generate CycloneDX format SBOM  
+          syft "$image_ref" $platform_flag -o "cyclonedx-json=${base}.cyclonedx.json"
+          
+          echo "sbom_spdx_file=${base}.spdx.json" >> $GITHUB_OUTPUT
+          echo "sbom_cyclonedx_file=${base}.cyclonedx.json" >> $GITHUB_OUTPUT
+          
+          # Show SBOM summary
+          pkg_count=$(jq '.packages | length' "${base}.spdx.json")
+          echo "SBOM generated - Package count: $pkg_count"
+
+      - name: Validate SBOM for ${{ matrix.platform }}
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.generate_sbom.outputs.sbom_spdx_file != ''
+        run: |
+          spdx="${{ steps.generate_sbom.outputs.sbom_spdx_file }}"
+          cyclone="${{ steps.generate_sbom.outputs.sbom_cyclonedx_file }}"
+          
+          echo "Validating SBOM files..."
+          
+          # Validate SPDX format
+          if jq empty "$spdx" 2>/dev/null; then
+            pkg_count=$(jq '.packages | length' "$spdx")
+            echo "✅ SPDX SBOM valid - $pkg_count packages"
+          else
+            echo "❌ SPDX SBOM validation failed"
+            exit 1
+          fi
+          
+          # Validate CycloneDX format  
+          if jq empty "$cyclone" 2>/dev/null; then
+            comp_count=$(jq '.components | length' "$cyclone")
+            echo "✅ CycloneDX SBOM valid - $comp_count components"
+          else
+            echo "❌ CycloneDX SBOM validation failed"
+            exit 1
+          fi
+          
+          # Minimum package sanity check
+          if [ "$pkg_count" -lt 5 ]; then
+            echo "❌ SBOM too few packages ($pkg_count)"
+            exit 1
+          fi
+          
+          echo "✅ SBOM validation passed"
+
+      - name: Upload SBOM artifacts for ${{ matrix.platform }}
+        uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.generate_sbom.outputs.sbom_spdx_file != ''
+        with:
+          name: >-
+            sbom-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
+          path: |
+            ${{ steps.generate_sbom.outputs.sbom_spdx_file }}
+            ${{ steps.generate_sbom.outputs.sbom_cyclonedx_file }}
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         if: github.event_name == 'push' && github.ref_type == 'tag'
@@ -615,6 +698,25 @@ jobs:
             echo "rekor_uuid=$REKOR_UUID" >> $GITHUB_OUTPUT
             echo "Rekor UUID: $REKOR_UUID"
           fi
+
+      - name: Attest SBOM for ${{ matrix.platform }}
+        if: >-
+          github.event_name == 'push' && 
+          github.ref_type == 'tag' && 
+          steps.docker_build.outputs.digest != '' && 
+          steps.generate_sbom.outputs.sbom_spdx_file != ''
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          image_ref="${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}@${{ steps.docker_build.outputs.digest }}"
+          spdx_sbom="${{ steps.generate_sbom.outputs.sbom_spdx_file }}"
+          
+          echo "Creating SBOM attestation for: $image_ref"
+          
+          # Create SBOM attestation (modern approach)
+          cosign attest --yes --predicate "$spdx_sbom" --type spdxjson "$image_ref"
+          
+          echo "✅ SBOM attestation created and signed"
           
       - name: Attest build provenance for ${{ matrix.platform }}
         id: attest_provenance
@@ -917,7 +1019,26 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v5
         with:
-          name: provenance-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-arm64
+          name: >-
+            provenance-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-arm64
+          path: .
+
+      - name: Download AMD64 SBOM artifact
+        id: download_sbom_amd64
+        continue-on-error: true
+        uses: actions/download-artifact@v5
+        with:
+          name: >-
+            sbom-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-amd64
+          path: .
+
+      - name: Download ARM64 SBOM artifact
+        id: download_sbom_arm64
+        continue-on-error: true
+        uses: actions/download-artifact@v5
+        with:
+          name: >-
+            sbom-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-arm64
           path: .
 
       - name: Create GitHub Release Body
@@ -1389,7 +1510,7 @@ jobs:
   # Auto-approve renovate PRs after successful builds
   auto_approve_renovate:
     runs-on: ubuntu-latest
-    needs: [publish_image, create_release]
+    needs: [publish_image]
     if: github.event_name == 'pull_request' && github.actor == 'renovate[bot]'
     permissions:
       pull-requests: write
