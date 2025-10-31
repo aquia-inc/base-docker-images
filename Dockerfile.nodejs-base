@@ -1,7 +1,8 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:ae238a181d95804645919b2671d50ae77477efbfb299544491346e2911125aaf AS builder
 
+ARG NODE_VERSION='nodejs~=24'
 # Install Node.js, npm and Yarn
-RUN apk add --no-cache nodejs yarn npm
+RUN apk add --no-cache ${NODE_VERSION} yarn npm
 
 # Extract Node.js version and save to file
 SHELL ["/bin/ash", "-o", "pipefail", "-c"]
