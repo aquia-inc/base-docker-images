@@ -19,7 +19,6 @@
   "timezone": "America/New_York",
   "automerge": true,
   "platformAutomerge": true,
-  "requiredStatusChecks": ["publish_image"],
   "major": {
       "automerge": false
     },
