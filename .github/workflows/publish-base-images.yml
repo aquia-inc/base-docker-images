@@ -1,15 +1,18 @@
 # .github/workflows/publish-base-images.yml
-name: Publish Base Docker images
+name: Verify and Publish Base Docker images
 
 on:
+  # Only trigger for a full publish.
   push:
     tags:
       - "release/**"
-    branches:
-      - main
+  
+  # trigger is for verification ONLY.
   pull_request:
     branches: [main]
-
+  
+  # workflow_dispatch for manual runs.
+  workflow_dispatch:
 env:
   REGISTRY: ghcr.io
   # For tag pushes, use the actual ref. For PRs, detect from modified Dockerfiles
