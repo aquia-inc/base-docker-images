@@ -20,7 +20,7 @@ jobs:
       has_changes: ${{ steps.build_matrix.outputs.has_changes }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -71,7 +71,7 @@ jobs:
         image_name: ${{ fromJSON(needs.detect_changed_images.outputs.images_matrix) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ssh-key: "${{ secrets.DEPLOY_KEY }}"
           fetch-depth: 0
