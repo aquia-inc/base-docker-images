@@ -5,51 +5,48 @@
     "docker:pinDigests",
     "default:automergeDigest"
   ],
-  "pre-commit": {
-    "enabled": true
-  },
+  "pre-commit": {"enabled": true},
   "assigneesFromCodeOwners": true,
   "automergeType": "pr",
   "automergeStrategy": "squash",
   "dependencyDashboard": true,
   "dependencyDashboardAutoclose": true,
-  "schedule": [
-    "after 11pm every weekday",
-    "before 5am every weekday",
-    "every weekend"
-  ],
+  "schedule": ["* 0-6,7-23 * * *"],
   "timezone": "America/New_York",
-  "major": {
-    "automerge": false
-  },
+  "automerge": true,
+  "platformAutomerge": true,
+  "major": {"automerge": false},
   "minor": {
     "automerge": true,
     "groupName": "minor dependencies",
-    "groupSlug": "all-minor",
-    "minimumReleaseAge": "2 days"
+    "groupSlug": "all-minor"
   },
   "patch": {
     "automerge": true,
     "groupName": "patch dependencies",
-    "groupSlug": "all-patch",
-    "minimumReleaseAge": "1 day"
+    "groupSlug": "all-patch"
   },
-  "terraform": {
-    "enabled": false
-  },
-  "labels": [
-    "renovate"
-  ],
-  "lockFileMaintenance": {
-    "enabled": true,
-    "automerge": true
-  },
+  "lockFileMaintenance": {"enabled": true, "automerge": true},
+  "labels": ["renovate", "dependencies"],
+  "terraform": {"enabled": false},
   "packageRules": [
     {
-      "matchCategories": [
-        "docker"
-      ],
-      "pinDigests": true
+      "description": "For any APK package in a Dockerfile, only allow patch and pin updates. This enforces the 'major.minor.x' pinning strategy.",
+      "matchManagers": ["dockerfile"],
+      "matchDatasources": ["alpine-packages"],
+      "matchUpdateTypes": ["patch", "pin"]
+    },
+    {
+      "description": "For any Docker FROM image, allow minor and patch updates.",
+      "matchManagers": ["dockerfile"],
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"]
+    },
+    {
+      "description": "Group all updates by their source Dockerfile to create logical PRs.",
+      "matchManagers": ["dockerfile"],
+      "groupName": "{{{replace '.*/' '' dep.paths.[0]}}} dependencies",
+      "groupSlug": "{{{replace '.*/' '' dep.paths.[0]}}}-dependencies"
     }
   ]
 }
