@@ -1054,11 +1054,13 @@ jobs:
           registry="${{ env.REGISTRY }}"
 
           # Function to extract value from a versions file
+          # Note: Using cut -d'=' -f2- to capture everything after first '='
+          # This is needed for URLs like SIGSTORE_URL=https://...?logIndex=123
           get_version_value() {
             local file="$1"
             local key="$2"
             if [ -f "$file" ]; then
-              grep "^${key}=" "$file" | cut -d'=' -f2
+              grep "^${key}=" "$file" | cut -d'=' -f2-
             fi
           }
 
@@ -1446,37 +1448,33 @@ jobs:
           docker manifest push "$universal_image:latest"
           
           # Create version-specific manifests if available
+          # IMPORTANT: Reuse the same digests as version tag ($amd64_digest, $arm64_digest)
+          # All tags for a release should point to the same signed image
+          # Previously this code re-inspected manifests for :major_tag/:minor_tag which
+          # caused cross-architecture tag pollution due to cosign signature manifests
           if [[ "${{ steps.version_info.outputs.has_version_tags }}" == "true" ]]; then
             major_tag="${{ steps.version_info.outputs.major_tag }}"
             minor_tag="${{ steps.version_info.outputs.minor_tag }}"
-            
+
             if [[ -n "$major_tag" ]]; then
-              echo "Creating manifest for $universal_image:$major_tag"
-              # Get digests for major tag
-              major_amd64_digest=$(docker manifest inspect "$amd64_image:$major_tag" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
-              major_arm64_digest=$(docker manifest inspect "$arm64_image:$major_tag" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
-              
+              echo "Creating manifest for $universal_image:$major_tag (using version digest)"
               docker manifest create "$universal_image:$major_tag" \
-                "$amd64_image@$major_amd64_digest" \
-                "$arm64_image@$major_arm64_digest" || \
+                "$amd64_image@$amd64_digest" \
+                "$arm64_image@$arm64_digest" || \
               docker manifest create --amend "$universal_image:$major_tag" \
-                "$amd64_image@$major_amd64_digest" \
-                "$arm64_image@$major_arm64_digest"
+                "$amd64_image@$amd64_digest" \
+                "$arm64_image@$arm64_digest"
               docker manifest push "$universal_image:$major_tag"
             fi
-            
+
             if [[ -n "$minor_tag" ]]; then
-              echo "Creating manifest for $universal_image:$minor_tag"
-              # Get digests for minor tag  
-              minor_amd64_digest=$(docker manifest inspect "$amd64_image:$minor_tag" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
-              minor_arm64_digest=$(docker manifest inspect "$arm64_image:$minor_tag" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
-              
+              echo "Creating manifest for $universal_image:$minor_tag (using version digest)"
               docker manifest create "$universal_image:$minor_tag" \
-                "$amd64_image@$minor_amd64_digest" \
-                "$arm64_image@$minor_arm64_digest" || \
+                "$amd64_image@$amd64_digest" \
+                "$arm64_image@$arm64_digest" || \
               docker manifest create --amend "$universal_image:$minor_tag" \
-                "$amd64_image@$minor_amd64_digest" \
-                "$arm64_image@$minor_arm64_digest"
+                "$amd64_image@$amd64_digest" \
+                "$arm64_image@$arm64_digest"
               docker manifest push "$universal_image:$minor_tag"
             fi
           fi
