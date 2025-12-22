@@ -28,7 +28,7 @@ runs:
   using: 'composite'
   steps:
     - name: Setup Trivy cache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/trivy
         key: ${{ runner.os }}-trivy-db-${{ inputs.image-tag }}
