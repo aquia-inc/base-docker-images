@@ -155,7 +155,42 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@22438a435773de8c97dc0958cc0b823c45b064ac
+        with:
+          scan-type: image
+          image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH,MEDIUM"
+
+
+
+      - name: Run container structure tests for ${{ matrix.platform }}
+        id: run_tests
+        run: |
+          # Download container-structure-test if not available
+          if ! command -v container-structure-test &> /dev/null; then
+            echo "Downloading container-structure-test..."
+            curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
+            chmod +x container-structure-test-linux-amd64
+            sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
+          fi
+          
+          # Run tests if config exists
+          test_config="tests/container-structure/${{ steps.context.outputs.image-base-name }}.yaml"
+          if [ -f "$test_config" ]; then
+            echo "Running container structure tests with config: $test_config"
+            container-structure-test test \
+              --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
+              --config "$test_config"
+          else
+            echo "No container structure test config found at $test_config, skipping tests"
+          fi
+
+      - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
+        uses: aquasecurity/trivy-action@22438a435773de8c97dc0958cc0b823c45b064ac
         with:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
@@ -175,7 +210,7 @@ jobs:
           platform-suffix: ${{ steps.context.outputs.platform-suffix }}
 
       - name: Upload versions artifact for ${{ matrix.platform }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: steps.extract_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
         with:
           name: versions-file-${{ steps.context.outputs.platform-suffix }}
@@ -308,7 +343,7 @@ jobs:
           echo "has_version_tags=${{ steps.version_tags.outputs.has_version_tags }}" >> version_artifacts/version_tags.env
 
       - name: Upload version tags as artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
         with:
           name: version-tags-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
@@ -630,7 +665,7 @@ jobs:
           echo "✅ SBOM validation passed"
 
       - name: Upload SBOM artifacts for ${{ matrix.platform }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.generate_sbom.outputs.sbom_spdx_file != ''
         with:
           name: >-
@@ -689,7 +724,7 @@ jobs:
           
       - name: Attest build provenance for ${{ matrix.platform }}
         id: attest_provenance
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
         with:
           # Create cryptographic attestation for build provenance
@@ -828,7 +863,7 @@ jobs:
           echo "provenance_file_path=$output_file" >> $GITHUB_OUTPUT
 
       - name: Upload provenance artifact for ${{ matrix.platform }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.extract_logindex.outputs.provenance_file_path != ''
         with:
           name: provenance-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
@@ -957,7 +992,7 @@ jobs:
           steps.parse_tag_release.outputs.image-base-name == 'openjdk17-base' ||
           steps.parse_tag_release.outputs.image-base-name == 'go-base'
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: versions-file-linux-amd64
           path: .
@@ -970,7 +1005,7 @@ jobs:
           steps.parse_tag_release.outputs.image-base-name == 'openjdk17-base' ||
           steps.parse_tag_release.outputs.image-base-name == 'go-base'
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: versions-file-linux-arm64
           path: .
@@ -978,7 +1013,7 @@ jobs:
       - name: Download AMD64 provenance artifact
         id: download_provenance_amd64
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: provenance-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-amd64
           path: .
@@ -986,7 +1021,7 @@ jobs:
       - name: Download ARM64 provenance artifact
         id: download_provenance_arm64
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: >-
             provenance-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-arm64
@@ -995,7 +1030,7 @@ jobs:
       - name: Download AMD64 SBOM artifact
         id: download_sbom_amd64
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: >-
             sbom-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-amd64
@@ -1004,7 +1039,7 @@ jobs:
       - name: Download ARM64 SBOM artifact
         id: download_sbom_arm64
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: >-
             sbom-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-arm64
