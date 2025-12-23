@@ -131,7 +131,7 @@ jobs:
           size=$(docker images --format "table {{.Size}}" "$image_tag" | tail -n +2)
           echo "Docker image size for ${{ matrix.platform }}: $size"
 
-      - name: Run container structure tests
+      - name: Setup container structure tests
         run: |
           curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
           chmod +x container-structure-test-linux-amd64
@@ -155,42 +155,7 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
-        with:
-          scan-type: image
-          image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
-          format: table
-          exit-code: "1"
-          ignore-unfixed: true
-          vuln-type: "os,library"
-          severity: "CRITICAL,HIGH,MEDIUM"
-
-
-
-      - name: Run container structure tests for ${{ matrix.platform }}
-        id: run_tests
-        run: |
-          # Download container-structure-test if not available
-          if ! command -v container-structure-test &> /dev/null; then
-            echo "Downloading container-structure-test..."
-            curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
-            chmod +x container-structure-test-linux-amd64
-            sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
-          fi
-          
-          # Run tests if config exists
-          test_config="tests/container-structure/${{ steps.context.outputs.image-base-name }}.yaml"
-          if [ -f "$test_config" ]; then
-            echo "Running container structure tests with config: $test_config"
-            container-structure-test test \
-              --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-              --config "$test_config"
-          else
-            echo "No container structure test config found at $test_config, skipping tests"
-          fi
-
-      - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
