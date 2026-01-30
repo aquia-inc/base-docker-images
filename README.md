@@ -58,7 +58,7 @@ Images are considered hardened when they do not contain fixed CVE vulnerabilitie
 * **Python**: 3.13.x (from wolfi-base with python3 package)
 * **OpenJDK**: 17.x with Maven 3.9.8 (from wolfi-base with openjdk-17 package)
 * **Wolfi Base**: Latest minimal Linux distribution
-* **FIPS Base**: Custom OpenSSL 3.0.9 with FIPS validation ([beta](#beta-images))
+* **FIPS Base**: Custom OpenSSL 3.0.9 with FIPS 140-2 cryptographic validation ([beta](#beta-images))
 * **Nginx**: 1.29.x with headers-more module (custom build)
 
 ### Recommended Version Pinning
@@ -123,7 +123,7 @@ The beta images are tested within limited scope and are generally stable but not
 
 #### FIPS-enabled base image
 
-The image built from the [Dockerfile.fips-base](./Dockerfile.fips-base) includes FIPS-enabled OpenSSL and the Dockerfile shows an example of how to use it in the `Example Stage 2` section that should be modified to your workload's specific needs.
+The image built from the [Dockerfile.fips-base](./Dockerfile.fips-base) includes FIPS-140-2-enabled OpenSSL and the Dockerfile shows an example of how to use it in the `Example Stage 2` section that should be modified to your workload's specific needs.
 
 [More information on the FIPS image.](./FIPS.md)
 
