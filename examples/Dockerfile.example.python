@@ -1,0 +1,31 @@
+# Stage 1: Build environment
+# Use Aquia's python-base image for installing dependencies
+FROM ghcr.io/aquia-inc/python-base:latest AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements file
+COPY python-app/requirements.txt .
+
+# Install dependencies (if any)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY python-app/app.py .
+
+# Stage 2: Runtime environment
+# Use a minimal Python runtime image for production
+FROM cgr.dev/chainguard/python:latest
+
+# Set working directory
+WORKDIR /app
+
+# Copy installed dependencies and application from builder stage
+COPY --from=builder /app /app
+
+# Run as non-root user for security
+USER nonroot
+
+# Set the entrypoint to run the application
+ENTRYPOINT ["python3", "app.py"]
