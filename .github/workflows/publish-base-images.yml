@@ -155,7 +155,7 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@22438a435773de8c97dc0958cc0b823c45b064ac
+        uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284
         with:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
@@ -190,7 +190,7 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@22438a435773de8c97dc0958cc0b823c45b064ac
+        uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284
         with:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
