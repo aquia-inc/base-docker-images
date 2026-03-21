@@ -113,7 +113,7 @@ jobs:
 
       - name: Build Docker Image for ${{ matrix.platform }} (Test)
         id: build_test
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           pull: true
@@ -584,7 +584,7 @@ jobs:
 
       - name: Build and push Docker image for ${{ matrix.platform }}
         id: docker_build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         if: github.event_name == 'push' && github.ref_type == 'tag'
         with:
           pull: true
