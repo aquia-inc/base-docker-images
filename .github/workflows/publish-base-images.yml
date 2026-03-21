@@ -113,7 +113,7 @@ jobs:
 
       - name: Build Docker Image for ${{ matrix.platform }} (Test)
         id: build_test
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           pull: true
@@ -155,7 +155,7 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@22438a435773de8c97dc0958cc0b823c45b064ac
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
         with:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
@@ -190,7 +190,7 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@22438a435773de8c97dc0958cc0b823c45b064ac
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
         with:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
@@ -210,7 +210,7 @@ jobs:
           platform-suffix: ${{ steps.context.outputs.platform-suffix }}
 
       - name: Upload versions artifact for ${{ matrix.platform }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: steps.extract_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
         with:
           name: versions-file-${{ steps.context.outputs.platform-suffix }}
@@ -343,7 +343,7 @@ jobs:
           echo "has_version_tags=${{ steps.version_tags.outputs.has_version_tags }}" >> version_artifacts/version_tags.env
 
       - name: Upload version tags as artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
         with:
           name: version-tags-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
@@ -358,7 +358,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5.10.0
+        uses: docker/metadata-action@v6.0.0
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
           tags: |
@@ -584,7 +584,7 @@ jobs:
 
       - name: Build and push Docker image for ${{ matrix.platform }}
         id: docker_build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         if: github.event_name == 'push' && github.ref_type == 'tag'
         with:
           pull: true
@@ -665,7 +665,7 @@ jobs:
           echo "✅ SBOM validation passed"
 
       - name: Upload SBOM artifacts for ${{ matrix.platform }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.generate_sbom.outputs.sbom_spdx_file != ''
         with:
           name: >-
@@ -724,7 +724,7 @@ jobs:
           
       - name: Attest build provenance for ${{ matrix.platform }}
         id: attest_provenance
-        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
         with:
           # Create cryptographic attestation for build provenance
@@ -863,7 +863,7 @@ jobs:
           echo "provenance_file_path=$output_file" >> $GITHUB_OUTPUT
 
       - name: Upload provenance artifact for ${{ matrix.platform }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.extract_logindex.outputs.provenance_file_path != ''
         with:
           name: provenance-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
@@ -992,7 +992,7 @@ jobs:
           steps.parse_tag_release.outputs.image-base-name == 'openjdk17-base' ||
           steps.parse_tag_release.outputs.image-base-name == 'go-base'
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: versions-file-linux-amd64
           path: .
@@ -1005,7 +1005,7 @@ jobs:
           steps.parse_tag_release.outputs.image-base-name == 'openjdk17-base' ||
           steps.parse_tag_release.outputs.image-base-name == 'go-base'
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: versions-file-linux-arm64
           path: .
@@ -1013,7 +1013,7 @@ jobs:
       - name: Download AMD64 provenance artifact
         id: download_provenance_amd64
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: provenance-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-amd64
           path: .
@@ -1021,7 +1021,7 @@ jobs:
       - name: Download ARM64 provenance artifact
         id: download_provenance_arm64
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: >-
             provenance-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-arm64
@@ -1030,7 +1030,7 @@ jobs:
       - name: Download AMD64 SBOM artifact
         id: download_sbom_amd64
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: >-
             sbom-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-amd64
@@ -1039,7 +1039,7 @@ jobs:
       - name: Download ARM64 SBOM artifact
         id: download_sbom_arm64
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: >-
             sbom-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-arm64
@@ -1348,7 +1348,7 @@ jobs:
           fi
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
