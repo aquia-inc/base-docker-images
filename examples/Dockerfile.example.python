@@ -1,6 +1,6 @@
 # Stage 1: Build environment
 # Use Aquia's python-base image for installing dependencies
-FROM ghcr.io/aquia-inc/python-base:latest AS builder
+FROM ghcr.io/aquia-inc/python-base-linux-arm64:latest AS builder
 
 # Set working directory
 WORKDIR /app
