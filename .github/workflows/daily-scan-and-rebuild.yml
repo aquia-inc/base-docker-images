@@ -21,7 +21,7 @@ jobs:
       actions: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0 # Required to list tags
 
@@ -45,13 +45,12 @@ jobs:
 
       - name: Install Trivy scanner
         run: |
-          # Install Trivy for vulnerability scanning
+          # Install Trivy via pinned curl-based install (avoids compromised deb repo)
           sudo apt-get update
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release jq
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
-          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list > /dev/null
-          sudo apt-get update
-          sudo apt-get install -y trivy
+          sudo apt-get install -y jq
+          TRIVY_VERSION="0.69.3"
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin "v${TRIVY_VERSION}"
+          trivy --version
 
       - name: Scan images and determine rebuild requirements
         id: scan_check_rebuild
