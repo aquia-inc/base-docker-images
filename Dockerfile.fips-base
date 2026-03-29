@@ -1,6 +1,6 @@
 ### OPENSSL WITH FIPS BUILD ###
 # Using Wolfi-Alpine base image instead of Wolfi because it has better tooling for building OpenSSL
-FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:418aaec3ff109e29fed361104706b65653dd6094df05344cae39964bd8e268c4
+FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:c8ab723a6c35e6f4ccca2e2fb41cf2dde2e3b9833d124e1c7a7bc1f897de390f
 
 # Install openssl dependencies
 RUN set -e && \
