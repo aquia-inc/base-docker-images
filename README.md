@@ -11,7 +11,7 @@ This repository contains Dockerfiles and releases of hardened Aquia Base Docker 
 
 This repository is a work in progress, but the produced images are considered stable, unless otherwise noted below.
 
-These images are **rebult daily**.
+These images are **rebuilt daily**.
 
 **Ensure you are using the `--pull` flag in yoiur build scripts/CI/CD to pick up the latests CVE fixes.**
 
