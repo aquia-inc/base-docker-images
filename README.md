@@ -11,6 +11,10 @@ This repository contains Dockerfiles and releases of hardened Aquia Base Docker 
 
 This repository is a work in progress, but the produced images are considered stable, unless otherwise noted below.
 
+These images are **rebult daily**.
+
+**Ensure you are using the `--pull` flag in yoiur build scripts/CI/CD to pick up the latests CVE fixes.**
+
 ## Available Images
 
 [![FIPS Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/fips-base/*&label=fips-base&style=for-the-badge&logo=lock&color=red)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64) 
