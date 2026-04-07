@@ -5,7 +5,7 @@ commandTests:
   - name: "Go version check"
     command: "go"
     args: ["version"]
-    expectedOutput: ["go1.25"]
+    expectedOutput: ["go1.26"]
     
   - name: "User is nonroot"
     command: "whoami"
@@ -18,7 +18,7 @@ commandTests:
   - name: "Go environment variables"
     command: "go"
     args: ["env", "GOVERSION"]
-    expectedOutput: ["1.25"]
+    expectedOutput: ["1.26"]
 
 fileExistenceTests:
   - name: "Version file exists"
@@ -32,7 +32,7 @@ fileExistenceTests:
 fileContentTests:
   - name: "Version file contains Go version"
     path: "/tmp/versions.txt"
-    expectedContents: ["go=1.25."]
+    expectedContents: ["go=1.26."]
     
   - name: "Version file contains major tag"
     path: "/tmp/versions.txt" 
@@ -40,7 +40,7 @@ fileContentTests:
     
   - name: "Version file contains minor tag"
     path: "/tmp/versions.txt"
-    expectedContents: ["go_minor_tag=1.25"]
+    expectedContents: ["go_minor_tag=1.26"]
 
 metadataTest:
   user: "nonroot"
