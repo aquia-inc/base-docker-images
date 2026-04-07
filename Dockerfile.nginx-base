@@ -32,7 +32,7 @@ RUN ./configure --prefix=/usr/local/nginx \
     make -j$(($(nproc)/2)) install
 
 # Clean up
-RUN rm -rf nginx nginx.tar.gz extra_module extra_module.tar.gz
+RUN cd /usr/src && rm -rf nginx nginx.tar.gz extra_module extra_module.tar.gz
 
 # Switch back to non-root user
 USER nginx
@@ -48,7 +48,7 @@ COPY --from=builder /usr/local/nginx/modules/*.so /var/lib/nginx/modules/
 
 # Health Check
 HEALTHCHECK --interval=30s --timeout=3s \
-# CMD curl -f http://localhost/ || exit 1
+# Alternative health check (not used): curl -f http://localhost/ || exit 1
 CMD nginx -t || exit 1
 
 # Set the user for subsequent commands

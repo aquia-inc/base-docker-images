@@ -22,8 +22,6 @@ RUN apk add --no-cache \
         ca-certificates && \
     mkdir -p /home/nonroot/.m2 && \
     chown -R nonroot:nonroot /home/nonroot 
-    # && \
-    # rm -rf /var/cache/apk/*
 
 # Set standard environment variables
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk 
