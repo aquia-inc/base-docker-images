@@ -1,16 +1,14 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:5743937d521cbeb9e8c73bf1bd7ba2589c178940eb03d7b148efecc962be8587 AS builder
 
-# pip CVE workaround: temp PyPI pip 26.1+ in user dir; restore "py3-pip" when Wolfi bumps
-RUN apk update && apk add --no-cache --upgrade python3
+RUN apk update && apk add --no-cache --upgrade python3 py3-pip
 
 # local install to /home/nonroot/.local/bin
 USER nonroot
 ENV POETRY_HOME=/home/nonroot \
-    PATH=/home/nonroot/.local/bin:$PATH \
+    PATH=$PATH:/home/nonroot/.local/bin \
     PYTHONPATH=/home/nonroot/.local/lib/python3/site-packages
 
-RUN python3 -m ensurepip --user --upgrade && \
-    python3 -m pip install --no-cache-dir --upgrade --user -v 'pip>=26.1' poetry cryptography virtualenv
+RUN python3 -m pip install --no-cache-dir --upgrade --user -v poetry cryptography virtualenv
 
 # Poetry sets default max workers to num of cpu-cores + 4, but pip max connection pool
 # is set at 10 and will discard any above that when installing dependencies
@@ -30,9 +28,7 @@ echo "pip=$(pip3 --version 2>&1 | awk -F' ' '{print $2}' | tr -d '\n')" >> /tmp/
 echo "poetry=$(poetry --version 2>&1 | awk -F 'version |\\)' '{print $2}' | sed 's/)$//')" >> /tmp/versions.txt
 
 USER root
-# pip CVE workaround: drop py3-pip-wheel artifacts (transitive dep) so Trivy reads only user-local pip 26.1+
-RUN apk del libcurl-openssl4 curl && \
-    rm -f /usr/share/python-wheels/pip-*.whl /var/lib/db/sbom/py3-pip-wheel-*.spdx.json
+RUN apk del libcurl-openssl4 curl
 
 USER nonroot
 RUN python3 --version
