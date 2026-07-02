@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/go:latest@sha256:3cea88773e65f24c4db570d96b97a65fb8f3c145f656a4396e23d9be6f34cddd
+FROM cgr.dev/chainguard/go:latest@sha256:4c184878fa51edc72f3f32ee56c3dece863b8bc422d2c16a65a62df9708809c4
 
 # Trigger workflow with version extraction fix
 USER nonroot
