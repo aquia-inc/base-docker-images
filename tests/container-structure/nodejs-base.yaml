@@ -10,7 +10,7 @@ commandTests:
   - name: "NPM is available"
     command: "npm"
     args: ["--version"]
-    expectedOutput: ["11."]
+    expectedOutput: ["12."]
     
   - name: "User is nobody"
     command: "id"
