@@ -36,7 +36,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0  # Need full history for git diff comparisons
 
@@ -113,13 +113,15 @@ jobs:
 
       - name: Build Docker Image for ${{ matrix.platform }} (Test)
         id: build_test
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           pull: true
           file: Dockerfile.${{ steps.context.outputs.image-base-name }}
           platforms: ${{ matrix.platform }}
           load: true
+          build-args: |
+            CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }}
           tags: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
@@ -358,7 +360,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
           tags: |
@@ -584,13 +586,15 @@ jobs:
 
       - name: Build and push Docker image for ${{ matrix.platform }}
         id: docker_build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         if: github.event_name == 'push' && github.ref_type == 'tag'
         with:
           pull: true
           file: Dockerfile.${{ steps.context.outputs.image-base-name }}
           push: true
           platforms: ${{ matrix.platform }}
+          build-args: |
+            CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
@@ -724,7 +728,7 @@ jobs:
           
       - name: Attest build provenance for ${{ matrix.platform }}
         id: attest_provenance
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
         with:
           # Create cryptographic attestation for build provenance
@@ -975,7 +979,7 @@ jobs:
       actions: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Parse tag for release info
         id: parse_tag_release
@@ -1330,7 +1334,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Parse tag information
         id: parse_tag
@@ -1348,7 +1352,7 @@ jobs:
           fi
 
       - name: Log in to Container Registry
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}

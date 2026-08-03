@@ -1,6 +1,8 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:02dab76bd852a70556b5b2002195c8a5fdab77d323c433bf6642aab080489795 AS builder
 
-RUN apk update && apk add --no-cache --upgrade python3 py3-pip
+# CACHEBUST busts the apk layer cache each run so daily rebuilds pick up package updates
+ARG CACHEBUST=unset
+RUN echo "cachebust=${CACHEBUST}" && apk update && apk add --no-cache --upgrade python3 py3-pip
 
 # local install to /home/nonroot/.local/bin
 USER nonroot
