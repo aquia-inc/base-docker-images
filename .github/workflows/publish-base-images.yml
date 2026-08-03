@@ -120,6 +120,8 @@ jobs:
           file: Dockerfile.${{ steps.context.outputs.image-base-name }}
           platforms: ${{ matrix.platform }}
           load: true
+          build-args: |
+            CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }}
           tags: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
@@ -591,6 +593,8 @@ jobs:
           file: Dockerfile.${{ steps.context.outputs.image-base-name }}
           push: true
           platforms: ${{ matrix.platform }}
+          build-args: |
+            CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
