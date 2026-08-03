@@ -4,9 +4,11 @@ FROM cgr.dev/chainguard/wolfi-base:latest@sha256:02dab76bd852a70556b5b2002195c8a
 ARG MAVEN_VERSION='maven~=3.9'
 ARG OPENJDK_PACKAGE=openjdk-17
 
+# CACHEBUST busts the apk layer cache each run so daily rebuilds pick up package updates
+ARG CACHEBUST=unset
 # Install necessary packages, common build tools, create non-root user, and perform cleanup
 # --upgrade ensures latest packages for security (including dependencies)
-RUN apk add --no-cache \
+RUN echo "cachebust=${CACHEBUST}" && apk add --no-cache \
         # Core Java/Maven stack
         ${OPENJDK_PACKAGE} \
         ${MAVEN_VERSION} \

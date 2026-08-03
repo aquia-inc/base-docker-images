@@ -1,8 +1,10 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:02dab76bd852a70556b5b2002195c8a5fdab77d323c433bf6642aab080489795 AS builder
 
 ARG NODE_VERSION='nodejs~=24'
+# CACHEBUST busts the apk layer cache each run so daily rebuilds pick up package updates
+ARG CACHEBUST=unset
 # Install Node.js, npm and Yarn
-RUN apk add --no-cache ${NODE_VERSION} yarn npm
+RUN echo "cachebust=${CACHEBUST}" && apk add --no-cache ${NODE_VERSION} yarn npm
 
 # Extract Node.js version and save to file
 SHELL ["/bin/ash", "-o", "pipefail", "-c"]
