@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:003627df3c1e1bba0c4116afcddb314aca9594ee2328c7e876a8081a6c988b2e
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:c0534ee75e0a6bc74bdfef07155049ec435b9e03a706d3545be3130d1a7cd00f
 
 # Define versions as arguments for easier updates and clarity
 ARG MAVEN_VERSION='maven~=3.9'
