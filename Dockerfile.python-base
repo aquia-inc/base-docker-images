@@ -2,7 +2,15 @@ FROM cgr.dev/chainguard/wolfi-base:latest@sha256:96ff486b326d15db16aa1fbd41a1704
 
 # CACHEBUST busts the apk layer cache each run so daily rebuilds pick up package updates
 ARG CACHEBUST=unset
-RUN echo "cachebust=${CACHEBUST}" && apk update && apk add --no-cache --upgrade python3 py3-pip
+# The base image records exact "pkg=version" constraints in /etc/apk/world, which makes a
+# plain "apk upgrade" a no-op for those packages: the solver honours the pin and leaves them
+# behind. Relaxing the exact pins to bare names first lets security updates actually apply.
+# The "=[0-9]" anchor deliberately leaves fuzzy "=~" pins alone. pip is bootstrapped from the
+# retained ensurepip wheel (py3-pip-wheel) into the user dir, so no system pip/_vendor ships.
+RUN echo "cachebust=${CACHEBUST}" && \
+    sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
+    apk update && apk upgrade --no-cache && \
+    apk add --no-cache --upgrade python3 py3-pip-wheel
 
 # local install to /home/nonroot/.local/bin
 USER nonroot
@@ -10,7 +18,14 @@ ENV POETRY_HOME=/home/nonroot \
     PATH=$PATH:/home/nonroot/.local/bin \
     PYTHONPATH=/home/nonroot/.local/lib/python3/site-packages
 
-RUN python3 -m pip install --no-cache-dir --upgrade --user -v poetry cryptography virtualenv
+RUN python3 -m ensurepip --user --upgrade && \
+    python3 -m pip install --no-cache-dir --upgrade --user -v pip poetry cryptography virtualenv
+
+# Raise pip's own bundled dependencies to their fixed versions:
+# msgpack 1.1.2 -> 1.2.1 (GHSA-6v7p-g79w-8964) and pkg_resources removed
+# (CVE-2025-47273, CVE-2026-59890 - setuptools dropped it in 82.0.0).
+COPY --chown=nonroot:nonroot scripts/harden-pip-vendor.py /tmp/harden-pip-vendor.py
+RUN python3 /tmp/harden-pip-vendor.py && rm -f /tmp/harden-pip-vendor.py
 
 # Poetry sets default max workers to num of cpu-cores + 4, but pip max connection pool
 # is set at 10 and will discard any above that when installing dependencies

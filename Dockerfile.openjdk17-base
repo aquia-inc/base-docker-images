@@ -7,8 +7,14 @@ ARG OPENJDK_PACKAGE=openjdk-17
 # CACHEBUST busts the apk layer cache each run so daily rebuilds pick up package updates
 ARG CACHEBUST=unset
 # Install necessary packages, common build tools, create non-root user, and perform cleanup
-# --upgrade ensures latest packages for security (including dependencies)
-RUN echo "cachebust=${CACHEBUST}" && apk add --no-cache \
+# --upgrade ensures latest packages for security (including dependencies).
+# Relax the exact "pkg=version" pins in /etc/apk/world first so "apk upgrade"
+# actually applies security updates (the solver otherwise honours the pin and
+# no-ops). The "=[0-9]" anchor leaves fuzzy "=~" pins (e.g. maven=~3.9) alone.
+RUN echo "cachebust=${CACHEBUST}" && \
+    sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
+    apk update && apk upgrade --no-cache && \
+    apk add --no-cache \
         # Core Java/Maven stack
         ${OPENJDK_PACKAGE} \
         ${MAVEN_VERSION} \
