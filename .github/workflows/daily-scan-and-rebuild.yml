@@ -154,6 +154,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # RELEASE_PAT is required: tags pushed with the default GITHUB_TOKEN do NOT
+          # trigger the downstream publish-base-images workflow, so a rebuild tag pushed
+          # with GITHUB_TOKEN would be a silent no-op. A PAT does trigger it.
+          if [ -z "${RELEASE_PAT}" ]; then
+            echo "::error::RELEASE_PAT secret is not set; rebuild tags cannot trigger publish."
+            exit 1
+          fi
+
           for base_name in $unique_needs_rebuild; do
             echo "Creating rebuild tag for $base_name..."
 
@@ -189,8 +197,8 @@ jobs:
 
             echo "Creating and pushing rebuild tag: $new_tag"
             git tag "$new_tag"
-            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GH_REPO}.git" "$new_tag"
+            git push "https://x-access-token:${RELEASE_PAT}@github.com/${GH_REPO}.git" "$new_tag"
             echo "[ok] Rebuild triggered for $base_name by pushing tag $new_tag"
           done
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
