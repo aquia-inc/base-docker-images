@@ -1,10 +1,13 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:96ff486b326d15db16aa1fbd41a17043a557bebf76d2c0ac932e717534025940
 
-# if you need a quicker turnaround, you can patch the image like the below,
-# before the automated image build picks up the new CVE fixes (24-48 hours, usually)
-
-# USER root
-# RUN apk update && \
-# apk add --upgrade --no-cache libssl3 libcrypto3
+# CACHEBUST busts the apk layer cache each run so daily rebuilds pick up package updates
+ARG CACHEBUST=unset
+# Patch ahead of upstream: relax the exact "pkg=version" pins in /etc/apk/world so
+# "apk upgrade" actually applies security updates (the solver otherwise honours the
+# pin and no-ops). The "=[0-9]" anchor leaves fuzzy "=~" pins alone.
+USER root
+RUN echo "cachebust=${CACHEBUST}" && \
+    sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
+    apk update && apk upgrade --no-cache
 
 USER nonroot

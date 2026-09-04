@@ -4,7 +4,13 @@ ARG NODE_VERSION='nodejs~=24'
 # CACHEBUST busts the apk layer cache each run so daily rebuilds pick up package updates
 ARG CACHEBUST=unset
 # Install Node.js, npm and Yarn
-RUN echo "cachebust=${CACHEBUST}" && apk add --no-cache ${NODE_VERSION} yarn npm
+# Relax the exact "pkg=version" pins in /etc/apk/world so "apk upgrade" actually
+# applies security updates (the solver otherwise honours the pin and no-ops). The
+# "=[0-9]" anchor leaves fuzzy "=~" pins (e.g. nodejs=~24) alone.
+RUN echo "cachebust=${CACHEBUST}" && \
+    sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
+    apk update && apk upgrade --no-cache && \
+    apk add --no-cache ${NODE_VERSION} yarn npm
 
 # Extract Node.js version and save to file
 SHELL ["/bin/ash", "-o", "pipefail", "-c"]
