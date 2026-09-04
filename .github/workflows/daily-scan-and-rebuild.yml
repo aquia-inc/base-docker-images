@@ -24,6 +24,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0 # Required to list tags
+          persist-credentials: false # token supplied explicitly on push below
 
       - name: Discover available base images
         id: discover_images
@@ -188,7 +189,7 @@ jobs:
 
             echo "Creating and pushing rebuild tag: $new_tag"
             git tag "$new_tag"
-            git push origin "$new_tag"
+            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GH_REPO}.git" "$new_tag"
             echo "[ok] Rebuild triggered for $base_name by pushing tag $new_tag"
           done
         env:
