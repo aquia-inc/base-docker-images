@@ -10,10 +10,10 @@ inputs:
   fallback-image:
     description: 'Fallback image name for non-release builds'
     required: false
-    # Generic sentinel rather than a real image name: if the fallback is ever
-    # reached, the resulting image name is obviously invalid and fails loudly,
-    # instead of silently mislabelling (e.g. a nodejs build) as 'python-base'.
-    default: '__UNDEFINED__'
+    # Must be a valid lowercase image name: non-Dockerfile PR builds reach this
+    # fallback and build a throwaway ':test' image with it, so an invalid ref
+    # (e.g. a sentinel with underscores/uppercase) would fail the build.
+    default: 'python-base'
 outputs:
   image-base-name:
     description: 'Base image name (e.g., python-base)'
