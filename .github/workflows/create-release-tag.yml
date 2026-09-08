@@ -39,7 +39,7 @@ jobs:
               echo -n "${filename#Dockerfile.} "; done)
 
             # create JSON array for matrix (e.g., ["nodejs-base", "wolfi-base"])
-            image_array=($images)
+            read -ra image_array <<< "$images"
             output_string="["
             for item in "${image_array[@]}"; do
               output_string+="\"$item\", "
@@ -118,6 +118,8 @@ jobs:
         env:
           RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
           GH_REPO: ${{ github.repository }}
+          IMAGE_NAME: ${{ matrix.image_name }}
+          NEXT_PATCH: ${{ steps.next_version.outputs.patch }}
         run: |
           # RELEASE_PAT is required: tags pushed with the default GITHUB_TOKEN do NOT
           # trigger the downstream publish-base-images workflow. A PAT does.
@@ -131,8 +133,8 @@ jobs:
           git config user.name "Aquia Base Images Bot"
 
           # Create new tag with next patch version
-          new_tag="release/${{ matrix.image_name }}/v${{ steps.next_version.outputs.patch }}"
-          tag_message="Release ${{ matrix.image_name }}/v${{ steps.next_version.outputs.patch }}"
+          new_tag="release/${IMAGE_NAME}/v${NEXT_PATCH}"
+          tag_message="Release ${IMAGE_NAME}/v${NEXT_PATCH}"
 
           echo "Creating tag: $new_tag"
           echo "Tag message: $tag_message"

@@ -10,6 +10,9 @@ inputs:
   fallback-image:
     description: 'Fallback image name for non-release builds'
     required: false
+    # Must be a valid lowercase image name: non-Dockerfile PR builds reach this
+    # fallback and build a throwaway ':test' image with it, so an invalid ref
+    # (e.g. a sentinel with underscores/uppercase) would fail the build.
     default: 'python-base'
 outputs:
   image-base-name:
@@ -37,16 +40,20 @@ runs:
     - name: Parse tag and construct image context
       id: parse
       shell: bash
+      env:
+        INPUT_TAG: ${{ inputs.tag }}
+        INPUT_PLATFORM: ${{ inputs.platform }}
+        INPUT_FALLBACK_IMAGE: ${{ inputs.fallback-image }}
       run: |
-        tag_to_parse="${{ inputs.tag }}"
-        platform="${{ inputs.platform }}"
+        tag_to_parse="$INPUT_TAG"
+        platform="$INPUT_PLATFORM"
         
         echo "Input TAG: $tag_to_parse"
         echo "Input PLATFORM: $platform"
         
         # Sanitize platform name for use in image names
         platform_suffix=$(echo "$platform" | tr '/' '-')
-        echo "platform_suffix=$platform_suffix" >> $GITHUB_OUTPUT
+        echo "platform_suffix=$platform_suffix" >> "$GITHUB_OUTPUT"
         
         # Strip refs/tags/ prefix if present
         tag_clean=$(echo "$tag_to_parse" | sed 's|^refs/tags/||')
@@ -60,26 +67,26 @@ runs:
             version_no_build=$(echo "$version" | sed 's/\+.*//')
             is_release_tag="true"
             
-            echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
-            echo "version=$version" >> $GITHUB_OUTPUT
-            echo "version_no_build=$version_no_build" >> $GITHUB_OUTPUT
-            echo "is_release_tag=$is_release_tag" >> $GITHUB_OUTPUT
+            echo "image_base_name=$image_base_name" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "version_no_build=$version_no_build" >> "$GITHUB_OUTPUT"
+            echo "is_release_tag=$is_release_tag" >> "$GITHUB_OUTPUT"
             echo "Parsed: image_base_name=$image_base_name, version=$version"
         else
             # Not a release tag - use fallback
             echo "Not a release tag build. Using fallback values."
-            image_base_name="${{ inputs.fallback-image }}"
+            image_base_name="$INPUT_FALLBACK_IMAGE"
             version="dev"
             is_release_tag="false"
             
-            echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
-            echo "version=$version" >> $GITHUB_OUTPUT
-            echo "version_no_build=$version" >> $GITHUB_OUTPUT
-            echo "is_release_tag=$is_release_tag" >> $GITHUB_OUTPUT
+            echo "image_base_name=$image_base_name" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "version_no_build=$version" >> "$GITHUB_OUTPUT"
+            echo "is_release_tag=$is_release_tag" >> "$GITHUB_OUTPUT"
             echo "Using fallback: image_base_name=$image_base_name, version=$version"
         fi
         
         # Construct full platform-specific image name
         image_name="${image_base_name}-${platform_suffix}"
-        echo "image_name=$image_name" >> $GITHUB_OUTPUT
+        echo "image_name=$image_name" >> "$GITHUB_OUTPUT"
         echo "Constructed image name: $image_name"

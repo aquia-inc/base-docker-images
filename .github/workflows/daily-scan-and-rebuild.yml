@@ -38,7 +38,7 @@ jobs:
           echo "IMAGE_BASE_NAMES=$BASE_NAMES" >> "$GITHUB_ENV"
 
       - name: Setup Docker environment
-        uses: ./.github/actions/setup-docker
+        uses: $/.github/actions/setup-docker
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
