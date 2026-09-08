@@ -72,18 +72,37 @@ jobs:
 
       - name: Check if Dockerfile changed for this image
         id: dockerfile_check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          IMAGE_BASE_NAME: ${{ steps.context.outputs.image-base-name }}
+          PR_DOCKERFILE_FOUND: ${{ steps.detect_image.outputs.dockerfile_found }}
         run: |
-          # For non-tag pushes, always proceed
-          if [[ "${{ github.event_name }}" != "push" || "${{ github.ref_type }}" != "tag" ]]; then
-            echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
+          # Pull requests: build only when the PR actually changed a Dockerfile
+          # (detect_image sets this). dockerfile_changed is the authoritative build
+          # gate - the expensive build/test/scan steps below are conditioned on it,
+          # so a PR that changed no Dockerfile no-ops instead of building a fallback.
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            if [[ "$PR_DOCKERFILE_FOUND" == "true" ]]; then
+              echo "dockerfile_changed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "dockerfile_changed=false" >> "$GITHUB_OUTPUT"
+              echo "PR changed no Dockerfile; skipping build for this image"
+            fi
+            exit 0
+          fi
+
+          # Non-tag pushes (manual/branch dispatch): proceed
+          if [[ "$REF_TYPE" != "tag" ]]; then
+            echo "dockerfile_changed=true" >> "$GITHUB_OUTPUT"
             echo "Not a tag push, proceeding with build"
             exit 0
           fi
 
-          dockerfile_path="Dockerfile.${{ steps.context.outputs.image-base-name }}"
+          dockerfile_path="Dockerfile.${IMAGE_BASE_NAME}"
           echo "Checking if $dockerfile_path was modified..."
           # Get the previous tag for this image
-          prev_tag=$(git tag -l "release/${{ steps.context.outputs.image-base-name }}/v*" --sort=-version:refname | head -n 2 | tail -n 1)
+          prev_tag=$(git tag -l "release/${IMAGE_BASE_NAME}/v*" --sort=-version:refname | head -n 2 | tail -n 1)
           if [ -n "$prev_tag" ]; then
             echo "Comparing with previous tag: $prev_tag"
             if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$"; then
@@ -105,6 +124,7 @@ jobs:
           exit 0
 
       - name: Setup Docker environment
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         uses: $/.github/actions/setup-docker
         with:
           registry: ${{ env.REGISTRY }}
@@ -113,6 +133,7 @@ jobs:
           platform: ${{ matrix.platform }}
 
       - name: Build Docker Image for ${{ matrix.platform }} (Test)
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         id: build_test
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
@@ -128,6 +149,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
 
       - name: Output Docker Image Size for ${{ matrix.platform }}
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         run: |
           image_tag="${{ github.repository }}/${{ steps.context.outputs.image-name }}:test"
           echo "Getting size for image: $image_tag"
@@ -135,12 +157,14 @@ jobs:
           echo "Docker image size for ${{ matrix.platform }}: $size"
 
       - name: Setup container structure tests
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         run: |
           curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
           chmod +x container-structure-test-linux-amd64
           sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
 
       - name: Run Container Structure Tests for ${{ matrix.platform }}
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         run: |
           image_base_name="${{ steps.context.outputs.image-base-name }}"
           test_config="tests/container-structure/${image_base_name}.yaml"
@@ -157,6 +181,7 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
         with:
           scan-type: image
@@ -170,6 +195,7 @@ jobs:
 
 
       - name: Run container structure tests for ${{ matrix.platform }}
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         id: run_tests
         run: |
           # Download container-structure-test if not available
@@ -192,6 +218,7 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
         with:
           scan-type: image
@@ -203,6 +230,7 @@ jobs:
           severity: "CRITICAL,HIGH,MEDIUM"
 
       - name: Extract language versions
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         id: extract_versions
         uses: $/.github/actions/extract-versions
         with:
@@ -221,6 +249,7 @@ jobs:
           if-no-files-found: error
 
       - name: Calculate version tags for all image types
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         id: version_tags
         run: |
           image_name="${{ steps.context.outputs.image-base-name }}"
@@ -235,7 +264,7 @@ jobs:
           
           case "$image_name" in
             # Language images - extract runtime versions from /tmp/versions.txt
-            "python-base"|"nodejs-base"|"openjdk17-base"|"go-base")
+            "python-base"|"nodejs-base"|"openjdk17-base"|"go-base"|"go-base-1.27")
               echo "Language image detected, extracting runtime versions..."
               
               if docker run --rm --platform ${{ matrix.platform }} \
@@ -259,7 +288,7 @@ jobs:
                     MAJOR_TAG=$(grep "java_major_tag=" versions.txt | cut -d'=' -f2)
                     MINOR_TAG=$(grep "java_minor_tag=" versions.txt | cut -d'=' -f2)
                     ;;
-                  "go-base")
+                  "go-base"|"go-base-1.27")
                     MAJOR_TAG=$(grep "go_major_tag=" versions.txt | cut -d'=' -f2)
                     MINOR_TAG=$(grep "go_minor_tag=" versions.txt | cut -d'=' -f2)
                     ;;
@@ -1162,13 +1191,15 @@ jobs:
 
       - name: Parse tag information
         id: parse_tag
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          tag="${{ github.ref_name }}"
+          tag="$REF_NAME"
           if [[ $tag =~ ^release/([^/]+)/(v.+)$ ]]; then
             image_base_name="${BASH_REMATCH[1]}"
             version="${BASH_REMATCH[2]}"
-            echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
-            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "image_base_name=$image_base_name" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
             echo "Parsed: image=$image_base_name, version=$version"
           else
             echo "Invalid tag format: $tag"
@@ -1341,7 +1372,7 @@ jobs:
   auto_approve_renovate:
     runs-on: ubuntu-latest
     needs: [publish_image]
-    if: github.event_name == 'pull_request' && github.actor == 'renovate[bot]'
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'renovate[bot]'
     permissions:
       pull-requests: write
     steps:

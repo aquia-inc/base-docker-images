@@ -73,7 +73,7 @@ jobs:
 
             for platform_suffix in linux-amd64 linux-arm64; do
               image_name="${base_name}-${platform_suffix}"
-              full_image_tag="${{ env.REGISTRY }}/${{ env.GH_REPO }}/${image_name}:latest"
+              full_image_tag="${REGISTRY}/${GH_REPO}/${image_name}:latest"
 
               echo "Checking image: $full_image_tag"
 
