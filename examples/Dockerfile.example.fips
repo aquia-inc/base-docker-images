@@ -1,0 +1,72 @@
+# Example: Using the FIPS 140-3 Base Image
+#
+# This demonstrates building an application on the FIPS base image, which ships
+# the CMVP-validated OpenSSL FIPS Provider 3.1.2 (certificate #4985) already
+# active in approved mode.
+#
+# The important property: you do not configure anything. OPENSSL_CONF and
+# OPENSSL_MODULES are exported by the base image, so every process in a derived
+# image inherits approved mode automatically. That includes application
+# runtimes, not just the openssl CLI - Python's hashlib.md5() raises
+# UnsupportedDigestmodError here, while hashlib.sha256() works normally.
+#
+# Read ../FIPS.md before making compliance claims about an image built this
+# way. In short: this is built from CMVP-validated source per the Security
+# Policy and is user-affirmed for this operating environment, but it is NOT
+# "FIPS 140-3 validated on Wolfi" - no such validation entry exists.
+#
+# NOTE: Replace :latest with a current version tag from
+# https://github.com/aquia-inc/base-docker-images/releases
+FROM ghcr.io/aquia-inc/base-docker-images/fips-140-3:latest
+
+USER root
+
+# Without pipefail a pipeline reports only the exit status of its last command,
+# which would let a failing step upstream of a pipe pass unnoticed.
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
+
+# Install whatever your workload needs. Packages come from Wolfi and are
+# outside the FIPS module boundary, so they are patched independently of the
+# validated Module.
+RUN apk add --no-cache python-3.13
+
+USER nonroot
+WORKDIR /app
+
+# Show what the base image provides. /tmp/versions.txt records the validated
+# Module version, its certificate, its SHA-256 and the certificate sunset date.
+RUN echo "=== FIPS 140-3 Base Image ===" && \
+    cat /tmp/versions.txt
+
+# Prove approved mode is active before the application is allowed to run.
+#
+# Treat this as a template for your own startup assertion. A FIPS module that
+# is installed but not enforcing is silent under almost every other check, so
+# asserting that a NON-approved algorithm fails is the test that actually
+# distinguishes the two.
+RUN set -eu; \
+    echo "=== FIPS verification ==="; \
+    openssl list -providers | grep -A3 '^  fips$'; \
+    echo "-- approved algorithm (SHA-256) must work:"; \
+    echo fips-check | openssl dgst -sha256; \
+    echo "-- non-approved algorithm (MD5) must be refused:"; \
+    if echo fips-check | openssl dgst -md5 >/dev/null 2>&1; then \
+        echo "FAIL: MD5 succeeded, this image is not enforcing approved mode"; \
+        exit 1; \
+    fi; \
+    echo "OK: MD5 refused, approved mode is enforced"; \
+    echo "-- enforcement reaches the application runtime, not just the CLI:"; \
+    python3 -c "import hashlib; print('   sha256 ok:', hashlib.sha256(b'x').hexdigest()[:16])"; \
+    if python3 -c "import hashlib; hashlib.md5(b'x')" >/dev/null 2>&1; then \
+        echo "FAIL: hashlib.md5 succeeded, approved mode is not reaching Python"; \
+        exit 1; \
+    fi; \
+    echo "   md5 correctly refused by hashlib"
+
+COPY --chown=nonroot:nonroot fips-app/ ./
+
+# Run as nonroot for security. The base image already defaults to nonroot;
+# this is stated explicitly so it survives any future edit above.
+USER nonroot
+
+ENTRYPOINT ["python3", "/app/main.py"]

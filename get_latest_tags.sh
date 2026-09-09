@@ -21,7 +21,7 @@ echo "=============================================="
 git fetch origin --tags >/dev/null 2>&1
 
 # Get latest tag for each image type and calculate new version
-for image in fips-base go-base nginx-base nodejs-base python-base wolfi-base openjdk17-base; do
+for image in fips-base fips-140-3 go-base nginx-base nodejs-base python-base wolfi-base openjdk17-base; do
   latest=$(git tag -l "release/$image/v*" | sort -V | tail -1)
   if [ -n "$latest" ]; then
     new_version=$(increment_version "$latest")

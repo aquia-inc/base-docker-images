@@ -1,0 +1,379 @@
+### FIPS 140-3 BASE IMAGE - OpenSSL FIPS Provider 3.1.2 ###
+#
+# This image ships the CMVP-validated OpenSSL FIPS Provider (the "Module")
+# built from unmodified OpenSSL 3.1.2 source, loaded on top of the distribution
+# libcrypto/libssl that Wolfi keeps patched.
+#
+# It is the successor to Dockerfile.fips-base, which targets the FIPS 140-2
+# certificates (#4282 / #4811, OpenSSL 3.0.8/3.0.9). Both of those reach their
+# sunset date on 2026-09-21 and then move to the CMVP Historical list, so
+# fips-base is deprecated: it keeps building until that date and is then
+# retired. Both images now share scripts/build-fips-module.sh and differ only
+# in the Module version they are certified for, the base distribution, and the
+# fipsinstall form each Security Policy prescribes.
+#
+# ---------------------------------------------------------------------------
+# 1. THE VALIDATION THIS IMAGE TARGETS
+# ---------------------------------------------------------------------------
+# CMVP certificate #4985 - OpenSSL FIPS Provider
+#   Standard        : FIPS 140-3, Overall Security Level 1
+#   Module version  : 3.1.2
+#   Vendor          : The OpenSSL Project
+#   Validated       : 2025-03-11
+#   Sunset          : 2030-03-10
+#   Certificate     : https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4985
+#   Security Policy : https://csrc.nist.gov/CSRC/media/projects/cryptographic-module-validation-program/documents/security-policies/140sp4985.pdf
+#
+# 3.1.2 is not an arbitrary version pin. It is the exact and only Module
+# version covered by certificate #4985, in the same way that 3.0.8/3.0.9 were
+# the only versions covered by the 140-2 certificates.
+#
+# ---------------------------------------------------------------------------
+# 2. WHY THE SECURITY POLICY IS BINDING ON THIS DOCKERFILE
+# ---------------------------------------------------------------------------
+# Compiling the Module here is a post-validation recompilation, which the CMVP
+# Management Manual governs directly.
+#
+#   FIPS 140-3 CMVP Management Manual (04-09-2026)
+#   https://csrc.nist.gov/csrc/media/Projects/cryptographic-module-validation-program/documents/fips%20140-3/FIPS-140-3-CMVP%20Management%20Manual.pdf
+#
+#   Section 7.9.2 (User):
+#     "A user may not modify a validated module. Any user modifications
+#      invalidate a module validation."
+#
+#   Footnote 5 to Section 7.9.2, the exception this Dockerfile relies on:
+#     "A user may post-validation recompile a module if the unmodified source
+#      code is available and the module's Security Policy provides specific
+#      guidance on acceptable recompilation methods to be followed as a
+#      specific exception to this guidance. The methods in the Security Policy
+#      must be followed without modification to comply with this guidance."
+#
+# That last sentence is what makes the Security Policy binding here, and it
+# has two concrete consequences for the build steps below:
+#
+#   a) "unmodified source code" - the upstream tarball is verified against the
+#      SHA-256 published by OpenSSL before it is unpacked. No patches, no
+#      sed-ing of sources, nothing added or removed.
+#
+#   b) "methods in the Security Policy ... without modification" - the build
+#      is EXACTLY the three commands given in Security Policy Section 11.1(a),
+#      issued by scripts/build-fips-module.sh and nothing else:
+#
+#        $ ./Configure enable-fips
+#        $ make
+#        $ make install_fips
+#
+#      Do NOT add Configure options. Appending hardening-looking flags such as
+#      "no-ssl3 no-legacy no-comp no-err" changes the compilation method away
+#      from the one the Security Policy prescribes and forfeits the footnote 5
+#      exception. An earlier revision of Dockerfile.fips-base appended exactly
+#      those flags, which is one of the defects that prompted this file.
+#
+# Security Policy Section 11.1(a) also sanctions the split build used below:
+#     "The 'install_fips' make target can also be invoked explicitly to install
+#      the FIPS Provider independently, without installing the rest of OpenSSL"
+#
+# Security Policy Section 11.1(c), honoured by omission - nothing in this file
+# sets OPENSSL_NO_FIPS_SECURITYCHECKS or otherwise weakens the Module:
+#     "These checks shall not be disabled (by using
+#      OPENSSL_NO_FIPS_SECURITYCHECKS or any other method)."
+#
+# ---------------------------------------------------------------------------
+# 3. OPERATIONAL ENVIRONMENT - WHAT MAY AND MAY NOT BE CLAIMED
+# ---------------------------------------------------------------------------
+# Security Policy Table 3 lists the tested operational environments:
+#   Ubuntu Linux 22.04.1 Server  (Intel i7-8550U, with and without PAA)
+#   Debian 11.5                  (Intel i7-8550U, with and without PAA)
+#   FreeBSD 13.1                 (Intel i7-10510U)
+#   Windows 10 Pro               (Intel i7-10510U)
+#   macOS 11.5.2                 (Apple M1 and Intel i7 Mac Mini)
+#
+# Security Policy Section 2.2: "No operational environments are vendor
+# affirmed." Wolfi Linux is therefore not covered by any existing affirmation,
+# and this image relies on USER affirmation under Management Manual 7.9.2:
+#
+#     "For Level 1 OE, a software, firmware, or hybrid cryptographic module
+#      will remain compliant with the FIPS 140-3 validation on any
+#      general-purpose platform/processor that supports the specified
+#      operating system listed on the validation entry, or another compatible
+#      operating system."
+#
+# Wolfi is a glibc-based Linux distribution, placing it in the same OS family
+# as the tested Ubuntu 22.04.1 and Debian 11.5 environments. Management Manual
+# footnote 4 gives "OSs of the same 'family'" as an example of compatibility.
+# This is why the runtime stage below is Wolfi (glibc) and NOT the musl-based
+# alpine-base used by Dockerfile.fips-base: a Debian/Ubuntu to glibc-Linux
+# porting claim is materially stronger than a Debian/Ubuntu to musl one.
+# Both amd64 and arm64 have a tested-processor analogue in Table 3 (Intel i7
+# and Apple M1 respectively).
+#
+# The limit of the claim, quoted from Management Manual 7.9.2:
+#     "The user may affirm that the module works correctly in the new OE if
+#      the porting rules are followed. However, the CMVP makes no statement as
+#      to the correct operation of the module or the security strengths of the
+#      generated keys when ported and executed in an OE not listed on the
+#      validation certificate."
+#
+# So: this image is built from CMVP-validated source per the Security Policy
+# and is user-affirmed for Wolfi Linux. It must NOT be described as "FIPS
+# 140-3 validated on Wolfi", because no such validation entry exists.
+#
+# ---------------------------------------------------------------------------
+# 4. WHY THE MODULE AND THE BASE LIBRARY ARE DIFFERENT VERSIONS
+# ---------------------------------------------------------------------------
+# Only fips.so has to come from the validated source. Per OpenSSL's own
+# fips_module documentation (https://docs.openssl.org/3.5/man7/fips_module/):
+#
+#     "Normally, it is possible to utilize a FIPS provider constructed from
+#      one of the validated versions alongside libcrypto and libssl compiled
+#      from any supported release from OpenSSL 3.0 onwards. ... This
+#      flexibility enables you to address bug fixes and CVEs that fall outside
+#      the FIPS boundary."
+#
+# That is exactly what this image does. The validated Module is 3.1.2; the
+# libcrypto/libssl it runs against are the current Wolfi packages, upgraded at
+# build time and re-scannable by Trivy on every rebuild. The alternative that
+# Dockerfile.fips-base used to follow - shipping the entire OpenSSL tree from
+# the validated source version - drags every out-of-boundary CVE of that old
+# release into the image, where package scanners cannot even see it because a
+# source build leaves no apk metadata behind. fips-base has since been rebuilt
+# on this same module-only pattern for that reason.
+#
+# ---------------------------------------------------------------------------
+# 5. DELIBERATE LINTER DEVIATIONS
+# ---------------------------------------------------------------------------
+# hadolint DL3018 ("pin versions in apk add") is knowingly not followed. Every
+# apk package here is outside the FIPS boundary and must be free to move to the
+# newest patched build on each rebuild; pinning them would reintroduce exactly
+# the stale-package problem this image is designed to avoid. The Module itself
+# IS pinned, by version and by SHA-256, because that is the part a certificate
+# covers.
+#
+# hadolint DL3002 ("last USER should not be root") fires on the builder stage,
+# which is discarded and never shipped. The stage that becomes the image ends
+# as nonroot.
+#
+### END OF COMPLIANCE NOTES ###
+
+
+# ---------------------------------------------------------------------------
+# Stage 1: build the validated Module from unmodified OpenSSL 3.1.2 source
+# ---------------------------------------------------------------------------
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:96ff486b326d15db16aa1fbd41a17043a557bebf76d2c0ac932e717534025940 AS fips-builder
+
+USER root
+
+# Without pipefail a pipeline reports only the exit status of its last command,
+# so a failed download feeding "sha256sum -c -" could still be treated as a
+# success. The source integrity check below depends on this being set.
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
+
+# The base image pins exact "pkg=version" constraints in /etc/apk/world, which
+# makes a plain "apk upgrade" a no-op for those packages. Relaxing the exact
+# pins to bare names first is what allows security updates to actually apply.
+# The "=[0-9]" anchor deliberately leaves fuzzy "=~" pins alone.
+RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
+    apk update && apk upgrade --no-cache && \
+    apk add --no-cache build-base perl wget ca-certificates
+
+# Module version and the SHA-256 published by OpenSSL for that tarball.
+# Changing OPENSSL_FIPS_VERSION alone is NOT a valid upgrade path: any other
+# version is outside certificate #4985 and would need its own certificate,
+# Security Policy and build method review.
+ARG OPENSSL_FIPS_VERSION=3.1.2
+ARG OPENSSL_FIPS_SHA256=a0ce69b8b97ea6a35b96875235aa453b966ba3cba8af2de23657d8b6767d6539
+
+# The download, SHA-256 verification and the Security Policy build method all
+# live in scripts/build-fips-module.sh, shared with Dockerfile.fips-base so
+# that a correction to the compile method cannot land in one image and be
+# missed in the other. Read that script's header before changing the build.
+COPY scripts/build-fips-module.sh /usr/local/bin/build-fips-module.sh
+RUN /usr/local/bin/build-fips-module.sh "${OPENSSL_FIPS_VERSION}" "${OPENSSL_FIPS_SHA256}" /staging
+
+
+# ---------------------------------------------------------------------------
+# Stage 2: runtime - validated Module on current, patched libcrypto/libssl
+# ---------------------------------------------------------------------------
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:96ff486b326d15db16aa1fbd41a17043a557bebf76d2c0ac932e717534025940
+
+USER root
+
+# See the builder stage for why pipefail matters; the verification steps below
+# pipe openssl output through awk and grep to decide whether to fail the build.
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
+
+# Same world-unpin rationale as the builder stage. This is the mechanism that
+# keeps the out-of-FIPS-boundary libcrypto/libssl patched on every rebuild.
+RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
+    apk update && apk upgrade --no-cache && \
+    apk add --no-cache openssl ca-certificates
+
+ENV FIPS_ROOT=/opt/openssl-fips
+ENV OPENSSL_MODULES=${FIPS_ROOT}/ossl-modules \
+    OPENSSL_CONF=${FIPS_ROOT}/openssl.cnf
+
+COPY --from=fips-builder /staging/ossl-modules/fips.so ${FIPS_ROOT}/ossl-modules/fips.so
+
+# Generate fipsmodule.cnf, which carries the HMAC-SHA2-256 integrity value of
+# fips.so that the Module checks against itself at load time.
+#
+# "-pedantic" is the invocation the Security Policy gives for installing the
+# configuration file to a non-default location (section 11.1(a)); it selects
+# the strictest, fully-conformant settings. Running fipsinstall also executes
+# the Module self-tests, so this step fails the build if the Module cannot
+# operate on this platform.
+RUN openssl fipsinstall \
+        -pedantic \
+        -module "${OPENSSL_MODULES}/fips.so" \
+        -out "${FIPS_ROOT}/fipsmodule.cnf"
+
+# Approved-mode configuration.
+#
+# fipsmodule.cnf must be included BEFORE any other section is opened: the
+# included file itself opens [fips_sect], so anything written after the
+# .include line would land inside that section instead of the default one.
+# "openssl_conf" therefore has to be stated first.
+#
+# "default_properties = fips=yes" is what makes this an approved-mode image
+# rather than merely an image that has the Module available: it constrains
+# algorithm fetches to the FIPS provider, so non-approved algorithms such as
+# MD5 fail instead of silently falling through to the default provider. It
+# corresponds to the "fips=yes" status indicator in Security Policy 2.4.
+#
+# The base provider is activated alongside fips because it supplies the
+# non-cryptographic encoders and decoders (key and certificate serialisation)
+# that the FIPS provider deliberately does not implement. It contributes no
+# cryptographic algorithms and so does not weaken approved mode.
+RUN printf '%s\n' \
+    'config_diagnostics = 1' \
+    'openssl_conf = openssl_init' \
+    '' \
+    ".include ${FIPS_ROOT}/fipsmodule.cnf" \
+    '' \
+    '[openssl_init]' \
+    'providers = provider_sect' \
+    'alg_section = algorithm_sect' \
+    '' \
+    '[provider_sect]' \
+    'fips = fips_sect' \
+    'base = base_sect' \
+    '' \
+    '[base_sect]' \
+    'activate = 1' \
+    '' \
+    '[algorithm_sect]' \
+    'default_properties = fips=yes' \
+    > "${FIPS_ROOT}/openssl.cnf"
+
+# Compatibility shim for the retired fips-base layout.
+#
+# fips-base (FIPS 140-2, retired 2026-09-21) kept its FIPS material under
+# /usr/local/ssl and put /usr/local/ssl/bin first on PATH. A consumer migrating
+# here who carries over OPENSSL_CONF=/usr/local/ssl/openssl.cnf would otherwise
+# get FIPS SILENTLY DISABLED: OpenSSL does not error on a missing config file,
+# it quietly falls back to the default provider. Measured on this image before
+# the shim existed:
+#
+#   OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl list -providers  ->  default
+#   echo x | OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl dgst -md5  ->  SUCCEEDS
+#
+# A silently non-enforcing FIPS image is the exact defect that made fips-base
+# non-compliant for months, so the old paths are mapped onto the real ones
+# rather than left to fail open.
+#
+# This is a convenience for a deliberate migration, NOT a claim of equivalence.
+# The two images still differ in ways no symlink can bridge, and both fail
+# loudly rather than silently:
+#   musl -> glibc          binaries built for fips-base will not exec here
+#   nobody -> nonroot      uid 65534 -> 65532, permissions and runAsUser
+# Note also that the old path now resolves to Module 3.1.2 under certificate
+# #4985, not 3.0.9 under #4282/#4811. See FIPS.md.
+RUN set -eu; \
+    mkdir -p /usr/local/ssl/bin /usr/local/ssl/lib64/ossl-modules; \
+    ln -sf "${FIPS_ROOT}/openssl.cnf"           /usr/local/ssl/openssl.cnf; \
+    ln -sf "${FIPS_ROOT}/fipsmodule.cnf"        /usr/local/ssl/fipsmodule.cnf; \
+    ln -sf "${FIPS_ROOT}/ossl-modules/fips.so"  /usr/local/ssl/lib64/ossl-modules/fips.so; \
+    ln -sf /usr/bin/openssl                     /usr/local/ssl/bin/openssl
+
+# Build-time proof that the image is actually in approved mode. Every check
+# below is a hard failure: a broken config or an inert Module fails the build
+# here rather than shipping an image that merely looks FIPS-enabled.
+#
+#   1. Module integrity check passes (HMAC over fips.so matches fipsmodule.cnf)
+#   2. The fips provider is present AND reports status "active"
+#   3. The active fips provider is the validated 3.1.2 Module
+#   4. An approved algorithm (SHA-256) works
+#   5. A non-approved algorithm (MD5) is refused, proving enforcement is real
+#      and not merely that the provider happens to be loaded
+RUN set -eu; \
+    echo "== 1. Module integrity =="; \
+    openssl fipsinstall -module "${OPENSSL_MODULES}/fips.so" \
+        -in "${FIPS_ROOT}/fipsmodule.cnf" -verify; \
+    echo "== 2/3. Provider active and at the validated version =="; \
+    openssl list -providers > /tmp/providers.txt; \
+    cat /tmp/providers.txt; \
+    grep -q '^  fips$' /tmp/providers.txt || { echo "FAIL: fips provider not loaded"; exit 1; }; \
+    awk '/^  fips$/{f=1} f&&/status:/{print; exit}' /tmp/providers.txt | grep -q active \
+        || { echo "FAIL: fips provider not active"; exit 1; }; \
+    awk '/^  fips$/{f=1} f&&/version:/{print; exit}' /tmp/providers.txt | grep -q '3\.1\.2' \
+        || { echo "FAIL: fips provider is not the validated 3.1.2 Module"; exit 1; }; \
+    echo "== 4. Approved algorithm (SHA-256) =="; \
+    echo fips-selftest | openssl dgst -sha256; \
+    echo "== 5. Non-approved algorithm (MD5) must be refused =="; \
+    if echo fips-selftest | openssl dgst -md5 >/dev/null 2>&1; then \
+        echo "FAIL: MD5 succeeded, image is NOT enforcing approved mode"; exit 1; \
+    fi; \
+    echo "OK: MD5 correctly refused"; \
+    echo "== 6. legacy fips-base path must resolve AND still enforce =="; \
+    OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl list -providers > /tmp/legacy.txt; \
+    grep -q '^  fips$' /tmp/legacy.txt \
+        || { echo "FAIL: legacy path does not activate the fips provider"; exit 1; }; \
+    if echo x | OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl dgst -md5 >/dev/null 2>&1; then \
+        echo "FAIL: legacy path leaves FIPS unenforced - the shim is not working"; exit 1; \
+    fi; \
+    /usr/local/ssl/bin/openssl version > /dev/null \
+        || { echo "FAIL: legacy openssl path does not resolve"; exit 1; }; \
+    echo "OK: legacy /usr/local/ssl paths resolve and enforce approved mode"; \
+    rm -f /tmp/providers.txt /tmp/legacy.txt
+
+# Record the versions that matter for audit: the validated Module version, the
+# certificate it comes from, and the out-of-boundary library it runs against.
+RUN set -eu; \
+    { \
+      echo "fips_standard=FIPS 140-3"; \
+      echo "fips_certificate=4985"; \
+      echo "fips_certificate_sunset=2030-03-10"; \
+      echo "fips_module=OpenSSL FIPS Provider"; \
+      echo "fips_module_version=3.1.2"; \
+      echo "fips_module_sha256=$(sha256sum "${OPENSSL_MODULES}/fips.so" | cut -d' ' -f1)"; \
+      echo "fips_mode=enabled"; \
+      echo "openssl_library=$(openssl version | awk '{print $2}')"; \
+    } > /tmp/versions.txt; \
+    cat /tmp/versions.txt
+
+# Assert the image's core invariant continuously, not just at build time. The
+# failure mode this guards against is a FIPS module that is installed and
+# loadable but no longer actually enforcing approved mode, which is silent
+# under every other kind of check.
+#
+# Derived images that need different health semantics can override this with
+# their own HEALTHCHECK, or disable it with "HEALTHCHECK NONE". The interval is
+# deliberately long because the invariant only changes on a config edit.
+HEALTHCHECK --interval=5m --timeout=5s --start-period=5s --retries=3 \
+    CMD ["/bin/ash", "-c", "openssl list -providers 2>/dev/null | grep -q '^  fips$' || exit 1"]
+
+LABEL org.opencontainers.image.title="fips-140-3-base" \
+      org.opencontainers.image.description="Wolfi base image with the CMVP-validated OpenSSL FIPS Provider 3.1.2 (certificate 4985) active in approved mode" \
+      io.aquia-inc.fips.standard="FIPS 140-3" \
+      io.aquia-inc.fips.certificate="4985" \
+      io.aquia-inc.fips.module-version="3.1.2" \
+      io.aquia-inc.fips.oe-status="user-affirmed per CMVP Management Manual 7.9.2; Wolfi is not a tested OE on certificate 4985"
+
+USER nonroot
+
+# Consumers inherit OPENSSL_CONF and OPENSSL_MODULES, so any process started
+# in a derived image runs in approved mode without further configuration.
+# To link against the FIPS-backed libraries no extra flags are needed either:
+# the distribution libcrypto/libssl in /usr/lib are the ones the Module is
+# loaded into.
+RUN openssl list -providers

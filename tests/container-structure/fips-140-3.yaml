@@ -1,0 +1,136 @@
+schemaVersion: 2.0.0
+
+# Test the FIPS 140-3 base image.
+#
+# These tests assert that the image is actually operating in approved mode,
+# not merely that a FIPS module is present on disk. The MD5 test is the load
+# bearing one: a module that is installed but not enforcing would still pass
+# every other check here.
+#
+# See Dockerfile.fips-140-3 for the CMVP references behind these assertions.
+commandTests:
+  # The validated Module must be loaded and reporting itself active.
+  - name: "FIPS provider is active"
+    command: "openssl"
+    args: ["list", "-providers"]
+    expectedOutput: ["fips[\\s\\S]*OpenSSL FIPS Provider[\\s\\S]*status: active"]
+
+  # The active Module must be the exact version covered by certificate 4985.
+  - name: "FIPS provider is the validated 3.1.2 module"
+    command: "openssl"
+    args: ["list", "-providers"]
+    expectedOutput: ["OpenSSL FIPS Provider[\\s\\S]*version: 3\\.1\\.2"]
+
+  # Integrity check: HMAC-SHA2-256 over fips.so must match fipsmodule.cnf.
+  - name: "FIPS module integrity check passes"
+    command: "openssl"
+    args:
+      - "fipsinstall"
+      - "-module"
+      - "/opt/openssl-fips/ossl-modules/fips.so"
+      - "-in"
+      - "/opt/openssl-fips/fipsmodule.cnf"
+      - "-verify"
+    # fipsinstall reports its verdict on stderr, so this must be asserted with
+    # expectedError; asserting on stdout would silently pass against no output.
+    expectedError: ["VERIFY PASSED"]
+
+  # An approved algorithm must work.
+  - name: "Approved algorithm SHA-256 is available"
+    command: "sh"
+    args: ["-c", "echo fips | openssl dgst -sha256"]
+    expectedOutput: ["SHA2-256"]
+
+  # A non-approved algorithm must be refused. This is what distinguishes
+  # "approved mode enforced" from "FIPS module merely loaded".
+  - name: "Non-approved algorithm MD5 is refused"
+    command: "sh"
+    args: ["-c", "echo fips | openssl dgst -md5 2>&1 || true"]
+    excludedOutput: ["MD5\\(stdin\\)"]
+    expectedOutput: ["unsupported"]
+
+  # The base provider supplies encoders/decoders and must also be active.
+  - name: "Base provider is active"
+    command: "openssl"
+    args: ["list", "-providers"]
+    expectedOutput: ["base[\\s\\S]*OpenSSL Base Provider[\\s\\S]*status: active"]
+
+  # Compatibility shim for the retired fips-base layout. A consumer carrying
+  # over OPENSSL_CONF=/usr/local/ssl/openssl.cnf must still get an enforcing
+  # image; without the shim OpenSSL silently falls back to the default provider
+  # because a missing config file is not an error.
+  - name: "Legacy fips-base config path still enforces approved mode"
+    command: "sh"
+    args: ["-c", "OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl list -providers"]
+    expectedOutput: ["OpenSSL FIPS Provider[\\s\\S]*status: active"]
+
+  - name: "Legacy config path refuses a non-approved algorithm"
+    command: "sh"
+    args: ["-c", "echo x | OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl dgst -md5 2>&1 || true"]
+    excludedOutput: ["MD5\\(stdin\\)"]
+    expectedOutput: ["unsupported"]
+
+  - name: "Legacy openssl binary path resolves"
+    command: "/usr/local/ssl/bin/openssl"
+    args: ["version"]
+    expectedOutput: ["OpenSSL"]
+
+  - name: "User is nonroot"
+    command: "id"
+    args: ["-un"]
+    expectedOutput: ["nonroot"]
+
+fileExistenceTests:
+  # Legacy fips-base paths, symlinked to the real locations.
+  - name: "Legacy openssl.cnf path exists"
+    path: "/usr/local/ssl/openssl.cnf"
+    shouldExist: true
+
+  - name: "Legacy fipsmodule.cnf path exists"
+    path: "/usr/local/ssl/fipsmodule.cnf"
+    shouldExist: true
+
+  - name: "Validated FIPS module is present"
+    path: "/opt/openssl-fips/ossl-modules/fips.so"
+    shouldExist: true
+
+  - name: "FIPS module config with integrity value is present"
+    path: "/opt/openssl-fips/fipsmodule.cnf"
+    shouldExist: true
+
+  - name: "Approved-mode OpenSSL config is present"
+    path: "/opt/openssl-fips/openssl.cnf"
+    shouldExist: true
+
+  - name: "Version file exists"
+    path: "/tmp/versions.txt"
+    shouldExist: true
+
+fileContentTests:
+  # fipsmodule.cnf must carry an integrity value; without it the module
+  # cannot self-verify at load time.
+  - name: "FIPS module config carries an integrity MAC"
+    path: "/opt/openssl-fips/fipsmodule.cnf"
+    expectedContents: ["module-mac = "]
+
+  # Guard against the approved-mode property being dropped from the config,
+  # which would silently downgrade the image to "module present but inert".
+  - name: "Approved mode is enforced by default properties"
+    path: "/opt/openssl-fips/openssl.cnf"
+    expectedContents: ["default_properties = fips=yes"]
+
+  - name: "Version file records the validated module version"
+    path: "/tmp/versions.txt"
+    expectedContents: ["fips_module_version=3\\.1\\.2"]
+
+  - name: "Version file records the CMVP certificate"
+    path: "/tmp/versions.txt"
+    expectedContents: ["fips_certificate=4985"]
+
+metadataTest:
+  user: "nonroot"
+  envVars:
+    - key: "OPENSSL_CONF"
+      value: "/opt/openssl-fips/openssl.cnf"
+    - key: "OPENSSL_MODULES"
+      value: "/opt/openssl-fips/ossl-modules"
