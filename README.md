@@ -19,6 +19,8 @@ These images are **rebuilt daily**.
 
 [![FIPS Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/fips-base/*&label=fips-base&style=for-the-badge&logo=lock&color=red)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64) 
 
+[![FIPS 140-3 Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/fips-140-3/*&label=fips-140-3&style=for-the-badge&logo=lock&color=darkgreen)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-140-3-linux-amd64) 
+
 [![Go 1.26 Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/go-base/*&label=go-base&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-amd64) 
 
 [![Go 1.27 Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/go-base-1.27/*&label=go-base-1.27&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-1.27-linux-amd64) 
@@ -36,6 +38,7 @@ These images are **rebuilt daily**.
 ### Latest linux/amd64 Releases
 
 * [fips-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64)
+* [fips-140-3-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-140-3-linux-amd64)
 * [go-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-amd64)
 * [go-base-1.27-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-1.27-linux-amd64)
 * [nginx-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-amd64)
@@ -47,6 +50,7 @@ These images are **rebuilt daily**.
 ### Latest linux/arm64 Releases
 
 * [fips-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-arm64)
+* [fips-140-3-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-140-3-linux-arm64)
 * [go-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-arm64)
 * [go-base-1.27-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-1.27-linux-arm64)
 * [nginx-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-arm64)
@@ -67,7 +71,8 @@ Images are considered hardened when they do not contain fixable-today CVE vulner
 * **Python**: 3.13.x (from wolfi-base with the python-3.13 package)
 * **OpenJDK**: 17.x with Maven 3.9.8 (from wolfi-base with openjdk-17 package)
 * **Wolfi Base**: Latest minimal Linux distribution
-* **FIPS Base**: Custom OpenSSL 3.0.9 with FIPS 140-2 cryptographic validation ([beta](#beta-images))
+* **FIPS Base** (`fips-base`): CMVP-validated OpenSSL FIPS Provider 3.0.9 (FIPS 140-2, certs #4282/#4811). Deprecated - the 140-2 certificates sunset 2026-09-21; use `fips-140-3`. ([beta](#beta-images))
+* **FIPS 140-3 Base** (`fips-140-3`): CMVP-validated OpenSSL FIPS Provider 3.1.2 (FIPS 140-3, cert #4985, sunset 2030-03-10), module-only on wolfi-base. User-affirmed per CMVP Management Manual 7.9.2 - NOT "FIPS validated on Wolfi". See [FIPS.md](./FIPS.md). ([beta](#beta-images))
 * **Nginx**: 1.29.x with headers-more module (custom build)
 
 ### Recommended Version Pinning
@@ -130,11 +135,33 @@ Anyone can pull the image locally with their Github [personal access token](http
 
 The beta images are tested within limited scope and are generally stable but not recommended for production use without thorough testing in lower environments.  We encourage you to use them for testing and development and provide feedback to us to help us get them to GA faster.  If any bugs or unexpected behaviors are encountered, please open an issue using the BUG_REPORT template in this repository with enough detail to reproduce the issue.
 
-#### FIPS-enabled base image
+#### FIPS-enabled base images
 
-The image built from the [Dockerfile.fips-base](./Dockerfile.fips-base) includes FIPS-140-2-enabled OpenSSL and the Dockerfile shows an example of how to use it in the `Example Stage 2` section that should be modified to your workload's specific needs.
+Two FIPS base images are available:
 
-[More information on the FIPS image.](./FIPS.md)
+- **`fips-base`** - the image most FIPS workloads already reference. Today it provides OpenSSL FIPS Provider 3.0.9 (FIPS 140-2, certs #4282/#4811). At the cutover it is republished onto the FIPS 140-3 image, so **existing `fips-base` references keep working with no Dockerfile change**.
+- **`fips-140-3`** - the FIPS 140-3 image: OpenSSL FIPS Provider 3.1.2, NIST CMVP certificate #4985. Available now for teams that want to reference 140-3 explicitly.
+
+**Why the change:** the NIST certificates behind the 140-2 provider reach their sunset date on **2026-09-21** and then move to NIST's Historical list. After that date an image branded "FIPS 140-2" is no longer defensible in a compliance audit, so the FIPS 140-3 provider replaces it.
+
+**Cutover timeline:**
+
+- **Until 2026-09-21:** `fips-base` keeps building on the FIPS 140-2 provider (3.0.9) with daily CVE patches. Nothing changes for consumers.
+- **On 2026-09-21:** the `fips-base` tags (`:latest` and version tags) are republished onto the FIPS 140-3 image. Anything pulling `fips-base` transparently moves to 140-3 - **no image reference change is required**.
+
+**What consumers need to do:** for most workloads, nothing - keep your existing `fips-base` reference. Two things to check, because the 140-3 image is built on Wolfi/glibc where the 140-2 `fips-base` was Alpine/musl:
+
+- **Native binaries:** anything compiled on top of `fips-base` (Go cgo, C extensions) must be rebuilt on the new base - musl binaries do not run on glibc. Interpreted runtimes and OpenSSL-CLI usage are unaffected.
+- **User/UID:** the default user changes from `nobody` (65534) to `nonroot` (65532); update any hardcoded UID, file ownership, or Kubernetes `runAsUser`.
+
+The old `/usr/local/ssl` OpenSSL config paths are preserved on the 140-3 image, so FIPS stays enforced through the cutover rather than silently turning off. To reference 140-3 explicitly today, use `fips-140-3`.
+
+**Pinning across the cutover:** the cutover ships as a new major version (`fips-base:2.0.0`) and swaps the descriptive tag from `openssl3.0` (FIPS 140-2) to `fips3.1` (FIPS 140-3):
+
+- `fips-base:latest` or `fips-base:fips3.1` resolve to the FIPS 140-3 image (recommended).
+- `fips-base:openssl3.0` (and the pre-cutover `v1.x` tags) freeze at the last FIPS 140-2 build. They stop receiving patches after 2026-09-21, so treat them as a signal to move rather than a place to stay.
+
+Full compliance detail is in [FIPS.md](./FIPS.md).
 
 ### Nginx Security
 

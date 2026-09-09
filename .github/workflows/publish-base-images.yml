@@ -251,8 +251,13 @@ jobs:
       - name: Calculate version tags for all image types
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         id: version_tags
+        env:
+          IMAGE_BASE_NAME: ${{ steps.context.outputs.image-base-name }}
+          IMAGE_NAME: ${{ steps.context.outputs.image-name }}
+          PLATFORM: ${{ matrix.platform }}
+          GH_REPOSITORY: ${{ github.repository }}
         run: |
-          image_name="${{ steps.context.outputs.image-base-name }}"
+          image_name="$IMAGE_BASE_NAME"
           
           echo "Processing image: $image_name"
           
@@ -267,8 +272,8 @@ jobs:
             "python-base"|"nodejs-base"|"openjdk17-base"|"go-base"|"go-base-1.27")
               echo "Language image detected, extracting runtime versions..."
               
-              if docker run --rm --platform ${{ matrix.platform }} \
-                 "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
+              if docker run --rm --platform "$PLATFORM" \
+                 "$GH_REPOSITORY/$IMAGE_NAME:test" \
                  sh -c 'head /tmp/versions.txt' > versions.txt 2>/dev/null; then
                 
                 echo "Successfully extracted versions.txt:"
@@ -307,11 +312,30 @@ jobs:
               ;;
               
             # Specialized tool images - extract tool versions directly
+            "fips-140-3")
+              echo "FIPS 140-3 image detected, extracting module version..."
+              if FIPS_MODULE_VERSION=$(docker run --rm --platform "$PLATFORM" \
+                 "$GH_REPOSITORY/$IMAGE_NAME:test" \
+                 sh -c 'grep "^fips_module_version=" /tmp/versions.txt | cut -d= -f2'); then
+                echo "FIPS module version: $FIPS_MODULE_VERSION"
+                FIPS_MAJOR=$(echo "$FIPS_MODULE_VERSION" | cut -d'.' -f1)
+                FIPS_MINOR=$(echo "$FIPS_MODULE_VERSION" | cut -d'.' -f1-2)
+                if [ -n "$FIPS_MAJOR" ] && [ -n "$FIPS_MINOR" ]; then
+                  echo "major_tag=fips$FIPS_MAJOR" >> $GITHUB_OUTPUT
+                  echo "minor_tag=fips$FIPS_MINOR" >> $GITHUB_OUTPUT
+                  echo "tool_version=$FIPS_MODULE_VERSION" >> $GITHUB_OUTPUT
+                  echo "has_version_tags=true" >> $GITHUB_OUTPUT
+                  echo "[ok] FIPS 140-3 version tags: major=fips$FIPS_MAJOR, minor=fips$FIPS_MINOR"
+                fi
+              else
+                echo "[warn] Failed to extract FIPS module version"
+              fi
+              ;;
             "fips-base")
               echo "FIPS image detected, extracting OpenSSL version..."
               
-              if OPENSSL_VERSION=$(docker run --rm --platform ${{ matrix.platform }} \
-                 "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
+              if OPENSSL_VERSION=$(docker run --rm --platform "$PLATFORM" \
+                 "$GH_REPOSITORY/$IMAGE_NAME:test" \
                  /usr/local/ssl/bin/openssl version 2>/dev/null | awk '{print $2}'); then
                 
                 echo "OpenSSL version: $OPENSSL_VERSION"
@@ -336,9 +360,9 @@ jobs:
               echo "Nginx image detected, extracting Nginx version..."
               
               # Extract nginx version using direct binary call
-              if NGINX_VERSION=$(docker run --rm --platform ${{ matrix.platform }} \
+              if NGINX_VERSION=$(docker run --rm --platform "$PLATFORM" \
                  --entrypoint="/usr/sbin/nginx" \
-                 "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
+                 "$GH_REPOSITORY/$IMAGE_NAME:test" \
                  -v 2>&1 | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1); then
                 
                 echo "Nginx version: $NGINX_VERSION"
