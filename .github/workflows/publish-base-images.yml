@@ -92,30 +92,16 @@ jobs:
             exit 0
           fi
 
-          # Non-tag pushes (manual/branch dispatch): proceed
-          if [[ "$REF_TYPE" != "tag" ]]; then
-            echo "dockerfile_changed=true" >> "$GITHUB_OUTPUT"
-            echo "Not a tag push, proceeding with build"
-            exit 0
-          fi
-
-          dockerfile_path="Dockerfile.${IMAGE_BASE_NAME}"
-          echo "Checking if $dockerfile_path was modified..."
-          # Get the previous tag for this image
-          prev_tag=$(git tag -l "release/${IMAGE_BASE_NAME}/v*" --sort=-version:refname | head -n 2 | tail -n 1)
-          if [ -n "$prev_tag" ]; then
-            echo "Comparing with previous tag: $prev_tag"
-            if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$"; then
-              echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
-              echo "Dockerfile $dockerfile_path was modified since $prev_tag"
-            else
-              echo "dockerfile_changed=false" >> $GITHUB_OUTPUT
-              echo "Dockerfile $dockerfile_path was NOT modified since $prev_tag - skipping build"
-            fi
-          else
-            echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
-            echo "No previous tag found, assuming Dockerfile changed"
-          fi
+          # Non-PR pushes (release tags and manual/branch dispatch): always
+          # build. A release/<image>/vX.Y.Z tag exists precisely to publish, so
+          # its presence is the build signal - never a Dockerfile diff. This is
+          # required for two paths that both carry an UNCHANGED Dockerfile by
+          # design: (1) a new image's first tag, which has no earlier tag to
+          # diff against, and (2) the daily scan-and-rebuild tags, which bump
+          # the patch version to refresh apk packages without any Dockerfile
+          # edit. Gating either on a Dockerfile diff silently no-ops the build.
+          echo "dockerfile_changed=true" >> "$GITHUB_OUTPUT"
+          echo "Tag or non-PR push ($REF_TYPE) for $IMAGE_BASE_NAME, proceeding with build"
 
       - name: Exit early if Dockerfile unchanged
         if: steps.dockerfile_check.outputs.dockerfile_changed != 'true'
