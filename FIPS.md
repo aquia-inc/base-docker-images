@@ -17,6 +17,18 @@ against.
 
 ## Deprecation of `fips-base`
 
+> **In short:** `fips-base` (FIPS 140-2) is being replaced by `fips-140-3`
+> (FIPS 140-3) because the NIST certificates behind `fips-base` expire on
+> **2026-09-21**. Until that date nothing changes and `fips-base` still receives
+> daily CVE patches; on that date it is retired (no new builds; tags published
+> before then stay pullable but stop being patched). If your workload depends on
+> `fips-base`, switch to `fips-140-3` before 2026-09-21. It is mostly a one-line
+> base-image change, plus recompiling binaries (Alpine/musl to Wolfi/glibc) and
+> updating the default user (`nobody` to `nonroot`). The old `/usr/local/ssl`
+> OpenSSL config paths are preserved in `fips-140-3` so FIPS stays enforced
+> during the switch. Step-by-step guidance is in
+> [Migrating](#migrating-from-fips-base-to-fips-140-3).
+
 The FIPS 140-2 certificates behind `fips-base` both reach their sunset date on
 **2026-09-21**, after which they move to the CMVP Historical list. CMVP's
 position on Historical modules is that federal agencies "should not include
