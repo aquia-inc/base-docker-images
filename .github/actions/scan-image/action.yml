@@ -38,39 +38,44 @@ runs:
     - name: Run Trivy vulnerability scanner
       id: scan
       shell: bash
+      env:
+        INPUT_IMAGE_TAG: ${{ inputs.image-tag }}
+        INPUT_SEVERITIES: ${{ inputs.severities }}
+        INPUT_EXIT_CODE: ${{ inputs.exit-code }}
+        INPUT_IGNORE_UNFIXED: ${{ inputs.ignore-unfixed }}
       run: |
         echo "=== Trivy Security Scan ==="
-        echo "Image: ${{ inputs.image-tag }}"
-        echo "Severities: ${{ inputs.severities }}"
-        echo "Exit code: ${{ inputs.exit-code }}"
-        echo "Ignore unfixed: ${{ inputs.ignore-unfixed }}"
-        
+        echo "Image: $INPUT_IMAGE_TAG"
+        echo "Severities: $INPUT_SEVERITIES"
+        echo "Exit code: $INPUT_EXIT_CODE"
+        echo "Ignore unfixed: $INPUT_IGNORE_UNFIXED"
+
         scan_result="unknown"
         vulnerabilities_found="false"
-        
+
         # Run Trivy scan
         if trivy image \
-          --ignore-unfixed=${{ inputs.ignore-unfixed }} \
-          --exit-code=${{ inputs.exit-code }} \
-          --severity=${{ inputs.severities }} \
+          --ignore-unfixed="$INPUT_IGNORE_UNFIXED" \
+          --exit-code="$INPUT_EXIT_CODE" \
+          --severity="$INPUT_SEVERITIES" \
           --format=table \
-          "${{ inputs.image-tag }}"; then
-          echo "✅ No vulnerabilities found at specified severity levels"
+          "$INPUT_IMAGE_TAG"; then
+          echo "[ok] No vulnerabilities found at specified severity levels"
           scan_result="passed"
           vulnerabilities_found="false"
         else
           exit_code=$?
-          if [ $exit_code -eq ${{ inputs.exit-code }} ]; then
-            echo "⚠️  Vulnerabilities found at specified severity levels"
-            scan_result="failed" 
+          if [ "$exit_code" -eq "$INPUT_EXIT_CODE" ]; then
+            echo "[warn] Vulnerabilities found at specified severity levels"
+            scan_result="failed"
             vulnerabilities_found="true"
           else
-            echo "❌ Trivy scan encountered an error (exit code: $exit_code)"
+            echo "[fail] Trivy scan encountered an error (exit code: $exit_code)"
             scan_result="error"
             vulnerabilities_found="false"
           fi
         fi
-        
-        echo "scan_result=$scan_result" >> $GITHUB_OUTPUT
-        echo "vulnerabilities_found=$vulnerabilities_found" >> $GITHUB_OUTPUT
+
+        echo "scan_result=$scan_result" >> "$GITHUB_OUTPUT"
+        echo "vulnerabilities_found=$vulnerabilities_found" >> "$GITHUB_OUTPUT"
         echo "Final result: $scan_result (vulnerabilities: $vulnerabilities_found)"

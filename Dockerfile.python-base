@@ -10,7 +10,7 @@ ARG CACHEBUST=unset
 RUN echo "cachebust=${CACHEBUST}" && \
     sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
     apk update && apk upgrade --no-cache && \
-    apk add --no-cache --upgrade python3 py3-pip-wheel
+    apk add --no-cache --upgrade python-3.13 py3-pip-wheel
 
 # local install to /home/nonroot/.local/bin
 USER nonroot

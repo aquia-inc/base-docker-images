@@ -2,14 +2,14 @@ FROM cgr.dev/chainguard/wolfi-base:latest@sha256:96ff486b326d15db16aa1fbd41a1704
 
 # CACHEBUST busts the apk layer cache each run so daily rebuilds pick up package updates
 ARG CACHEBUST=unset
-# Pin to the README-promised Go 1.26 line via the wolfi go-1.26 package (rather than
+# Pin to the README-promised Go 1.27 line via the wolfi go-1.27 package (rather than
 # chainguard/go:latest, which tracks the newest Go and silently moved to 1.27).
 # Relax the exact /etc/apk/world pins first so "apk upgrade" actually applies security
 # updates (the "=[0-9]" anchor leaves fuzzy "=~" pins alone).
 RUN echo "cachebust=${CACHEBUST}" && \
     sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
     apk update && apk upgrade --no-cache && \
-    apk add --no-cache go-1.26
+    apk add --no-cache go-1.27
 
 USER nonroot
 WORKDIR /workspace
@@ -23,4 +23,4 @@ RUN go version > /tmp/go_version.txt && \
     GO_MINOR="${GO_MAJOR}.$(echo "${GO_VERSION}" | cut -d'.' -f2)" && \
     echo "go_major_tag=${GO_MAJOR}" >> /tmp/versions.txt && \
     echo "go_minor_tag=${GO_MINOR}" >> /tmp/versions.txt && \
-    head -6 /tmp/versions.txt
+    head /tmp/versions.txt

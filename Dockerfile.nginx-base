@@ -39,8 +39,8 @@ RUN ./configure --prefix=/usr/local/nginx \
     make -j$(($(nproc)/2)) modules && \
     make -j$(($(nproc)/2)) install
 
-# Clean up
-RUN cd /usr/src && rm -rf nginx nginx.tar.gz extra_module extra_module.tar.gz
+# Clean up (absolute paths avoid a 'RUN cd', DS013)
+RUN rm -rf /usr/src/nginx /usr/src/nginx.tar.gz /usr/src/extra_module /usr/src/extra_module.tar.gz
 
 # Switch back to non-root user
 USER nginx

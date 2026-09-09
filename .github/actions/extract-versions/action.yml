@@ -27,11 +27,19 @@ runs:
     - name: Extract versions from container
       id: extract
       shell: bash
-      run: |
-        image_base_name="${{ inputs.image-base-name }}"
-        test_tag="${{ inputs.image-tag }}"
-        platform="${{ inputs.platform }}"
-        platform_suffix="${{ inputs.platform-suffix }}"
+      env:
+        INPUT_IMAGE_BASE_NAME: ${{ inputs.image-base-name }}
+        INPUT_IMAGE_TAG: ${{ inputs.image-tag }}
+        INPUT_PLATFORM: ${{ inputs.platform }}
+        INPUT_PLATFORM_SUFFIX: ${{ inputs.platform-suffix }}
+      # github-env: values are read from /tmp/versions.txt inside our own built
+      # image (a controlled build artifact, not external input), so the dynamic
+      # env write below is safe. The version vars feed docker/metadata-action labels.
+      run: | # zizmor: ignore[github-env]
+        image_base_name="$INPUT_IMAGE_BASE_NAME"
+        test_tag="$INPUT_IMAGE_TAG"
+        platform="$INPUT_PLATFORM"
+        platform_suffix="$INPUT_PLATFORM_SUFFIX"
         output_file="env.versions.${platform_suffix}"
         extraction_status="false"
 
@@ -42,7 +50,7 @@ runs:
         echo "Output file: $output_file"
 
         # Only extract versions for language-specific images
-        if [[ "$image_base_name" == "python-base" || "$image_base_name" == "nodejs-base" || "$image_base_name" == "openjdk17-base" || "$image_base_name" == "go-base" ]]; then
+        if [[ "$image_base_name" == "python-base" || "$image_base_name" == "nodejs-base" || "$image_base_name" == "openjdk17-base" || "$image_base_name" == "go-base" || "$image_base_name" == "go-base-1.27" ]]; then
             echo "Attempting to extract versions from $test_tag for $image_base_name"
             
             # Extract versions from the container
@@ -53,9 +61,11 @@ runs:
                     cat "$output_file"
                     extraction_status="true"
                     
-                    # Set environment variables for metadata action
+                    # Set environment variables for metadata action. Values come from
+                    # /tmp/versions.txt inside our own built image (a controlled build
+                    # artifact, not external input), so the dynamic env write is safe.
                     while IFS='=' read -r key value; do
-                      echo "${key}=${value}" >> $GITHUB_ENV
+                      echo "${key}=${value}" >> "$GITHUB_ENV"
                     done < "$output_file"
                 else
                     echo "Warning: Command succeeded but extracted versions file '$output_file' is empty."
@@ -69,9 +79,9 @@ runs:
             echo "No version extraction needed for $image_base_name."
         fi
 
-        echo "extraction_success=$extraction_status" >> $GITHUB_OUTPUT
+        echo "extraction_success=$extraction_status" >> "$GITHUB_OUTPUT"
         if [[ "$extraction_status" == "true" ]]; then
-          echo "versions_file=$output_file" >> $GITHUB_OUTPUT
+          echo "versions_file=$output_file" >> "$GITHUB_OUTPUT"
         else
-          echo "versions_file=" >> $GITHUB_OUTPUT
+          echo "versions_file=" >> "$GITHUB_OUTPUT"
         fi

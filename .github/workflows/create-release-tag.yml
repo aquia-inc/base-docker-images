@@ -6,15 +6,14 @@ on:
     branches: [main]
   # workflow_dispatch for manual runs.
   workflow_dispatch:
-permissions:
-  actions: read
-  contents: write
-  packages: write
-  security-events: write
+# Minimal default; each job opts into exactly what it needs.
+permissions: {}
 
 jobs:
   detect_changed_images:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       images_matrix: ${{ steps.build_matrix.outputs.images_to_build }}
       has_changes: ${{ steps.build_matrix.outputs.has_changes }}
@@ -66,6 +65,8 @@ jobs:
     needs: detect_changed_images
     if: needs.detect_changed_images.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read  # checkout only; the tag push authenticates with RELEASE_PAT
     strategy:
       fail-fast: false
       matrix:
@@ -78,16 +79,20 @@ jobs:
           persist-credentials: false # credential supplied explicitly on push (RELEASE_PAT)
 
       - name: Display processing image
+        env:
+          IMAGE_NAME: ${{ matrix.image_name }}
         run: |
-          echo "Processing image: ${{ matrix.image_name }}"
+          echo "Processing image: $IMAGE_NAME"
 
       - name: Find latest tag for image
         id: latest_tag
+        env:
+          IMAGE_NAME: ${{ matrix.image_name }}
         run: |
-          echo "Looking for existing tags for ${{ matrix.image_name }}..."
+          echo "Looking for existing tags for $IMAGE_NAME..."
           latest=$(git for-each-ref --sort='-v:refname' \
             --format '%(refname:short)' \
-            refs/tags/release/${{ matrix.image_name }} | head -n 1)
+            "refs/tags/release/$IMAGE_NAME" | head -n 1)
 
           if [ -n "$latest" ]; then
             # Extract semver from tag (remove 'v' prefix)
