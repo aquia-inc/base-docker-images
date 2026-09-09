@@ -139,25 +139,22 @@ The beta images are tested within limited scope and are generally stable but not
 
 Two FIPS base images are available:
 
-- **`fips-140-3`** (recommended) - OpenSSL FIPS Provider 3.1.2, validated under NIST CMVP certificate #4985 (FIPS 140-3). This is the current image.
-- **`fips-base`** - OpenSSL FIPS Provider 3.0.9, validated under FIPS 140-2 certificates #4282/#4811. **Deprecated** (see cutover below).
+- **`fips-base`** - the image most FIPS workloads already reference. Today it provides OpenSSL FIPS Provider 3.0.9 (FIPS 140-2, certs #4282/#4811). At the cutover it is republished onto the FIPS 140-3 image, so **existing `fips-base` references keep working with no Dockerfile change**.
+- **`fips-140-3`** - the FIPS 140-3 image: OpenSSL FIPS Provider 3.1.2, NIST CMVP certificate #4985. Available now for teams that want to reference 140-3 explicitly.
 
-**Why the change:** the NIST certificates behind `fips-base` reach their sunset date on **2026-09-21** and then move to NIST's Historical list. After that date an image branded "FIPS 140-2" is no longer defensible in a compliance audit, so `fips-base` is being retired and `fips-140-3` replaces it.
+**Why the change:** the NIST certificates behind the 140-2 provider reach their sunset date on **2026-09-21** and then move to NIST's Historical list. After that date an image branded "FIPS 140-2" is no longer defensible in a compliance audit, so the FIPS 140-3 provider replaces it.
 
 **Cutover timeline:**
 
-- **Until 2026-09-21:** `fips-base` keeps building and receiving daily CVE patches as normal - nothing breaks in the meantime.
-- **On 2026-09-21:** `fips-base` is retired and no new builds are published. Tags published before that date remain pullable but stop receiving CVE patches. `fips-140-3` continues as the supported image.
+- **Until 2026-09-21:** `fips-base` keeps building on the FIPS 140-2 provider (3.0.9) with daily CVE patches. Nothing changes for consumers.
+- **On 2026-09-21:** the `fips-base` tags (`:latest` and version tags) are republished onto the FIPS 140-3 image. Anything pulling `fips-base` transparently moves to 140-3 - **no image reference change is required**.
 
-**Migrating from `fips-base` to `fips-140-3`** is mostly a one-line change of base image, plus a few compatibility items:
+**What consumers need to do:** for most workloads, nothing - keep your existing `fips-base` reference. Two things to check, because the 140-3 image is built on Wolfi/glibc where the 140-2 `fips-base` was Alpine/musl:
 
-1. Point your build at the new image, e.g. `FROM ghcr.io/aquia-inc/base-docker-images/fips-140-3-linux-amd64:latest`.
-2. **Rebuild your binaries.** `fips-base` is Alpine/musl; `fips-140-3` is Wolfi/glibc. Anything compiled on top of `fips-base` (Go cgo binaries, C extensions, etc.) must be recompiled on `fips-140-3` - musl binaries will not run on glibc.
-3. **Check UID assumptions.** The default user changed from `nobody` (UID 65534) to `nonroot` (UID 65532); update any hardcoded UID, file ownership, or Kubernetes `runAsUser`.
-4. **Old OpenSSL config paths still work.** If your image sets `OPENSSL_CONF=/usr/local/ssl/openssl.cnf` (the old `fips-base` layout), `fips-140-3` symlinks it so FIPS stays enforced rather than silently turning off - it now resolves to the 3.1.2 module.
-5. **Verify enforcement** after switching: a non-approved algorithm must fail, e.g. `echo x | openssl dgst -md5` should be refused.
+- **Native binaries:** anything compiled on top of `fips-base` (Go cgo, C extensions) must be rebuilt on the new base - musl binaries do not run on glibc. Interpreted runtimes and OpenSSL-CLI usage are unaffected.
+- **User/UID:** the default user changes from `nobody` (65534) to `nonroot` (65532); update any hardcoded UID, file ownership, or Kubernetes `runAsUser`.
 
-For the full compliance details - what may and may not be claimed, the build method, and how to verify FIPS mode - see [FIPS.md](./FIPS.md).
+The old `/usr/local/ssl` OpenSSL config paths are preserved on the 140-3 image, so FIPS stays enforced through the cutover rather than silently turning off. To reference 140-3 explicitly today, use `fips-140-3`. Full compliance detail is in [FIPS.md](./FIPS.md).
 
 ### Nginx Security
 

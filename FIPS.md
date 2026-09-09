@@ -17,16 +17,16 @@ against.
 
 ## Deprecation of `fips-base`
 
-> **In short:** `fips-base` (FIPS 140-2) is being replaced by `fips-140-3`
-> (FIPS 140-3) because the NIST certificates behind `fips-base` expire on
-> **2026-09-21**. Until that date nothing changes and `fips-base` still receives
-> daily CVE patches; on that date it is retired (no new builds; tags published
-> before then stay pullable but stop being patched). If your workload depends on
-> `fips-base`, switch to `fips-140-3` before 2026-09-21. It is mostly a one-line
-> base-image change, plus recompiling binaries (Alpine/musl to Wolfi/glibc) and
-> updating the default user (`nobody` to `nonroot`). The old `/usr/local/ssl`
-> OpenSSL config paths are preserved in `fips-140-3` so FIPS stays enforced
-> during the switch. Step-by-step guidance is in
+> **In short:** the FIPS 140-2 provider behind `fips-base` (OpenSSL 3.0.9) loses
+> its NIST certificates on **2026-09-21**, so it is being replaced by the FIPS
+> 140-3 provider (OpenSSL 3.1.2, `fips-140-3`). **No image reference change is
+> required:** at the cutover the `fips-base` tags are republished onto the FIPS
+> 140-3 image, so an existing `FROM ...fips-base...` keeps working and
+> transparently moves to 140-3. Because the 140-3 image is Wolfi/glibc where
+> `fips-base` was Alpine/musl, two things need a check: native binaries compiled
+> on `fips-base` (Go cgo, C extensions) must be rebuilt, and the default user
+> changes from `nobody` (65534) to `nonroot` (65532). Interpreted runtimes and
+> OpenSSL-CLI usage are unaffected. Detail is in
 > [Migrating](#migrating-from-fips-base-to-fips-140-3).
 
 The FIPS 140-2 certificates behind `fips-base` both reach their sunset date on
@@ -37,15 +37,17 @@ use subject to the agency's own risk determination.
 
 Accordingly:
 
-- `fips-base` continues to build and publish until 2026-09-21.
-- On that date `Dockerfile.fips-base` is renamed to
-  `deprecated.Dockerfile.fips-base`, which removes it from release tagging,
-  the daily rebuild and the manual build trigger.
-- Tags published before then remain pullable from GHCR indefinitely. They stop
-  receiving CVE patches once builds stop.
+- Until 2026-09-21, `fips-base` continues to build and publish on the FIPS 140-2
+  provider (OpenSSL 3.0.9) with daily CVE patches.
+- On 2026-09-21, the cutover republishes the `fips-base` tags (`:latest` and the
+  version tags) onto the FIPS 140-3 image. An existing `fips-base` reference
+  keeps resolving and transparently moves to the 140-3 provider - no consumer
+  Dockerfile change is required.
+- Tags published before the cutover remain pullable from GHCR indefinitely.
 
-The two images are deliberately kept close so that migration is mostly a
-change of image reference. See [Migrating](#migrating-from-fips-base-to-fips-140-3).
+The two images are deliberately kept close so that the cutover needs no image
+reference change; the only consumer-visible differences are the base OS (musl to
+glibc) and the default user. See [Migrating](#migrating-from-fips-base-to-fips-140-3).
 
 ## How these images are built
 
@@ -197,14 +199,23 @@ docker run --rm ghcr.io/aquia-inc/base-docker-images/fips-140-3:latest \
 
 ## Migrating from `fips-base` to `fips-140-3`
 
-For most consumers this is a one-line change:
+For most consumers no change is required. At the 2026-09-21 cutover the
+`fips-base` tags are republished onto the FIPS 140-3 image, so an existing
+reference keeps working and moves to 140-3 automatically:
 
 ```dockerfile
-- FROM ghcr.io/aquia-inc/base-docker-images/fips-base:latest
-+ FROM ghcr.io/aquia-inc/base-docker-images/fips-140-3:latest
+# keeps working - resolves to the FIPS 140-3 image after the cutover
+FROM ghcr.io/aquia-inc/base-docker-images/fips-base:latest
 ```
 
-Differences to check before switching:
+To reference FIPS 140-3 explicitly (recommended for new work), use it by name:
+
+```dockerfile
+FROM ghcr.io/aquia-inc/base-docker-images/fips-140-3:latest
+```
+
+Either way the same compatibility differences apply, because the base image
+changes from Alpine/musl to Wolfi/glibc:
 
 | | `fips-base` | `fips-140-3` |
 |---|---|---|
