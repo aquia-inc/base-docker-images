@@ -147,7 +147,7 @@ Two FIPS base images are available:
 **Cutover timeline:**
 
 - **Until 2026-09-21:** `fips-base` keeps building on the FIPS 140-2 provider (3.0.9) with daily CVE patches. Nothing changes for consumers.
-- **On 2026-09-21:** the `fips-base` tags (`:latest` and version tags) are republished onto the FIPS 140-3 image. Anything pulling `fips-base` transparently moves to 140-3 - **no image reference change is required**.
+- **On 2026-09-21:** the tracking `fips-base` tags (`:latest`, `:fips3`, `:fips3.1`) are republished onto the FIPS 140-3 image on every rebuild, so anything pulling `fips-base` transparently moves to 140-3 - **no image reference change is required**. The frozen `:openssl3` / `:openssl3.0` tags and the `:2.0.0` cutover marker are handled separately; the full per-tag mapping is in [FIPS.md](./FIPS.md#how-the-tags-are-republished).
 
 **What consumers need to do:** for most workloads, nothing - keep your existing `fips-base` reference. Two things to check, because the 140-3 image is built on Wolfi/glibc where the 140-2 `fips-base` was Alpine/musl:
 

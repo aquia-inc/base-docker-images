@@ -1,17 +1,27 @@
 ### FIPS 140-2 BASE IMAGE - OpenSSL FIPS Provider 3.0.9 ###
 #
 # +-------------------------------------------------------------------------+
-# | DEPRECATED - SCHEDULED FOR RETIREMENT ON 2026-09-21                      |
-# |                                                                          |
-# | The CMVP certificates this image is built against (#4282 and #4811) are  |
-# | FIPS 140-2 validations and both reach their sunset date on 2026-09-21,   |
-# | after which they move to the CMVP Historical list. New builds of this    |
-# | image stop on that date and the Dockerfile is renamed to                 |
-# | deprecated.Dockerfile.fips-base. Previously published tags remain        |
-# | pullable from GHCR.                                                      |
-# |                                                                          |
-# | Migrate to Dockerfile.fips-140-3, which builds the FIPS 140-3 validated  |
-# | Module 3.1.2 under certificate #4985 (sunset 2030-03-10).                |
+# | RETIRED 2026-09-21 - THIS DOCKERFILE IS NO LONGER BUILT                 |
+# |                                                                         |
+# | CMVP certificates #4282 and #4811 (FIPS 140-2, OpenSSL 3.0.9)           |
+# | reached their sunset on 2026-09-21 and moved to the CMVP                |
+# | Historical list, so this image is no longer produced from source.       |
+# | The file is kept in-tree, renamed, purely as the audit record of        |
+# | the 140-2 lineage.                                                      |
+# |                                                                         |
+# | The fips-base tags now resolve to the FIPS 140-3 image (OpenSSL         |
+# | FIPS Provider 3.1.2, certificate #4985), republished from               |
+# | Dockerfile.fips-140-3 with no image-reference change for                |
+# | consumers:                                                              |
+# |   latest, fips3, fips3.1   track the 140-3 image on every rebuild       |
+# |   openssl3, openssl3.0     frozen at the final 140-2 build              |
+# |   2, 2.0, 2.0.0            mark the 140-2 -> 140-3 cutover              |
+# |                                                                         |
+# | Compatibility and the exact tag mapping are documented in               |
+# | FIPS.md. The base changes Alpine/musl/nobody -> Wolfi/glibc/            |
+# | nonroot, so native binaries built against fips-base must be             |
+# | rebuilt. See the /usr/local/ssl compatibility shim in the 140-3         |
+# | image for what continues to resolve unchanged.                          |
 # +-------------------------------------------------------------------------+
 #
 # ---------------------------------------------------------------------------
