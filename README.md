@@ -19,7 +19,9 @@ These images are **rebuilt daily**.
 
 [![FIPS Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/fips-base/*&label=fips-base&style=for-the-badge&logo=lock&color=red)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64) 
 
-[![Go 1.27 Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/go-base/*&label=go-base&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-amd64) 
+[![Go 1.26 Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/go-base/*&label=go-base&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-amd64) 
+
+[![Go 1.27 Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/go-base-1.27/*&label=go-base-1.27&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-1.27-linux-amd64) 
 
 [![Nginx Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/nginx-base/*&label=nginx-base&style=for-the-badge&logo=nginx&color=009639)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-amd64) 
 
@@ -35,6 +37,7 @@ These images are **rebuilt daily**.
 
 * [fips-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64)
 * [go-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-amd64)
+* [go-base-1.27-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-1.27-linux-amd64)
 * [nginx-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-amd64)
 * [nodejs-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-base-linux-amd64)
 * [openjdk17-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base-linux-amd64)
@@ -45,6 +48,7 @@ These images are **rebuilt daily**.
 
 * [fips-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-arm64)
 * [go-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-arm64)
+* [go-base-1.27-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-1.27-linux-arm64)
 * [nginx-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-arm64)
 * [nodejs-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-base-linux-arm64)
 * [openjdk17-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base-linux-arm64)
@@ -57,9 +61,10 @@ Images are considered hardened when they do not contain fixable-today CVE vulner
 
 ## Current Language Versions
 
-* **Go**: 1.26.x (from chainguard/go:latest)
+* **Go**: 1.26.x (go-base, from wolfi-base with the go-1.26 package)
+* **Go**: 1.27.x (go-base-1.27, from wolfi-base with the go-1.27 package)
 * **Node.js**: 24.18.x with npm 12.0.x (from wolfi-base with nodejs/npm packages)
-* **Python**: 3.13.x (from wolfi-base with python3 package)
+* **Python**: 3.13.x (from wolfi-base with the python-3.13 package)
 * **OpenJDK**: 17.x with Maven 3.9.8 (from wolfi-base with openjdk-17 package)
 * **Wolfi Base**: Latest minimal Linux distribution
 * **FIPS Base**: Custom OpenSSL 3.0.9 with FIPS 140-2 cryptographic validation ([beta](#beta-images))
@@ -67,7 +72,7 @@ Images are considered hardened when they do not contain fixable-today CVE vulner
 
 ### Recommended Version Pinning
 
-The images are tagged with [Semantic Versioning](https://semver.org/) and also with the installed language's major (i.e. `python-base:3`, `nodejs-base:24`) and major + minor (i.e. `python-base:3.13`, `go-base:1.27`, `nodejs-base:24.18`) versions (currently implemented for Python, Node.js, OpenJDK, and Go).
+The images are tagged with [Semantic Versioning](https://semver.org/) and also with the installed language's major (i.e. `python-base:3`, `nodejs-base:24`) and major + minor (i.e. `python-base:3.13`, `go-base:1.26`, `nodejs-base:24.18`) versions (currently implemented for Python, Node.js, OpenJDK, and Go).
 
 If you want to ensure that your image's installed language is not updated to a potentially non-backwards-compatible version, you can pin the version of the image you are using to the specific version of the language you want - i.e. `python-base:3.13` or `nodejs-base:24.18`.
 
