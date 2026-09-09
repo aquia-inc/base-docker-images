@@ -217,18 +217,34 @@ FROM ghcr.io/aquia-inc/base-docker-images/fips-140-3:latest
 Either way the same compatibility differences apply, because the base image
 changes from Alpine/musl to Wolfi/glibc:
 
-| | `fips-base` | `fips-140-3` |
+| | `fips-base` (FIPS 140-2) | `fips-140-3` |
 |---|---|---|
+| Base image | `ghcr.io/wolfi-dev/alpine-base` | `cgr.dev/chainguard/wolfi-base` |
 | C library | musl | **glibc** |
+| Package manager | `apk` | `apk` |
 | Default user | `nobody` (65534) | `nonroot` (65532) |
-| FIPS root | `/usr/local/ssl` | `/opt/openssl-fips` |
+| FIPS root | `/usr/local/ssl` | `/opt/openssl-fips` (with `/usr/local/ssl` symlinks) |
 | `openssl` on `PATH` | yes | yes |
+| FIPS module | OpenSSL 3.0.9, cert #4282/#4811 | OpenSSL 3.1.2, cert #4985 |
 
-The **libc change is the one that matters**. Precompiled binaries and native
-extensions built against musl will not run on glibc and must be rebuilt.
+What the base swap means in practice:
 
-`OPENSSL_CONF` and `OPENSSL_MODULES` are exported by both images, so code that
-simply uses OpenSSL needs no change.
+- **Package installs are unchanged.** Both images use Wolfi's `apk`, so any
+  `apk add ...` layers in a consuming Dockerfile work the same way.
+- **Rebuild native binaries - this is the breaking change.** A Go binary built
+  with cgo, a Python/Node C extension, or any statically musl-linked artifact
+  compiled on `fips-base` will not execute on glibc. Rebuild it on the new base.
+  Pure-Go (`CGO_ENABLED=0`), interpreted code, and anything that only shells out
+  to `openssl` are unaffected.
+- **glibc is the more standard target.** musl's smaller libc has occasional
+  behavioural differences (DNS resolver, locales, default thread stack size);
+  moving to glibc removes those edge cases rather than introducing them.
+- **Update UID assumptions.** Files owned by `nobody` (65534) and any Kubernetes
+  `securityContext.runAsUser: 65534` must move to `nonroot` (65532).
+- **OpenSSL usage needs no change.** `OPENSSL_CONF` and `OPENSSL_MODULES` are
+  exported by both images, and the old `/usr/local/ssl` config paths are
+  symlinked on `fips-140-3` (see below), so code that simply uses OpenSSL keeps
+  working in approved mode.
 
 ### Legacy path shim in `fips-140-3`
 

@@ -154,7 +154,14 @@ Two FIPS base images are available:
 - **Native binaries:** anything compiled on top of `fips-base` (Go cgo, C extensions) must be rebuilt on the new base - musl binaries do not run on glibc. Interpreted runtimes and OpenSSL-CLI usage are unaffected.
 - **User/UID:** the default user changes from `nobody` (65534) to `nonroot` (65532); update any hardcoded UID, file ownership, or Kubernetes `runAsUser`.
 
-The old `/usr/local/ssl` OpenSSL config paths are preserved on the 140-3 image, so FIPS stays enforced through the cutover rather than silently turning off. To reference 140-3 explicitly today, use `fips-140-3`. Full compliance detail is in [FIPS.md](./FIPS.md).
+The old `/usr/local/ssl` OpenSSL config paths are preserved on the 140-3 image, so FIPS stays enforced through the cutover rather than silently turning off. To reference 140-3 explicitly today, use `fips-140-3`.
+
+**Pinning across the cutover:** the cutover ships as a new major version (`fips-base:2.0.0`) and swaps the descriptive tag from `openssl3.0` (FIPS 140-2) to `fips3.1` (FIPS 140-3):
+
+- `fips-base:latest` or `fips-base:fips3.1` resolve to the FIPS 140-3 image (recommended).
+- `fips-base:openssl3.0` (and the pre-cutover `v1.x` tags) freeze at the last FIPS 140-2 build. They stop receiving patches after 2026-09-21, so treat them as a signal to move rather than a place to stay.
+
+Full compliance detail is in [FIPS.md](./FIPS.md).
 
 ### Nginx Security
 
