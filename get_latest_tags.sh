@@ -20,8 +20,12 @@ echo "=============================================="
 # Fetch latest tags from origin
 git fetch origin --tags >/dev/null 2>&1
 
-# Get latest tag for each image type and calculate new version
-for image in fips-base fips-140-3 go-base nginx-base nodejs-base python-base wolfi-base openjdk17-base; do
+# Get latest tag for each image type and calculate new version.
+# fips-base is intentionally absent: it was retired on 2026-09-21 and no longer
+# takes release/fips-base version tags. Its tags are republished from the
+# fips-140-3 image by the publish workflow, so there is no next version to
+# propose for it here.
+for image in fips-140-3 go-base nginx-base nodejs-base python-base wolfi-base openjdk17-base; do
   latest=$(git tag -l "release/$image/v*" | sort -V | tail -1)
   if [ -n "$latest" ]; then
     new_version=$(increment_version "$latest")
