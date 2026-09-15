@@ -13,20 +13,39 @@ vulnerabilities:
     # zlib heap buffer overflow, MEDIUM. Alias: GHSA-g5fp-32jq-cfw2.
     # Affected range is zlib 1.3.1.2 through 1.3.2.
     #
-    # Why this is ignored rather than fixed: there is no fixed package to
-    # install. Wolfi ships a maximum of zlib 1.3.2-r6 on both linux/amd64 and
-    # linux/arm64 (verified with "apk list zlib" in wolfi-base on both
-    # architectures). Trivy reports the fix as "1.3.3-r0", which is its
-    # normalisation of the upstream zlib 1.3.3 release; that version is not
-    # packaged in Wolfi. wolfi-dev/os zlib.yaml is still version 1.3.2 building
-    # upstream tag v1.3.2, and its 2026-09-13 commit titled
-    # "fix(zlib): GHSA-g5fp-32jq-cfw2" changed only "epoch: 5" to "epoch: 6" -
-    # no source patch - so r6 is a rebuild, not a remediation. wolfi-dev
-    # advisories carries no entry for this CVE at all.
+    # Why this is ignored rather than fixed: NO FIXED RELEASE EXISTS, from any
+    # source. Trivy reports the fix as "1.3.3-r0", but zlib 1.3.3 has never
+    # been released by anyone:
+    #
+    #   - Upstream github.com/madler/zlib has no 1.3.3 tag, branch or release.
+    #     Its newest tag and newest release are both v1.3.2 (2026-02-17), and
+    #     the develop branch has had no commit since 2026-06-01 - three months
+    #     before this CVE was published.
+    #   - NVD lists CVE-2026-85091 as "Awaiting Analysis" (published
+    #     2026-09-03). Its references are a researcher gist, a VulnCheck
+    #     advisory and a pointer to the vulnerable line in v1.3.2. There is no
+    #     patch reference and no vendor advisory.
+    #   - The GitHub advisory is unreviewed with an "Unknown" patched version.
+    #   - wolfi-dev/os zlib.yaml is still version 1.3.2 built from upstream tag
+    #     v1.3.2 (expected-commit da607da), and carries no advisory entry for
+    #     this CVE. Its 2026-09-13 commit titled
+    #     "fix(zlib): GHSA-g5fp-32jq-cfw2" changed only "epoch: 5" to
+    #     "epoch: 6" - no source patch - so the epoch bumps are rebuilds, not
+    #     remediation.
+    #
+    # "1.3.3-r0" is therefore a version that does not exist. Verified
+    # empirically: an image rebuilt onto zlib 1.3.2-r7 (the newest revision
+    # Wolfi offers) is still reported as vulnerable by Trivy, because the
+    # scanner is comparing against that unreleased version.
     #
     # The world-unpin plus "apk upgrade" in every Dockerfile is working
-    # correctly; there is simply nothing newer to upgrade to, so no rebuild can
-    # clear this finding.
+    # correctly; there is nothing to upgrade to, so no rebuild can clear this
+    # finding until upstream zlib actually ships a fix.
+    #
+    # Exploitability is narrow: the overflow is in gz_vacate() and requires the
+    # gz* API used in non-blocking mode with stale external buffer pointers,
+    # with gzprintf()/gzvprintf() called after a write stall. A base image
+    # ships libz but does not itself exercise that path.
     #
     # Why ignoring is the safer posture: the Trivy gate runs before the image
     # is pushed, so this single MEDIUM blocked every image in the repository
@@ -36,15 +55,24 @@ vulnerabilities:
     # also consistent with the hardening definition in README.md, which is
     # scoped to "fixable-today" CVEs.
     #
-    # REMOVE THIS ENTRY when wolfi-dev/os zlib.yaml reaches 1.3.3 (or Wolfi
-    # publishes an advisory recording a fixed-version that Wolfi actually
-    # ships). Check with:
-    #   docker run --rm cgr.dev/chainguard/wolfi-base:latest \
-    #     sh -c 'apk update -q; apk list zlib' | grep -E '^zlib-[0-9]'
+    # REMOVE THIS ENTRY once a real fix ships and Wolfi packages it. Check both:
+    #   1. upstream released a fixed version
+    #      gh api repos/madler/zlib/releases --jq '.[0].tag_name'
+    #   2. Wolfi packaged it
+    #      docker run --rm cgr.dev/chainguard/wolfi-base:latest \
+    #        sh -c 'apk update -q; apk list zlib' | grep -E '^zlib-[0-9]'
+    #
+    # Because no upstream fix exists yet, this entry may well still be needed
+    # at the expiry date below. That is intentional: it expires anyway so the
+    # risk is re-reviewed deliberately rather than carried indefinitely.
     statement: >-
-      No fixed package exists. Wolfi ships at most zlib 1.3.2-r6 on both
-      architectures; the upstream fix (zlib 1.3.3) is not packaged in Wolfi, so
-      no rebuild can remediate this. Blocking on it prevents every image in the
-      repository from publishing and therefore stops all other security
-      updates. Accepted as a time-boxed risk pending a Wolfi zlib 1.3.3 package.
+      No fixed release exists from any source. Trivy reports the fix as
+      1.3.3-r0, but zlib 1.3.3 has never been released - upstream's newest tag
+      and release are both v1.3.2, NVD still lists the CVE as Awaiting Analysis
+      with no patch reference, and Wolfi builds zlib from the unpatched v1.3.2
+      source. An image rebuilt onto the newest revision Wolfi offers
+      (1.3.2-r7) is still flagged. No rebuild can remediate this. Blocking on
+      it prevents every image in the repository from publishing and therefore
+      stops all other security updates. Accepted as a time-boxed risk pending a
+      real upstream zlib fix.
     expired_at: 2026-10-15

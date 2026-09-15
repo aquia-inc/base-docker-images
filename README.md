@@ -71,16 +71,20 @@ Those cases are recorded in [`.trivyignore.yaml`](./.trivyignore.yaml). Every en
 
 | CVE | Package | Severity | Why it cannot be fixed today | Expires |
 |---|---|---|---|---|
-| CVE-2026-85091 | zlib | MEDIUM | Wolfi ships at most `zlib 1.3.2-r6` on both architectures. The upstream fix (zlib 1.3.3) is not packaged in Wolfi, so `apk upgrade` has nothing newer to install. Blocking on it stopped every image in this repository from publishing, which halts all other security updates. | 2026-10-15 |
+| CVE-2026-85091 | zlib | MEDIUM | **No fixed release exists from any source.** Trivy names the fix as `1.3.3-r0`, but zlib 1.3.3 has never been released: upstream's newest tag and release are both `v1.3.2`, and NVD still lists the CVE as *Awaiting Analysis* with no patch reference. Wolfi builds zlib from the unpatched `v1.3.2` source, so an image rebuilt onto the newest revision it offers is still flagged. Blocking on it stopped every image in this repository from publishing, which halts all other security updates. | 2026-10-15 |
 
-To check whether the zlib entry can be removed:
+The zlib entry can only be removed once a real fix ships **and** Wolfi packages it. Check both:
 
 ```sh
+# 1. has upstream released a fixed version?
+gh api repos/madler/zlib/releases --jq '.[0].tag_name'
+
+# 2. has Wolfi packaged it?
 docker run --rm cgr.dev/chainguard/wolfi-base:latest \
     sh -c 'apk update -q; apk list zlib' | grep -E '^zlib-[0-9]'
 ```
 
-If that reports 1.3.3 or later, delete the entry and let the next build verify.
+Since no upstream fix exists yet, this entry may still be needed at its expiry date. That is intentional - it expires regardless, so the risk gets re-reviewed deliberately instead of being carried indefinitely.
 
 ## Current Language Versions
 
