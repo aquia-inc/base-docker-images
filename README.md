@@ -63,6 +63,29 @@ These images are **rebuilt daily**.
 
 Images are considered hardened when they do not contain fixable-today CVE vulnerabilities of the following severities: CRITICAL, HIGH, MEDIUM. They are based on [wolfi-base](<https://edu.chainguard.dev/open-source/wolfi/overview/>) from Chainguard. We use Renovate to automatically update each of these base images to the most recently published image ([`latest`](https://edu.chainguard.dev/chainguard/chainguard-images/reference/wolfi-base/tags_history/)).
 
+### Accepted risks (time-boxed)
+
+The Trivy gate runs at a MEDIUM severity floor with `ignore-unfixed`, so a finding normally blocks a build only when a fixed package actually exists. Occasionally an advisory names a fixed version that the distribution has not packaged yet: the finding counts as "fixed" and blocks the build, but no rebuild can clear it because the fixed package cannot be installed.
+
+Those cases are recorded in [`.trivyignore.yaml`](./.trivyignore.yaml). Every entry carries a mandatory `expired_at` date which Trivy enforces - once the date passes the finding fails builds again, so an ignore cannot quietly become permanent. An entry is an accepted risk, never a fix, and the file is kept empty whenever possible.
+
+| CVE | Package | Severity | Why it cannot be fixed today | Expires |
+|---|---|---|---|---|
+| CVE-2026-85091 | zlib | MEDIUM | **No fixed release exists from any source.** Trivy names the fix as `1.3.3-r0`, but zlib 1.3.3 has never been released: upstream's newest tag and release are both `v1.3.2`, and NVD still lists the CVE as *Awaiting Analysis* with no patch reference. Wolfi builds zlib from the unpatched `v1.3.2` source, so an image rebuilt onto the newest revision it offers is still flagged. Blocking on it stopped every image in this repository from publishing, which halts all other security updates. | 2026-10-15 |
+
+The zlib entry can only be removed once a real fix ships **and** Wolfi packages it. Check both:
+
+```sh
+# 1. has upstream released a fixed version?
+gh api repos/madler/zlib/releases --jq '.[0].tag_name'
+
+# 2. has Wolfi packaged it?
+docker run --rm cgr.dev/chainguard/wolfi-base:latest \
+    sh -c 'apk update -q; apk list zlib' | grep -E '^zlib-[0-9]'
+```
+
+Since no upstream fix exists yet, this entry may still be needed at its expiry date. That is intentional - it expires regardless, so the risk gets re-reviewed deliberately instead of being carried indefinitely.
+
 ## Current Language Versions
 
 * **Go**: 1.26.x (go-base, from wolfi-base with the go-1.26 package)

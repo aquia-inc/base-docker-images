@@ -48,7 +48,9 @@ list-all-pkgs: false
 
 # Same as '--ignorefile'
 # Default is '.trivyignore'
-ignorefile: .trivyignore
+# Uses the YAML form so that every ignore must carry an expired_at date, which
+# Trivy enforces - an ignore cannot silently become permanent.
+ignorefile: .trivyignore.yaml
 
 # Same as '--ignore-policy'
 # Default is empty
