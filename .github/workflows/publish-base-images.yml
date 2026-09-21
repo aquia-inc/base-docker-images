@@ -1267,13 +1267,8 @@ jobs:
           amd64_digest=$(docker manifest inspect "$amd64_image:$version" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
           arm64_digest=$(docker manifest inspect "$arm64_image:$version" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
           
-          amd64_latest_digest=$(docker manifest inspect "$amd64_image:latest" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
-          arm64_latest_digest=$(docker manifest inspect "$arm64_image:latest" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
-          
           echo "AMD64 version digest: $amd64_digest"
           echo "ARM64 version digest: $arm64_digest"
-          echo "AMD64 latest digest: $amd64_latest_digest"
-          echo "ARM64 latest digest: $arm64_latest_digest"
           
           # Create unified manifest for semver version using digests
           echo "Creating manifest for $universal_image:$version"
@@ -1285,14 +1280,21 @@ jobs:
             "$arm64_image@$arm64_digest"
           docker manifest push "$universal_image:$version"
           
-          # Create unified manifest for latest using digests
+          # Create unified manifest for latest.
+          # IMPORTANT: reuse the same digests as the version tag ($amd64_digest,
+          # $arm64_digest), for the same reason the major/minor tags below do.
+          # This previously re-inspected "$amd64_image:latest" separately, so
+          # :latest could resolve to different content than the release it was
+          # published with - drift that showed up as :latest and :<version>
+          # carrying different SHAs. Every tag for a release must point at the
+          # same signed image.
           echo "Creating manifest for $universal_image:latest"
           docker manifest create "$universal_image:latest" \
-            "$amd64_image@$amd64_latest_digest" \
-            "$arm64_image@$arm64_latest_digest" || \
+            "$amd64_image@$amd64_digest" \
+            "$arm64_image@$arm64_digest" || \
           docker manifest create --amend "$universal_image:latest" \
-            "$amd64_image@$amd64_latest_digest" \
-            "$arm64_image@$arm64_latest_digest"
+            "$amd64_image@$amd64_digest" \
+            "$arm64_image@$arm64_digest"
           docker manifest push "$universal_image:latest"
           
           # Create version-specific manifests if available

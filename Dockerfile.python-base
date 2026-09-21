@@ -40,7 +40,7 @@ SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 # multi-arch manifest step fail with "invalid reference format" on
 # python-base:3.13.15+. It is stripped first so the trailing-component
 # match below still anchors correctly.
-RUN python3 --version 2>&1 | awk -F' ' '{print $2}' | tr -d '\n' | sed 's/+.*$//; s/\.[0-9]$//' > /tmp/python_minor_version.txt && \
+RUN python3 --version 2>&1 | awk -F' ' '{print $2}' | tr -d '\n' | sed 's/+.*$//' | cut -d. -f1-2 > /tmp/python_minor_version.txt && \
 PY_VERSION=$(cat /tmp/python_minor_version.txt) && \
 ln -s "/home/nonroot/.local/lib/python${PY_VERSION}" /home/nonroot/.local/lib/python3
 
