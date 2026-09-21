@@ -317,31 +317,10 @@ jobs:
                 echo "[warn] Failed to extract FIPS module version"
               fi
               ;;
-            "fips-base")
-              echo "FIPS image detected, extracting OpenSSL version..."
-              
-              if OPENSSL_VERSION=$(docker run --rm --platform "$PLATFORM" \
-                 "$GH_REPOSITORY/$IMAGE_NAME:test" \
-                 /usr/local/ssl/bin/openssl version 2>/dev/null | awk '{print $2}'); then
-                
-                echo "OpenSSL version: $OPENSSL_VERSION"
-                
-                # Extract major.minor (e.g., 3.0.9 -> 3.0)
-                OPENSSL_MAJOR=$(echo "$OPENSSL_VERSION" | cut -d'.' -f1)
-                OPENSSL_MINOR=$(echo "$OPENSSL_VERSION" | cut -d'.' -f1-2)
-                
-                if [ -n "$OPENSSL_MAJOR" ] && [ -n "$OPENSSL_MINOR" ]; then
-                  echo "major_tag=openssl$OPENSSL_MAJOR" >> $GITHUB_OUTPUT
-                  echo "minor_tag=openssl$OPENSSL_MINOR" >> $GITHUB_OUTPUT
-                  echo "tool_version=$OPENSSL_VERSION" >> $GITHUB_OUTPUT
-                  echo "has_version_tags=true" >> $GITHUB_OUTPUT
-                  echo "✅ OpenSSL version tags: major=openssl$OPENSSL_MAJOR, minor=openssl$OPENSSL_MINOR"
-                fi
-              else
-                echo "⚠️  Failed to extract OpenSSL version"
-              fi
-              ;;
-              
+            # fips-base is retired (2026-09-21). It is no longer built; its
+            # tags are republished from the fips-140-3 image by the "Mirror
+            # FIPS 140-3 manifest onto fips-base tags" step in the manifest
+            # job, so there is no fips-base version-extraction arm here.
             "nginx-base")
               echo "Nginx image detected, extracting Nginx version..."
               
@@ -1377,6 +1356,45 @@ jobs:
               fi
             done
           fi
+
+      - name: Mirror FIPS 140-3 manifest onto fips-base tags
+        # fips-base was retired on 2026-09-21 and is no longer built from a
+        # Dockerfile. Its live tags are republished here from the just-published
+        # fips-140-3 manifest so consumers pinned to
+        # FROM ...fips-base:{latest,fips3,fips3.1} keep resolving to the current
+        # 140-3 image with no image-reference change. This is a registry-side
+        # manifest copy: both architectures are preserved and nothing is rebuilt.
+        #
+        # Deliberately NOT written here: openssl3 / openssl3.0 (frozen at the
+        # final 140-2 build) and the 2 / 2.0 / 2.0.0 semver markers (a one-time
+        # cutover freeze applied by the runbook in FIPS.md). Re-pointing those on
+        # every rebuild would defeat the "frozen" signal, so the mirror only
+        # moves the tracking tags.
+        if: steps.parse_tag.outputs.image_base_name == 'fips-140-3'
+        env:
+          REGISTRY_REPO: ${{ env.REGISTRY }}/${{ github.repository }}
+          SRC_VERSION: ${{ steps.parse_tag.outputs.version }}
+          MAJOR_TAG: ${{ steps.version_info.outputs.major_tag }}
+          MINOR_TAG: ${{ steps.version_info.outputs.minor_tag }}
+        run: |
+          src="${REGISTRY_REPO}/fips-140-3:${SRC_VERSION}"
+          dst="${REGISTRY_REPO}/fips-base"
+
+          # Tags that TRACK the 140-3 image on every rebuild.
+          tags=( "${dst}:latest" )
+          [ -n "${MAJOR_TAG}" ] && tags+=( "${dst}:${MAJOR_TAG}" )
+          [ -n "${MINOR_TAG}" ] && tags+=( "${dst}:${MINOR_TAG}" )
+
+          tag_args=()
+          for t in "${tags[@]}"; do
+            tag_args+=( --tag "$t" )
+          done
+
+          echo "Republishing $src onto fips-base tags: ${tags[*]}"
+          docker buildx imagetools create "${tag_args[@]}" "$src"
+
+          echo "Verifying fips-base:latest resolves to a multi-arch manifest:"
+          docker buildx imagetools inspect "${dst}:latest" | grep -E 'MediaType|Platform' | head -n 12
 
   # Auto-approve renovate PRs after successful builds
   auto_approve_renovate:

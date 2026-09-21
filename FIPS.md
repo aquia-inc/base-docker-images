@@ -49,6 +49,52 @@ The two images are deliberately kept close so that the cutover needs no image
 reference change; the only consumer-visible differences are the base OS (musl to
 glibc) and the default user. See [Migrating](#migrating-from-fips-base-to-fips-140-3).
 
+### How the tags are republished
+
+At the cutover, `Dockerfile.fips-base` is renamed to
+`deprecated.Dockerfile.fips-base` and is no longer built - the discovery globs in
+the publish and daily-rebuild workflows stop matching it. The `fips-base` tags
+are produced instead by the **Mirror FIPS 140-3 manifest onto fips-base tags**
+step in `publish-base-images.yml`: on every `fips-140-3` publish it copies that
+image's multi-arch manifest onto the `fips-base` tags with a registry-side
+`docker buildx imagetools create` (no rebuild, both architectures preserved).
+
+Every tag that `fips-base` used before the cutover keeps resolving. What changes
+is only which of them keep moving:
+
+| `fips-base` tag | after 2026-09-21 |
+|---|---|
+| `:latest` | **tracks** the current `fips-140-3` image (updated on every rebuild) |
+| `:fips3`, `:fips3.1` | **track** the current `fips-140-3` image (new, matching `fips-140-3`) |
+| `:openssl3`, `:openssl3.0` | **frozen** at the final FIPS 140-2 build; still pullable, no longer updated |
+| `:2`, `:2.0`, `:2.0.0` | one-time markers of the 140-2 to 140-3 cutover (a deliberate major bump from `:1.1.x`) |
+| earlier `:1.1.x` version tags | unchanged, still pullable |
+
+The major bump to `2.0.0` is the semver signal that the module standard changed
+(FIPS 140-2 to 140-3) and the base changed (musl to glibc). Consumers pinned to
+`:openssl3` or `:openssl3.0` keep the last 140-2 image and see it stop updating,
+which is the intended "this line has ended" signal rather than a silent swap.
+
+### Cutover runbook (one-time, on or after 2026-09-21)
+
+The tracking tags (`:latest`, `:fips3`, `:fips3.1`) are handled automatically by
+the mirror step above. The frozen `:2` / `:2.0` / `:2.0.0` markers are written
+once, by hand, because re-pointing them on every rebuild would defeat the point
+of a frozen marker:
+
+```bash
+reg=ghcr.io/aquia-inc/base-docker-images
+# Stamp the cutover semver markers onto the current 140-3 image, one time.
+docker buildx imagetools create \
+  --tag "$reg/fips-base:2" \
+  --tag "$reg/fips-base:2.0" \
+  --tag "$reg/fips-base:2.0.0" \
+  "$reg/fips-140-3:latest"
+```
+
+The `:openssl3` / `:openssl3.0` tags need no action - they simply stop being
+updated once `fips-base` no longer builds, which is the freeze.
+
 ## How these images are built
 
 Only the FIPS Provider itself (`fips.so`) is compiled from the validated
