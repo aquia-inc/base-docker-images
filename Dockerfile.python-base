@@ -33,7 +33,14 @@ RUN poetry config installer.max-workers 10
 
 # create symlink for correct PYTHONPATH for poetry
 SHELL ["/bin/ash", "-o", "pipefail", "-c"]
-RUN python3 --version 2>&1 | awk -F' ' '{print $2}' | tr -d '\n' | sed 's/\.[0-9]$//' > /tmp/python_minor_version.txt && \
+# The leading "s/+.*$//" strips CPython's snapshot suffix. Wolfi moved the
+# python-3.13 package to a git snapshot (3.13.15_git20260912-r0), so
+# "python3 --version" now prints "Python 3.13.15+". This value is used as a
+# Docker tag, and "+" is not a legal tag character, which made the
+# multi-arch manifest step fail with "invalid reference format" on
+# python-base:3.13.15+. It is stripped first so the trailing-component
+# match below still anchors correctly.
+RUN python3 --version 2>&1 | awk -F' ' '{print $2}' | tr -d '\n' | sed 's/+.*$//; s/\.[0-9]$//' > /tmp/python_minor_version.txt && \
 PY_VERSION=$(cat /tmp/python_minor_version.txt) && \
 ln -s "/home/nonroot/.local/lib/python${PY_VERSION}" /home/nonroot/.local/lib/python3
 
