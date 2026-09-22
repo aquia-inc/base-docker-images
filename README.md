@@ -17,8 +17,6 @@ These images are **rebuilt daily**.
 
 ## Available Images
 
-[![FIPS Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/fips-base/*&label=fips-base&style=for-the-badge&logo=lock&color=red)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64) 
-
 [![FIPS 140-3 Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/fips-140-3/*&label=fips-140-3&style=for-the-badge&logo=lock&color=darkgreen)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-140-3-linux-amd64) 
 
 [![Go 1.26 Base](https://img.shields.io/github/v/tag/aquia-inc/base-docker-images?filter=release/go-base/*&label=go-base&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-amd64) 
@@ -37,7 +35,6 @@ These images are **rebuilt daily**.
  
 ### Latest linux/amd64 Releases
 
-* [fips-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64)
 * [fips-140-3-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-140-3-linux-amd64)
 * [go-base-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-amd64)
 * [go-base-1.27-linux-amd64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-1.27-linux-amd64)
@@ -49,7 +46,6 @@ These images are **rebuilt daily**.
 
 ### Latest linux/arm64 Releases
 
-* [fips-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-arm64)
 * [fips-140-3-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Ffips-140-3-linux-arm64)
 * [go-base-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-arm64)
 * [go-base-1.27-linux-arm64](https://github.com/aquia-inc/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-1.27-linux-arm64)
@@ -81,9 +77,10 @@ An entry is an accepted risk, never a fix, and it is only justified while no fix
 * **Python**: 3.13.x (from wolfi-base with the python-3.13 package)
 * **OpenJDK**: 17.x with Maven 3.9.8 (from wolfi-base with openjdk-17 package)
 * **Wolfi Base**: Latest minimal Linux distribution
-* **FIPS Base** (`fips-base`): CMVP-validated OpenSSL FIPS Provider 3.0.9 (FIPS 140-2, certs #4282/#4811). Deprecated - the 140-2 certificates sunset 2026-09-21; use `fips-140-3`. ([beta](#beta-images))
 * **FIPS 140-3 Base** (`fips-140-3`): CMVP-validated OpenSSL FIPS Provider 3.1.2 (FIPS 140-3, cert #4985, sunset 2030-03-10), module-only on wolfi-base. User-affirmed per CMVP Management Manual 7.9.2 - NOT "FIPS validated on Wolfi". See [FIPS.md](./FIPS.md). ([beta](#beta-images))
 * **Nginx**: 1.29.x with headers-more module (custom build)
+
+`fips-base` is no longer listed above: it was retired on 2026-09-21 when its FIPS 140-2 certificates reached their NIST sunset date, and is no longer built. Its tags were republished onto `fips-140-3`, so existing `FROM ...fips-base...` references keep working unchanged. The reasoning, the per-tag mapping and the two compatibility caveats are in [FIPS-enabled base images](#fips-enabled-base-images) and [FIPS.md](./FIPS.md).
 
 ### Recommended Version Pinning
 
@@ -97,7 +94,7 @@ On the other hand, pinning your image to `python-base:3` or `nodejs-base:24` for
 
 Both choices have tradeoffs and is a decision you need to make based on your project's needs.
 
-The non-language-specific images, such as the `nginx-base`, `fips-base`, and `wolfi-base` images can be pinned to `:latest`, as they are unlikely to bring backwards-incompatible changes to your workloads.
+The non-language-specific images, such as the `nginx-base` and `wolfi-base` images can be pinned to `:latest`, as they are unlikely to bring backwards-incompatible changes to your workloads.
 
 ## How to Use
 
@@ -147,29 +144,23 @@ The beta images are tested within limited scope and are generally stable but not
 
 #### FIPS-enabled base images
 
-Two FIPS base images are available:
+**`fips-140-3`** is the FIPS base image: OpenSSL FIPS Provider 3.1.2, NIST CMVP certificate #4985 (sunset 2030-03-10). New work should reference it by name.
 
-- **`fips-base`** - the image most FIPS workloads already reference. Today it provides OpenSSL FIPS Provider 3.0.9 (FIPS 140-2, certs #4282/#4811). At the cutover it is republished onto the FIPS 140-3 image, so **existing `fips-base` references keep working with no Dockerfile change**.
-- **`fips-140-3`** - the FIPS 140-3 image: OpenSSL FIPS Provider 3.1.2, NIST CMVP certificate #4985. Available now for teams that want to reference 140-3 explicitly.
+**`fips-base` was retired on 2026-09-21** and is no longer built. Its FIPS 140-2 certificates (#4282 / #4811, OpenSSL 3.0.9) reached their NIST sunset date and moved to the Historical list; after that date an image branded "FIPS 140-2" is not defensible in a compliance audit.
 
-**Why the change:** the NIST certificates behind the 140-2 provider reach their sunset date on **2026-09-21** and then move to NIST's Historical list. After that date an image branded "FIPS 140-2" is no longer defensible in a compliance audit, so the FIPS 140-3 provider replaces it.
+**Nothing broke for consumers.** Rather than retiring the name, the `fips-base` tags were republished onto the FIPS 140-3 image, so an existing `FROM ...fips-base...` keeps resolving and transparently moved to 140-3 - no Dockerfile change was required. The tracking tags (`:latest`, `:fips3`, `:fips3.1`) follow the 140-3 image on every rebuild; the frozen `:openssl3` / `:openssl3.0` tags and the `:2.0.0` cutover marker are handled separately. The full per-tag mapping is in [FIPS.md](./FIPS.md#how-the-tags-are-republished).
 
-**Cutover timeline:**
-
-- **Until 2026-09-21:** `fips-base` keeps building on the FIPS 140-2 provider (3.0.9) with daily CVE patches. Nothing changes for consumers.
-- **On 2026-09-21:** the tracking `fips-base` tags (`:latest`, `:fips3`, `:fips3.1`) are republished onto the FIPS 140-3 image on every rebuild, so anything pulling `fips-base` transparently moves to 140-3 - **no image reference change is required**. The frozen `:openssl3` / `:openssl3.0` tags and the `:2.0.0` cutover marker are handled separately; the full per-tag mapping is in [FIPS.md](./FIPS.md#how-the-tags-are-republished).
-
-**What consumers need to do:** for most workloads, nothing - keep your existing `fips-base` reference. Two things to check, because the 140-3 image is built on Wolfi/glibc where the 140-2 `fips-base` was Alpine/musl:
+**What to check:** for most workloads, nothing. Two things matter, because the 140-3 image is built on Wolfi/glibc where the 140-2 `fips-base` was Alpine/musl:
 
 - **Native binaries:** anything compiled on top of `fips-base` (Go cgo, C extensions) must be rebuilt on the new base - musl binaries do not run on glibc. Interpreted runtimes and OpenSSL-CLI usage are unaffected.
 - **User/UID:** the default user changes from `nobody` (65534) to `nonroot` (65532); update any hardcoded UID, file ownership, or Kubernetes `runAsUser`.
 
-The old `/usr/local/ssl` OpenSSL config paths are preserved on the 140-3 image, so FIPS stays enforced through the cutover rather than silently turning off. To reference 140-3 explicitly today, use `fips-140-3`.
+The old `/usr/local/ssl` OpenSSL config paths are preserved on the 140-3 image, so FIPS stayed enforced through the cutover rather than silently turning off.
 
-**Pinning across the cutover:** the cutover ships as a new major version (`fips-base:2.0.0`) and swaps the descriptive tag from `openssl3.0` (FIPS 140-2) to `fips3.1` (FIPS 140-3):
+**Pinning after the cutover:** the cutover shipped as a new major version (`fips-base:2.0.0`) and swapped the descriptive tag from `openssl3.0` (FIPS 140-2) to `fips3.1` (FIPS 140-3):
 
-- `fips-base:latest` or `fips-base:fips3.1` resolve to the FIPS 140-3 image (recommended).
-- `fips-base:openssl3.0` (and the pre-cutover `v1.x` tags) freeze at the last FIPS 140-2 build. They stop receiving patches after 2026-09-21, so treat them as a signal to move rather than a place to stay.
+- `fips-base:latest` or `fips-base:fips3.1` resolve to the FIPS 140-3 image. Referencing `fips-140-3` directly is clearer for new work.
+- `fips-base:openssl3.0` (and the pre-cutover `v1.x` tags) are frozen at the last FIPS 140-2 build and no longer receive patches, so treat them as a signal to move rather than a place to stay.
 
 Full compliance detail is in [FIPS.md](./FIPS.md).
 
