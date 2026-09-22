@@ -59,6 +59,8 @@ jobs:
           set -e # Exit on most errors, but parsing/scan failures handled below
 
           needs_rebuild_list=""
+          scan_errors=""
+          push_failures=""
 
           if [ -z "$IMAGE_BASE_NAMES" ]; then
               echo "::error::IMAGE_BASE_NAMES environment variable is not set. Discovery might have failed."
@@ -84,24 +86,41 @@ jobs:
               fi
 
               echo "Scanning $full_image_tag for vulnerabilities (severities: ${{ env.TRIGGER_SEVERITIES }})"
-              # Run Trivy vulnerability scan
+              # The platform must be stated explicitly. These are single-platform
+              # images, and the runner is amd64, so Trivy would otherwise default to
+              # the host platform and die on the arm64 image with
+              # "no child with platform linux/amd64 in index ...-linux-arm64".
+              scan_platform="${platform_suffix/linux-/linux/}"
+
+              # Output is captured because Trivy exits 1 BOTH for "findings were
+              # found" and for a fatal scan error, so the exit code alone cannot
+              # distinguish them. Treating an error as a finding silently queues
+              # every image for rebuild on every run and destroys the signal.
+              scan_log="$(mktemp)"
               if trivy image \
+                --platform "$scan_platform" \
                 --ignore-unfixed \
                 --exit-code 1 \
                 --severity "${{ env.TRIGGER_SEVERITIES }}" \
                 --format table \
-                "$full_image_tag"; then
+                "$full_image_tag" > "$scan_log" 2>&1; then
+                cat "$scan_log"
                 echo "[ok] No fixable vulnerabilities found in $full_image_tag"
               else
                 scan_exit_code=$?
-                if [ $scan_exit_code -eq 1 ]; then
+                cat "$scan_log"
+                if grep -qE '(FATAL|Fatal error)' "$scan_log"; then
+                  echo "::warning::Trivy could not scan $full_image_tag (exit $scan_exit_code). Not treating this as a vulnerability finding."
+                  scan_errors="${scan_errors} ${full_image_tag}"
+                elif [ $scan_exit_code -eq 1 ]; then
                   echo "[warn] Fixable vulnerabilities found in $full_image_tag"
                   found_fixable_vulns_for_base=true
                 else
                   echo "[fail] Trivy scan failed for $full_image_tag (exit code: $scan_exit_code)"
-                  # Continue processing other platforms
+                  scan_errors="${scan_errors} ${full_image_tag}"
                 fi
               fi
+              rm -f "$scan_log"
             done # End platform loop
 
             # Rebuild whenever fixable vulnerabilities are found. Fixes often ship as apk
@@ -136,6 +155,11 @@ jobs:
             fi
             echo "Decision for $base_name: $rebuild_reason"
           done # End base_name loop
+
+          # Refresh tags before computing rebuild versions. create-release-tag runs
+          # on every push to main, so a tag created after this job checked out
+          # would otherwise be invisible here and cause a push collision.
+          git fetch --tags --force --quiet || true
 
           # Process rebuild list
           unique_needs_rebuild=$(echo "$needs_rebuild_list" | xargs -n1 | sort -u | xargs)
@@ -195,10 +219,39 @@ jobs:
             new_version="v${major}.${minor}.${new_patch}"
             new_tag="release/${base_name}/${new_version}"
 
+            # A rebuild tag for this version may already exist: create-release-tag
+            # runs on every push to main and computes the same "latest patch + 1",
+            # so a merge landing minutes before this job wins the race. That means a
+            # rebuild is already in flight for this image, which is the outcome we
+            # wanted, so skip it rather than failing the whole run and stranding the
+            # images that have not been processed yet.
+            if git rev-parse -q --verify "refs/tags/$new_tag" > /dev/null 2>&1; then
+              echo "[skip] $new_tag already exists; a rebuild for $base_name is already in flight."
+              continue
+            fi
+
             echo "Creating and pushing rebuild tag: $new_tag"
             git tag "$new_tag"
-            git push "https://x-access-token:${RELEASE_PAT}@github.com/${GH_REPO}.git" "$new_tag"
-            echo "[ok] Rebuild triggered for $base_name by pushing tag $new_tag"
+            if git push "https://x-access-token:${RELEASE_PAT}@github.com/${GH_REPO}.git" "$new_tag"; then
+              echo "[ok] Rebuild triggered for $base_name by pushing tag $new_tag"
+            else
+              echo "::warning::Could not push $new_tag for $base_name; continuing with the remaining images."
+              git tag -d "$new_tag" > /dev/null 2>&1 || true
+              push_failures="${push_failures} ${base_name}"
+            fi
           done
+
+          # Surface problems that were deliberately not allowed to abort the run.
+          # A scan error is not a vulnerability finding, but it does mean an image
+          # went unchecked, so it must not pass silently.
+          if [ -n "$scan_errors" ]; then
+            echo "::error::Images that could not be scanned:${scan_errors}"
+          fi
+          if [ -n "$push_failures" ]; then
+            echo "::error::Images whose rebuild tag could not be pushed:${push_failures}"
+          fi
+          if [ -n "$scan_errors" ] || [ -n "$push_failures" ]; then
+            exit 1
+          fi
         env:
           RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
