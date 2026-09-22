@@ -255,3 +255,99 @@ jobs:
           fi
         env:
           RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+
+      # The FIPS 140-2 image was retired on 2026-09-21. Its openssl3 / openssl3.0
+      # tags were deliberately frozen at the final 140-2 build rather than moved,
+      # so they are not rebuilt and the rebuild scan above never sees them (there
+      # is no Dockerfile.fips-base any more). Without this check they would
+      # quietly accumulate vulnerabilities while still being pullable.
+      #
+      # Nothing here can fix them - only retire them. So the job fails when a
+      # frozen tag has any scanner finding a consumer would see (a fixable
+      # vulnerability, or a secret such as a private key left in the image), or
+      # when the published end-of-life date (FIPS.md) has passed and the tags
+      # still resolve.
+      #
+      # A retired tag is overwritten with the end-of-life marker image built
+      # from eol/Dockerfile. The marker carries the eol-marker label, so it is
+      # recognised here and neither scanned nor counted as still present. Once
+      # every reference is a marker this step is permanently green and can be
+      # removed.
+      - name: Monitor frozen FIPS 140-2 tags
+        if: ${{ !cancelled() }}
+        env:
+          EOL_DATE: "2026-09-30"
+          FROZEN_TAGS: "openssl3 openssl3.0"
+        run: |
+          set -uo pipefail
+
+          findings=""
+          scan_errors=""
+          present=""
+          today=$(date -u +%F)
+
+          # True when the reference is the end-of-life marker (eol/Dockerfile).
+          is_eol_marker() {
+            docker buildx imagetools inspect "$1" --format '{{json .Image}}' 2>/dev/null |
+              jq -e '[.. | objects | .Labels? // empty | .["org.aquia.base-docker-images.eol-marker"]?] | any(. == "true")' \
+              > /dev/null 2>&1
+          }
+
+          scan() {
+            local ref="$1" platform="$2" log
+            log="$(mktemp)"
+            if trivy image \
+              --platform "$platform" \
+              --ignore-unfixed \
+              --exit-code 1 \
+              --severity "${{ env.TRIGGER_SEVERITIES }}" \
+              --format table \
+              "$ref" > "$log" 2>&1; then
+              echo "[ok] No findings in $ref ($platform)"
+            elif grep -qE '(FATAL|Fatal error)' "$log"; then
+              cat "$log"
+              echo "::warning::Trivy could not scan $ref ($platform)"
+              scan_errors="${scan_errors} ${ref}@${platform}"
+            else
+              cat "$log"
+              findings="${findings} ${ref}@${platform}"
+            fi
+            rm -f "$log"
+          }
+
+          for package in fips-base fips-base-linux-amd64 fips-base-linux-arm64; do
+            case "$package" in
+              fips-base) platforms="linux/amd64 linux/arm64" ;;
+              *) platforms="linux/${package##*-}" ;;
+            esac
+            for tag in $FROZEN_TAGS; do
+              ref="${REGISTRY}/${GH_REPO}/${package}:${tag}"
+              if ! docker manifest inspect "$ref" > /dev/null 2>&1; then
+                echo "[info] $ref no longer resolves (retired)"
+                continue
+              fi
+              if is_eol_marker "$ref"; then
+                echo "[ok] $ref is retired (end-of-life marker)"
+                continue
+              fi
+              present="${present} ${ref}"
+              for platform in $platforms; do
+                scan "$ref" "$platform"
+              done
+            done
+          done
+
+          failed=0
+          if [ -n "$findings" ]; then
+            echo "::error::Frozen FIPS 140-2 tags have scanner findings (vulnerabilities or secrets) and cannot be rebuilt. Retire them now with eol/retire-fips-base-tag.sh (see FIPS.md):${findings}"
+            failed=1
+          fi
+          if [ -n "$scan_errors" ]; then
+            echo "::error::Frozen FIPS 140-2 tags that could not be scanned:${scan_errors}"
+            failed=1
+          fi
+          if [ -n "$present" ] && [[ "$today" > "$EOL_DATE" ]]; then
+            echo "::error::The end-of-life date for the frozen FIPS 140-2 tags (${EOL_DATE}) has passed but they still resolve. Retire them with eol/retire-fips-base-tag.sh (see FIPS.md):${present}"
+            failed=1
+          fi
+          exit "$failed"

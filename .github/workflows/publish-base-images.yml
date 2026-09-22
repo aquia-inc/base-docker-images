@@ -1330,6 +1330,11 @@ jobs:
         # 140-3 image with no image-reference change. This is a registry-side
         # manifest copy: both architectures are preserved and nothing is rebuilt.
         #
+        # The per-architecture packages (fips-base-linux-amd64 / -arm64) are
+        # mirrored too. Every release page tells consumers to use
+        # FROM ...<image>-linux-<arch>:latest, so leaving those behind would
+        # keep that documented path on the retired 140-2 image.
+        #
         # Deliberately NOT written here: openssl3 / openssl3.0 (frozen at the
         # final 140-2 build) and the 2 / 2.0 / 2.0.0 semver markers (a one-time
         # cutover freeze applied by the runbook in FIPS.md). Re-pointing those on
@@ -1342,24 +1347,51 @@ jobs:
           MAJOR_TAG: ${{ steps.version_info.outputs.major_tag }}
           MINOR_TAG: ${{ steps.version_info.outputs.minor_tag }}
         run: |
-          src="${REGISTRY_REPO}/fips-140-3:${SRC_VERSION}"
-          dst="${REGISTRY_REPO}/fips-base"
+          set -euo pipefail
 
-          # Tags that TRACK the 140-3 image on every rebuild.
-          tags=( "${dst}:latest" )
-          [ -n "${MAJOR_TAG}" ] && tags+=( "${dst}:${MAJOR_TAG}" )
-          [ -n "${MINOR_TAG}" ] && tags+=( "${dst}:${MINOR_TAG}" )
+          # Republish one source onto the TRACKING tags of one destination
+          # package: latest plus the fips3 / fips3.1 ladder, nothing else.
+          mirror() {
+            local src="$1" dst="$2"
+            local tags=( "${dst}:latest" )
+            [ -n "${MAJOR_TAG}" ] && tags+=( "${dst}:${MAJOR_TAG}" )
+            [ -n "${MINOR_TAG}" ] && tags+=( "${dst}:${MINOR_TAG}" )
 
-          tag_args=()
-          for t in "${tags[@]}"; do
-            tag_args+=( --tag "$t" )
+            local tag_args=()
+            for t in "${tags[@]}"; do
+              tag_args+=( --tag "$t" )
+            done
+
+            echo "Republishing $src onto: ${tags[*]}"
+            docker buildx imagetools create "${tag_args[@]}" "$src"
+          }
+
+          # Resolve the digest behind a tag. imagetools returns the digest of
+          # the manifest or index the tag points at.
+          digest_of() {
+            docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' | jq -r '.digest'
+          }
+
+          mirror "${REGISTRY_REPO}/fips-140-3:${SRC_VERSION}" "${REGISTRY_REPO}/fips-base"
+          for arch in amd64 arm64; do
+            mirror "${REGISTRY_REPO}/fips-140-3-linux-${arch}:${SRC_VERSION}" \
+                   "${REGISTRY_REPO}/fips-base-linux-${arch}"
           done
 
-          echo "Republishing $src onto fips-base tags: ${tags[*]}"
-          docker buildx imagetools create "${tag_args[@]}" "$src"
-
-          echo "Verifying fips-base:latest resolves to a multi-arch manifest:"
-          docker buildx imagetools inspect "${dst}:latest" | grep -E 'MediaType|Platform' | head -n 12
+          # Fail the job unless every mirrored latest now matches its source
+          # exactly. A partial mirror would leave some consumers on 140-2.
+          failed=0
+          for suffix in "" "-linux-amd64" "-linux-arm64"; do
+            want=$(digest_of "${REGISTRY_REPO}/fips-140-3${suffix}:${SRC_VERSION}")
+            got=$(digest_of "${REGISTRY_REPO}/fips-base${suffix}:latest")
+            if [ -n "$want" ] && [ "$want" = "$got" ]; then
+              echo "[ok] fips-base${suffix}:latest = fips-140-3${suffix}:${SRC_VERSION} ($got)"
+            else
+              echo "::error::fips-base${suffix}:latest is $got, expected $want"
+              failed=1
+            fi
+          done
+          exit "$failed"
 
   # Auto-approve renovate PRs after successful builds
   auto_approve_renovate:
