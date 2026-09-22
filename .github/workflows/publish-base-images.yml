@@ -178,43 +178,6 @@ jobs:
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH,MEDIUM"
 
-
-
-      - name: Run container structure tests for ${{ matrix.platform }}
-        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
-        id: run_tests
-        run: |
-          # Download container-structure-test if not available
-          if ! command -v container-structure-test &> /dev/null; then
-            echo "Downloading container-structure-test..."
-            curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
-            chmod +x container-structure-test-linux-amd64
-            sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
-          fi
-          
-          # Run tests if config exists
-          test_config="tests/container-structure/${{ steps.context.outputs.image-base-name }}.yaml"
-          if [ -f "$test_config" ]; then
-            echo "Running container structure tests with config: $test_config"
-            container-structure-test test \
-              --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-              --config "$test_config"
-          else
-            echo "No container structure test config found at $test_config, skipping tests"
-          fi
-
-      - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
-        with:
-          scan-type: image
-          image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
-          format: table
-          exit-code: "1"
-          ignore-unfixed: true
-          vuln-type: "os,library"
-          severity: "CRITICAL,HIGH,MEDIUM"
-
       - name: Extract language versions
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         id: extract_versions
