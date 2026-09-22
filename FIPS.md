@@ -73,7 +73,8 @@ and `fips-base-linux-arm64`, except where a row says otherwise.
 |---|---|
 | `:latest` | **tracks** the current `fips-140-3` image (updated on every rebuild) |
 | `:fips3`, `:fips3.1` | **track** the current `fips-140-3` image (new, matching `fips-140-3`) |
-| `:openssl3`, `:openssl3.0` | **frozen** at the final FIPS 140-2 build; still pullable, no longer updated, **end of life 2026-09-30** (see below) |
+| `:openssl3` | **frozen** at the final FIPS 140-2 build; still pullable, no longer updated, **end of life 2026-09-30** (see below) |
+| `:openssl3.0` | **retired 2026-09-22** - now the end-of-life marker (see below) |
 | `:openssl3.5` (per-architecture packages only) | removed; it implied an OpenSSL 3.5 FIPS module, which has no CMVP validation |
 | `:2`, `:2.0`, `:2.0.0` | one-time markers of the 140-2 to 140-3 cutover (a deliberate major bump from `:1.1.x`) |
 | earlier `:1.1.x` version tags | unchanged, still pullable |
@@ -95,6 +96,35 @@ They are retired earlier if a scanner finding appears in them first - a fixable
 vulnerability, or a secret such as a private key left in the image.
 The daily scan checks all six frozen references (`:openssl3` and `:openssl3.0`
 on each of the three packages) and fails when either condition is met.
+
+`:openssl3.0` was retired early, on 2026-09-22: that build still contained the
+OpenSSL 3.0.9 source tree, including OpenSSL's sample private keys
+(`apps/ca-key.pem`, `apps/client.pem` and others). They are OpenSSL's public
+test keys, not credentials, but every consumer's scanner reports them as HIGH
+secret findings.
+
+### Retiring a frozen tag
+
+A retired tag is not deleted. It is overwritten with a small end-of-life
+marker image built from `eol/Dockerfile`. The marker's shell and entrypoint
+print which tag was retired, why, the full reference of the replacement image
+and the links below, then exit 1. So a `RUN` step in a consumer's build, or a
+`docker run`, fails with an explanation rather than `MANIFEST_UNKNOWN`. The
+marker has no OS packages, so it scans clean. The daily scan recognises it by
+its `org.aquia.base-docker-images.eol-marker` label and treats the tag as
+retired.
+
+One command retires a tag on all three packages, with the per-architecture
+markers pointing at the matching per-architecture replacement:
+
+```bash
+# Needs: docker login ghcr.io with a token that has write:packages
+eol/retire-fips-base-tag.sh openssl3.0
+```
+
+The script only accepts `openssl3` and `openssl3.0`, and it fails unless all
+three references are markers afterwards. To rehearse against a throwaway
+registry, set `REGISTRY_REPO`, for example `REGISTRY_REPO=localhost:5000/test`.
 
 ### Cutover runbook (one-time, on or after 2026-09-21)
 

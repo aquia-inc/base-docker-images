@@ -266,7 +266,13 @@ jobs:
       # frozen tag has any scanner finding a consumer would see (a fixable
       # vulnerability, or a secret such as a private key left in the image), or
       # when the published end-of-life date (FIPS.md) has passed and the tags
-      # still resolve. Retiring them includes removing this step.
+      # still resolve.
+      #
+      # A retired tag is overwritten with the end-of-life marker image built
+      # from eol/Dockerfile. The marker carries the eol-marker label, so it is
+      # recognised here and neither scanned nor counted as still present. Once
+      # every reference is a marker this step is permanently green and can be
+      # removed.
       - name: Monitor frozen FIPS 140-2 tags
         if: ${{ !cancelled() }}
         env:
@@ -279,6 +285,13 @@ jobs:
           scan_errors=""
           present=""
           today=$(date -u +%F)
+
+          # True when the reference is the end-of-life marker (eol/Dockerfile).
+          is_eol_marker() {
+            docker buildx imagetools inspect "$1" --format '{{json .Image}}' 2>/dev/null |
+              jq -e '[.. | objects | .Labels? // empty | .["org.aquia.base-docker-images.eol-marker"]?] | any(. == "true")' \
+              > /dev/null 2>&1
+          }
 
           scan() {
             local ref="$1" platform="$2" log
@@ -313,6 +326,10 @@ jobs:
                 echo "[info] $ref no longer resolves (retired)"
                 continue
               fi
+              if is_eol_marker "$ref"; then
+                echo "[ok] $ref is retired (end-of-life marker)"
+                continue
+              fi
               present="${present} ${ref}"
               for platform in $platforms; do
                 scan "$ref" "$platform"
@@ -322,7 +339,7 @@ jobs:
 
           failed=0
           if [ -n "$findings" ]; then
-            echo "::error::Frozen FIPS 140-2 tags have scanner findings (vulnerabilities or secrets) and cannot be rebuilt. Retire them now (see FIPS.md):${findings}"
+            echo "::error::Frozen FIPS 140-2 tags have scanner findings (vulnerabilities or secrets) and cannot be rebuilt. Retire them now with eol/retire-fips-base-tag.sh (see FIPS.md):${findings}"
             failed=1
           fi
           if [ -n "$scan_errors" ]; then
@@ -330,7 +347,7 @@ jobs:
             failed=1
           fi
           if [ -n "$present" ] && [[ "$today" > "$EOL_DATE" ]]; then
-            echo "::error::The end-of-life date for the frozen FIPS 140-2 tags (${EOL_DATE}) has passed but they still resolve. Retire them and remove this step (see FIPS.md):${present}"
+            echo "::error::The end-of-life date for the frozen FIPS 140-2 tags (${EOL_DATE}) has passed but they still resolve. Retire them with eol/retire-fips-base-tag.sh (see FIPS.md):${present}"
             failed=1
           fi
           exit "$failed"
