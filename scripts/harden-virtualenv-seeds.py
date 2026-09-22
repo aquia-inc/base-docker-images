@@ -204,11 +204,21 @@ def verify(embed: pathlib.Path, site_packages: pathlib.Path,
     for path in targets:
         if not path.is_file():
             continue
+
+        # Wheels are zip archives, so only their file name carries a version.
+        # Every other target is text and must be readable: a verification step
+        # that cannot read what it is checking has to fail rather than report
+        # success on the file name alone.
         haystack = path.name
-        try:
-            haystack += path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            pass
+        if path.suffix != ".whl":
+            try:
+                haystack += path.read_text(encoding="utf-8")
+            except OSError as error:
+                sys.exit(
+                    f"harden-virtualenv-seeds: cannot read {path} "
+                    f"to verify it: {error}"
+                )
+
         for version in sorted(stale_versions):
             if version in haystack:
                 sys.exit(
