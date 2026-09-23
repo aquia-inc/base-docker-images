@@ -221,6 +221,24 @@ PR to `main` with new Dockerfile in format `Dockerfile.<image-name>`. This will 
 2. Workflow will diff which Dockerfiles changed and create release tags for them.
 3. Workflow triggered by creation of new release tag will build new Docker image, incrementing the patch version and setting it to `latest`.
 
+### Run the Structure Tests Locally
+
+Each image has a [container-structure-test](https://github.com/GoogleContainerTools/container-structure-test)
+suite in `tests/container-structure/<image-name>.yaml`. CI pins the tool to
+v1.22.1.
+
+Always pass `--platform` matching the image. The tool creates its test
+container for the host platform unless told otherwise, so testing an arm64
+image on an amd64 machine (or the reverse) fails every command test with
+"its platform ... does not match the specified platform":
+
+```shell
+container-structure-test test \
+  --platform linux/arm64 \
+  --image ghcr.io/aquia-inc/base-docker-images/python-base-linux-arm64:latest \
+  --config tests/container-structure/python-base.yaml
+```
+
 ### Rebuild an Image Manually
 
 You must have permissions to push tags to this repository.

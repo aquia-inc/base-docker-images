@@ -164,6 +164,11 @@ jobs:
 
       - name: Run Container Structure Tests for ${{ matrix.platform }}
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
+        # --platform is required: the tool creates its test container for the
+        # host platform (linux/amd64 on this runner) unless told otherwise, so
+        # the arm64 image would be rejected rather than run under emulation.
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: |
           image_base_name="${{ steps.context.outputs.image-base-name }}"
           test_config="tests/container-structure/${image_base_name}.yaml"
@@ -173,6 +178,7 @@ jobs:
           if [ -f "$test_config" ]; then
             echo "Running container structure tests with config: $test_config"
             container-structure-test test \
+              --platform "$PLATFORM" \
               --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
               --config "$test_config"
           else
