@@ -118,9 +118,41 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           platform: ${{ matrix.platform }}
 
+      # The first build is allowed to fail once. Wolfi's package mirror
+      # occasionally returns transient errors mid-upgrade ("temporary error
+      # (try again later)", a spurious "Permission denied" on a package), and a
+      # single such error used to fail the whole release. A genuine build
+      # failure fails the retry too, so the job still fails on real problems.
+      #
+      # Only this build needs the retry. The push build below uses the same
+      # CACHEBUST value and the cache this step writes, so its package layer
+      # is normally a cache hit rather than a second trip to the mirror.
       - name: Build Docker Image for ${{ matrix.platform }} (Test)
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         id: build_test
+        continue-on-error: true
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          pull: true
+          file: Dockerfile.${{ steps.context.outputs.image-base-name }}
+          platforms: ${{ matrix.platform }}
+          load: true
+          build-args: |
+            CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }}
+          tags: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
+
+      - name: Wait before retrying the test build for ${{ matrix.platform }}
+        if: steps.build_test.outcome == 'failure'
+        run: |
+          echo "::warning::Test build failed; retrying once in 60s in case the failure was transient."
+          sleep 60
+
+      - name: Retry Docker Image build for ${{ matrix.platform }} (Test)
+        if: steps.build_test.outcome == 'failure'
+        id: build_test_retry
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
