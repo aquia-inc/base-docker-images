@@ -12,6 +12,15 @@ commandTests:
     args: ["-h"]
     expectedError: ["Usage: nginx"]
 
+  # Loads the shipped nginx.conf, including the headers-more dynamic module.
+  # A module built for a different nginx version fails here with
+  # "module ... version X instead of Y".
+  - name: "Nginx config and modules load"
+    command: "nginx"
+    args: ["-t"]
+    expectedError: ["test is successful"]
+    excludedError: ["emerg"]
+
 fileExistenceTests:
   - name: "Nginx binary exists"
     path: "/usr/sbin/nginx"

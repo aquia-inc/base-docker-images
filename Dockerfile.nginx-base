@@ -1,3 +1,8 @@
+# The runtime image, named once so the builder can read its exact nginx
+# version. Keep this digest identical to the final FROM below (Renovate bumps
+# both together).
+FROM cgr.dev/chainguard/nginx:latest@sha256:51048009c0db8c584a3746a98368295fa2c13ad1b29e5c846a5d3da9dd9b35c4 AS runtime
+
 # Using the custom NGINX image from chainguard
 FROM cgr.dev/chainguard/nginx:latest-dev@sha256:1b5dc4d37cf0537b6e8352aacbfad29a8f0956bc47762d433ba8b09910a5fe78 AS builder
 
@@ -15,16 +20,25 @@ RUN echo "cachebust=${CACHEBUST}" && \
     apk update && apk upgrade --no-cache && \
     apk --no-cache add -u perl wget build-base pcre-dev zlib-dev curl openssl-dev
 
-# Define NGINX and additional compatible module versions
+# headers-more-nginx-module release
 # https://github.com/openresty/headers-more-nginx-module/?tab=readme-ov-file#compatibility
-ARG NGINX_VERSION=1.29.1
-ARG MORE_HEADERS_VERSION=0.37
+ARG MORE_HEADERS_VERSION=0.40
 
 WORKDIR /usr/src/
 
-# Download NGINX and headers-more-nginx-module sources
-RUN wget "http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" -O nginx.tar.gz && \
-	wget "https://github.com/openresty/headers-more-nginx-module/archive/v${MORE_HEADERS_VERSION}.tar.gz" -O extra_module.tar.gz
+# A dynamic module only loads into the exact nginx version it was compiled
+# against ("module ... version 1029001 instead of 1031006"). The version is
+# therefore read from the runtime image's own nginx binary rather than pinned
+# here: a pinned source version silently falls behind every time the runtime
+# base is bumped, and the module then fails to load at startup.
+COPY --from=runtime /usr/sbin/nginx /tmp/runtime-nginx
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
+RUN NGINX_VERSION="$(/tmp/runtime-nginx -v 2>&1 | sed -n 's#^nginx version: nginx/##p')" && \
+    test -n "$NGINX_VERSION" && \
+    echo "Building headers-more ${MORE_HEADERS_VERSION} against runtime nginx ${NGINX_VERSION}" && \
+    wget -nv "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" -O nginx.tar.gz && \
+    wget -nv "https://github.com/openresty/headers-more-nginx-module/archive/v${MORE_HEADERS_VERSION}.tar.gz" -O extra_module.tar.gz && \
+    rm -f /tmp/runtime-nginx
 
 # Make dirs for nginx and extract sources
 RUN mkdir -p /usr/src/nginx /usr/src/extra_module /var/log/nginx /etc/nginx/conf.d /var/cache/nginx /var/lib/nginx/modules && chown -R nginx:nginx /var/lib/nginx/ && \
@@ -54,15 +68,19 @@ FROM cgr.dev/chainguard/nginx:latest@sha256:51048009c0db8c584a3746a98368295fa2c1
 # Copy compiled modules only if the directory exists
 COPY --from=builder /usr/local/nginx/modules/*.so /var/lib/nginx/modules/
 
-# Health Check
-HEALTHCHECK --interval=30s --timeout=3s \
-# Alternative health check (not used): curl -f http://localhost/ || exit 1
-CMD nginx -t || exit 1
-
 # Set the user for subsequent commands
 USER nginx
 
 # Copy NGINX configuration
 COPY nginx.conf /etc/nginx/nginx.conf
+
+# Fail the build if the shipped configuration does not load, which includes the
+# headers-more module loading into this nginx. Exec form: this image has no
+# shell.
+RUN ["/usr/sbin/nginx", "-t"]
+
+# Exec form for the same reason: the shell form ("CMD nginx -t || exit 1")
+# needs /bin/sh, which this image does not have, so it could never succeed.
+HEALTHCHECK --interval=30s --timeout=3s CMD ["/usr/sbin/nginx", "-t"]
 
 # End of Dockerfile
