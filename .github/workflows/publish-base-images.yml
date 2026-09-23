@@ -144,10 +144,23 @@ jobs:
 
       - name: Setup container structure tests
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
+        # Pinned to a GitHub release and verified by digest before it is
+        # installed with sudo. The storage.googleapis.com ".../latest/" URL used
+        # previously is unversioned and unverified, and had silently stopped
+        # updating (it still served v1.16.0 after v1.22.1 shipped).
+        # The digest is the one GitHub's release API reports for this asset.
+        env:
+          CST_VERSION: v1.22.1
+          CST_SHA256: fa35e89512a8978585f76cf41397956d2e3a30c62c2ad3fb857b1597074d14ca
         run: |
-          curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
-          chmod +x container-structure-test-linux-amd64
-          sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
+          set -euo pipefail
+          asset=container-structure-test-linux-amd64
+          curl -fsSLo "$asset" \
+            "https://github.com/GoogleContainerTools/container-structure-test/releases/download/${CST_VERSION}/${asset}"
+          echo "${CST_SHA256}  ${asset}" | sha256sum -c -
+          chmod +x "$asset"
+          sudo mv "$asset" /usr/local/bin/container-structure-test
+          container-structure-test version
 
       - name: Run Container Structure Tests for ${{ matrix.platform }}
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
@@ -252,11 +265,11 @@ jobs:
                   echo "major_tag=$MAJOR_TAG" >> $GITHUB_OUTPUT
                   echo "minor_tag=$MINOR_TAG" >> $GITHUB_OUTPUT
                   echo "has_version_tags=true" >> $GITHUB_OUTPUT
-                  echo "✅ Runtime version tags: major=$MAJOR_TAG, minor=$MINOR_TAG"
+                  echo "[ok] Runtime version tags: major=$MAJOR_TAG, minor=$MINOR_TAG"
                 fi
                 rm -f versions.txt
               else
-                echo "⚠️  Failed to extract versions.txt from container"
+                echo "[warn] Failed to extract versions.txt from container"
               fi
               ;;
               
@@ -304,10 +317,10 @@ jobs:
                   echo "minor_tag=nginx$NGINX_MINOR" >> $GITHUB_OUTPUT
                   echo "tool_version=$NGINX_VERSION" >> $GITHUB_OUTPUT
                   echo "has_version_tags=true" >> $GITHUB_OUTPUT
-                  echo "✅ Nginx version tags: major=nginx$NGINX_MAJOR, minor=nginx$NGINX_MINOR"
+                  echo "[ok] Nginx version tags: major=nginx$NGINX_MAJOR, minor=nginx$NGINX_MINOR"
                 fi
               else
-                echo "⚠️  Failed to extract Nginx version"
+                echo "[warn] Failed to extract Nginx version"
               fi
               ;;
               
@@ -446,28 +459,28 @@ jobs:
           # Validate SPDX format
           if jq empty "$spdx" 2>/dev/null; then
             pkg_count=$(jq '.packages | length' "$spdx")
-            echo "✅ SPDX SBOM valid - $pkg_count packages"
+            echo "[ok] SPDX SBOM valid - $pkg_count packages"
           else
-            echo "❌ SPDX SBOM validation failed"
+            echo "[fail] SPDX SBOM validation failed"
             exit 1
           fi
           
           # Validate CycloneDX format  
           if jq empty "$cyclone" 2>/dev/null; then
             comp_count=$(jq '.components | length' "$cyclone")
-            echo "✅ CycloneDX SBOM valid - $comp_count components"
+            echo "[ok] CycloneDX SBOM valid - $comp_count components"
           else
-            echo "❌ CycloneDX SBOM validation failed"
+            echo "[fail] CycloneDX SBOM validation failed"
             exit 1
           fi
           
           # Minimum package sanity check
           if [ "$pkg_count" -lt 5 ]; then
-            echo "❌ SBOM too few packages ($pkg_count)"
+            echo "[fail] SBOM too few packages ($pkg_count)"
             exit 1
           fi
           
-          echo "✅ SBOM validation passed"
+          echo "[ok] SBOM validation passed"
 
       - name: Upload SBOM artifacts for ${{ matrix.platform }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -525,7 +538,7 @@ jobs:
           # Create SBOM attestation (modern approach)
           cosign attest --yes --predicate "$spdx_sbom" --type spdxjson "$image_ref"
           
-          echo "✅ SBOM attestation created and signed"
+          echo "[ok] SBOM attestation created and signed"
           
       - name: Attest build provenance for ${{ matrix.platform }}
         id: attest_provenance
@@ -1008,11 +1021,11 @@ jobs:
           *   AMD64: Major=\`${MAJOR_AMD64:-N/A}\`, Minor=\`${MINOR_AMD64:-N/A}\`, Full=\`${FULL_AMD64:-N/A}\`
           *   ARM64: Major=\`${MAJOR_ARM64:-N/A}\`, Minor=\`${MINOR_ARM64:-N/A}\`, Full=\`${FULL_ARM64:-N/A}\`
 
-          **🎯 $LANGUAGE_NAME Runtime Pinning Best Practices:**
-          * **✅ Recommended for CI/CD**: Pin to major.minor (e.g., \`${MINOR_AMD64:-X.Y}\`) - Gets security patches, avoids breaking changes
-          * **⚠️ Use with caution**: \`:latest\` tag - May introduce breaking changes unexpectedly  
-          * **⚠️ Avoid in CI**: Specific semver tags (e.g., \`$version_tag\`) - Misses important security updates
-          * **⚠️ High risk**: Major-only tags (e.g., \`${MAJOR_AMD64:-X}\`) - May include breaking changes within major versions
+          **$LANGUAGE_NAME Runtime Pinning Best Practices:**
+          * **Recommended for CI/CD**: Pin to major.minor (e.g., \`${MINOR_AMD64:-X.Y}\`) - Gets security patches, avoids breaking changes
+          * **Use with caution**: \`:latest\` tag - May introduce breaking changes unexpectedly  
+          * **Avoid in CI**: Specific semver tags (e.g., \`$version_tag\`) - Misses important security updates
+          * **High risk**: Major-only tags (e.g., \`${MAJOR_AMD64:-X}\`) - May include breaking changes within major versions
 
           **Dockerfile Examples:**
 
@@ -1037,7 +1050,7 @@ jobs:
             body+=$'\n\n**For Development/Testing:**'
             body+=$(printf '\n* **AMD64 (Latest)**: \`docker pull %s/%s/%s-linux-amd64:latest\`' "$registry" "$repo_name" "$image_base_name")
             body+=$(printf '\n* **ARM64 (Latest)**: \`docker pull %s/%s/%s-linux-arm64:latest\`' "$registry" "$repo_name" "$image_base_name")
-            body+=$'\n\n**🔐 Build Provenance & Supply Chain Security:**'
+            body+=$'\n\n**Build Provenance & Supply Chain Security:**'
 
             if [ -n "$sigstore_amd64" ] || [ -n "$sigstore_arm64" ]; then
               body+=$'\n\n**Sigstore Transparency Log:**'
@@ -1057,7 +1070,7 @@ jobs:
                 body+=$(printf '\n* **ARM64**: [%s](%s)' "View Attestation" "$github_attestation_arm64")
               fi
             fi
-            body+=$'\n\n**🔐 Public Verification (No authentication required):**'
+            body+=$'\n\n**Public Verification (No authentication required):**'
             body+=$'\n```bash'
             body+=$'\n# Install cosign: https://docs.sigstore.dev/cosign/installation'
             body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:%s | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-latest}")
@@ -1068,9 +1081,9 @@ jobs:
             # Non-language base images: best practices + examples
             base_practices="
 
-          **🎯 Non-language Base Image Best Practices:**
-          * **✅ Recommended for CI/CD**: Use \`:latest\` with \`docker build --pull ...\` - Ensures latest security patches
-          * **💡 Why use :latest tag?** Non-language base images are unlikely to introduce build issues when their version changes and it ensures you receive the latest security patches.
+          **Non-language Base Image Best Practices:**
+          * **Recommended for CI/CD**: Use \`:latest\` with \`docker build --pull ...\` - Ensures latest security patches
+          * **Why use :latest tag?** Non-language base images are unlikely to introduce build issues when their version changes and it ensures you receive the latest security patches.
          
 
           **Dockerfile Examples:**
@@ -1080,7 +1093,7 @@ jobs:
           * **ARM64**: \`FROM $registry/$repo_name/${image_base_name}-linux-arm64:latest\`
           * **Build command**: \`docker build --pull ...\`
 
-          **🔐 Build Provenance & Supply Chain Security:**"
+          **Build Provenance & Supply Chain Security:**"
           
           if [ -n "$sigstore_amd64" ] || [ -n "$sigstore_arm64" ]; then
             base_practices+=$'\n\n**Sigstore Transparency Log:**'
@@ -1102,7 +1115,7 @@ jobs:
             fi
           fi
           
-          base_practices+=$'\n\n**🔐 Public Verification (No authentication required):**'
+          base_practices+=$'\n\n**Public Verification (No authentication required):**'
           base_practices+=$'\n```bash'
           base_practices+=$'\n# Install cosign: https://docs.sigstore.dev/cosign/installation'
           base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
@@ -1216,14 +1229,14 @@ jobs:
           
           echo "Checking if source images exist:"
           echo "AMD64: $amd64_image:$version"
-          docker manifest inspect "$amd64_image:$version" >/dev/null && echo "✅ AMD64 image exists" || echo "❌ AMD64 image missing"
+          docker manifest inspect "$amd64_image:$version" >/dev/null && echo "[ok] AMD64 image exists" || echo "[fail] AMD64 image missing"
           echo "ARM64: $arm64_image:$version"
-          docker manifest inspect "$arm64_image:$version" >/dev/null && echo "✅ ARM64 image exists" || echo "❌ ARM64 image missing"
+          docker manifest inspect "$arm64_image:$version" >/dev/null && echo "[ok] ARM64 image exists" || echo "[fail] ARM64 image missing"
           
           echo "AMD64: $amd64_image:latest"
-          docker manifest inspect "$amd64_image:latest" >/dev/null && echo "✅ AMD64 latest exists" || echo "❌ AMD64 latest missing"
+          docker manifest inspect "$amd64_image:latest" >/dev/null && echo "[ok] AMD64 latest exists" || echo "[fail] AMD64 latest missing"
           echo "ARM64: $arm64_image:latest"
-          docker manifest inspect "$arm64_image:latest" >/dev/null && echo "✅ ARM64 latest exists" || echo "❌ ARM64 latest missing"
+          docker manifest inspect "$arm64_image:latest" >/dev/null && echo "[ok] ARM64 latest exists" || echo "[fail] ARM64 latest missing"
           
           # Get digests for specific platforms
           echo "Getting platform-specific digests..."
@@ -1292,7 +1305,7 @@ jobs:
             fi
           fi
           
-          echo "✅ Multi-arch manifests created successfully"
+          echo "[ok] Multi-arch manifests created successfully"
 
       - name: Verify multi-arch manifests
         run: |
