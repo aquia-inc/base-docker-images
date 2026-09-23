@@ -40,62 +40,6 @@ RUN python3 /tmp/harden-pip-vendor.py && rm -f /tmp/harden-pip-vendor.py
 COPY --chown=nonroot:nonroot scripts/harden-virtualenv-seeds.py /tmp/harden-virtualenv-seeds.py
 RUN python3 /tmp/harden-virtualenv-seeds.py && rm -f /tmp/harden-virtualenv-seeds.py
 
-# Drop virtualenv's superseded seed wheels.
-#
-# virtualenv embeds several pip/setuptools wheels so it can seed environments
-# for older Python versions without a network fetch. The older copies keep
-# their original vulnerabilities - currently pip 26.0.1 (CVE-2026-13346,
-# CVE-2026-3219, CVE-2026-6357, CVE-2026-8643) and setuptools 82.0.1
-# (CVE-2026-59890) - and Trivy reports them because a fixed version exists
-# upstream. Upgrading virtualenv does NOT help: 21.9.1, the current release,
-# still ships exactly those wheels alongside the patched ones.
-#
-# apk cannot fix this either, since these are wheels inside a pip-installed
-# package rather than an OS package. Only the newest wheel of each project is
-# kept, which is the one a Python 3.13 environment actually seeds from. This
-# image ships a single Python version, so the older seeds have no consumer.
-#
-# Deliberately version-agnostic: it keeps the highest version present rather
-# than naming versions, so a future virtualenv that bundles a new stale wheel
-# is pruned without another edit here.
-RUN python3 - <<'PRUNE'
-import pathlib, re, sys
-from collections import defaultdict
-
-# Located by glob rather than a fixed path: the python3 compatibility symlink
-# is created further down this file, so it does not exist yet at this point.
-root = pathlib.Path("/home/nonroot/.local/lib")
-matches = sorted(root.glob("python3*/site-packages/virtualenv/seed/wheels/embed"))
-if not matches:
-    sys.exit("virtualenv seed wheel directory not found under %s" % root)
-embed = matches[-1]
-
-
-def key(version):
-    # Numeric-aware compare so 26.10 sorts above 26.2, unlike a string compare.
-    return tuple(int(part) if part.isdigit() else part
-                 for part in re.split(r"[.\-]", version))
-
-
-groups = defaultdict(list)
-for wheel in embed.glob("*.whl"):
-    name, version = wheel.name.split("-", 2)[:2]
-    groups[name].append((key(version), version, wheel))
-
-removed = 0
-for name, entries in sorted(groups.items()):
-    entries.sort()
-    keep = entries[-1]
-    print("keeping %s %s" % (name, keep[1]))
-    for _, version, wheel in entries[:-1]:
-        print("removing superseded %s %s" % (name, version))
-        wheel.unlink()
-        removed += 1
-
-if not removed:
-    print("no superseded seed wheels present")
-PRUNE
-
 # Poetry sets default max workers to num of cpu-cores + 4, but pip max connection pool
 # is set at 10 and will discard any above that when installing dependencies
 RUN poetry config installer.max-workers 10
