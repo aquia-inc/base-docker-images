@@ -157,6 +157,12 @@ def test_sbom_suffix_counts_as_a_signature():
     assert gr.SIGNATURE.match("sha256-" + "a" * 64 + ".sbom")
 
 
+def test_candidate_packages_cover_every_released_image_and_arch():
+    got = gr.candidate_packages({"fips-base": {"1.1.1"}, "go-base-1.27": {"0.0.1"}})
+    assert got == ["fips-base", "fips-base-linux-amd64", "fips-base-linux-arm64",
+                   "go-base-1.27", "go-base-1.27-linux-amd64", "go-base-1.27-linux-arm64"]
+
+
 def test_multi_arch_package_maps_to_its_image():
     assert gr.image_of("nodejs-base-linux-arm64") == "nodejs-base"
     assert gr.image_of("go-base-1.27") == "go-base-1.27"

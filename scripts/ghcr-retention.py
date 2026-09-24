@@ -251,8 +251,14 @@ _OPENER = _https_only_opener()
 
 def http_json(url: str, headers: dict[str, str]) -> tuple[object, dict[str, str]]:
     request = urllib.request.Request(url, headers=headers)
-    with _OPENER.open(request, timeout=60) as response:
-        return json.load(response), dict(response.headers)
+    try:
+        with _OPENER.open(request, timeout=60) as response:
+            return json.load(response), dict(response.headers)
+    except urllib.error.HTTPError as error:
+        # Keep GitHub's explanation: a bare "400 Bad Request" is undiagnosable.
+        detail = error.read(500).decode("utf-8", "replace")
+        raise urllib.error.HTTPError(error.url, error.code,
+                                     f"{error.reason}: {detail}", error.headers, None) from None
 
 
 def api_pages(path: str, token: str) -> list:
@@ -278,6 +284,18 @@ def release_tags(org: str, repo: str, token: str) -> dict[str, set[str]]:
         image, _, version = rest.partition("/")
         releases.setdefault(image, set()).add(version.lstrip("v").split("+")[0])
     return releases
+
+
+def candidate_packages(releases: dict[str, set[str]]) -> list[str]:
+    """Every package this repository can have published.
+
+    Derived from the release tags rather than by listing the organisation's
+    packages, which the workflow's GITHUB_TOKEN is not allowed to do. Each
+    released image publishes a multi-arch package plus one per architecture;
+    packages that do not exist are skipped by the caller.
+    """
+    return sorted(f"{image}{suffix}" for image in releases
+                  for suffix in ("", "-linux-amd64", "-linux-arm64"))
 
 
 def package_versions(org: str, repo: str, package: str, token: str) -> list[Version]:
@@ -324,12 +342,6 @@ def main() -> int:
         sys.exit("ghcr-retention: set GH_TOKEN to a token with read:packages")
 
     releases = release_tags(args.org, args.repo, token)
-    packages = sorted(
-        p["name"].split("/", 1)[1]
-        for p in api_pages(f"/orgs/{args.org}/packages?package_type=container", token)
-        if p.get("repository", {}).get("name") == args.repo and "/" in p["name"])
-    if not packages:
-        sys.exit("ghcr-retention: no packages found - check the token's package access")
 
     report, problems = [], []
     header = f"{'package':28} {'versions':>8} {'keep':>6} {'delete':>6} {'retire':>6} {'orphans':>7} {'unknown':>7}"
@@ -337,8 +349,13 @@ def main() -> int:
     print("REPORT ONLY - nothing is deleted or retagged.\n")
     print(header)
     totals = [0] * 6
-    for package in packages:
-        versions = package_versions(args.org, args.repo, package, token)
+    for package in candidate_packages(releases):
+        try:
+            versions = package_versions(args.org, args.repo, package, token)
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                continue  # this image never published that variant
+            raise
         # Every tagged version is fetched, signature tags included: those can
         # be indexes whose children are live attestation bundles.
         tagged = [v.digest for v in versions if v.tags]
