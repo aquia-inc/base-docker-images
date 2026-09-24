@@ -109,9 +109,16 @@ and attestations. Old releases are frozen at the vulnerabilities they had when
 they were built, so leaving them pullable only exposes whoever still uses
 them.
 
-These tags are never removed: `:latest`, the major and major.minor tags (for
-example `python-base:3.13`, `fips-base:fips3.1`), and the frozen or retired
-tags described in [FIPS.md](FIPS.md).
+These tags are never removed: `:latest`, the major and major.minor tags that
+still receive updates (for example `python-base:3.13`, `fips-base:fips3.1`),
+and the frozen or retired tags described in [FIPS.md](FIPS.md).
+
+A major.minor tag stops receiving updates once its version line ends, for
+example `nodejs-base:24.9` after Node.js 24.10 shipped. When the image it
+points at falls outside the window, the tag is retired: it is replaced by a
+small image that fails with a message naming the tag to use instead, so a
+build fails with an explanation rather than keep pulling an image that is
+never patched again.
 
 If you pin an exact release such as `python-base:v1.1.487`, it will stop
 resolving once it falls outside the window. Pin a major.minor tag or
