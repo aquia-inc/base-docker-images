@@ -96,6 +96,30 @@ Both choices have tradeoffs and is a decision you need to make based on your pro
 
 The non-language-specific images, such as the `nginx-base` and `wolfi-base` images can be pinned to `:latest`, as they are unlikely to bring backwards-incompatible changes to your workloads.
 
+### Image Retention
+
+Old releases are removed from the registry. From **2026-10-26**, each image
+keeps:
+
+- its newest **30** releases, and
+- every release from the last **90 days**,
+
+whichever keeps more. Older releases are deleted along with their signatures
+and attestations. Old releases are frozen at the vulnerabilities they had when
+they were built, so leaving them pullable only exposes whoever still uses
+them.
+
+These tags are never removed: `:latest`, the major and major.minor tags (for
+example `python-base:3.13`, `fips-base:fips3.1`), and the frozen or retired
+tags described in [FIPS.md](FIPS.md).
+
+If you pin an exact release such as `python-base:v1.1.487`, it will stop
+resolving once it falls outside the window. Pin a major.minor tag or
+`:latest` instead, and build with `--pull` so you pick up each rebuild.
+
+GitHub releases and git tags are kept as the historical and provenance
+record, even after the image they describe has been removed.
+
 ## How to Use
 
 ### Ensure your base image is always fresh
