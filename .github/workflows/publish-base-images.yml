@@ -1063,6 +1063,7 @@ jobs:
           * **Recommended for CI/CD**: Pin to major.minor (e.g., \`${MINOR_AMD64:-X.Y}\`) - Gets security patches, avoids breaking changes
           * **Use with caution**: \`:latest\` tag - May introduce breaking changes unexpectedly  
           * **Avoid in CI**: Specific semver tags (e.g., \`$version_tag\`) - Misses important security updates
+          * **Retention**: From 2026-10-26, releases older than 90 days (beyond the newest 30 per image) are removed from the registry, so a pinned semver tag such as \`$version_tag\` will eventually stop resolving. Tracking tags (major.minor, \`:latest\`) are never removed.
           * **High risk**: Major-only tags (e.g., \`${MAJOR_AMD64:-X}\`) - May include breaking changes within major versions
 
           **Dockerfile Examples:**
@@ -1122,6 +1123,7 @@ jobs:
           **Non-language Base Image Best Practices:**
           * **Recommended for CI/CD**: Use \`:latest\` with \`docker build --pull ...\` - Ensures latest security patches
           * **Why use :latest tag?** Non-language base images are unlikely to introduce build issues when their version changes and it ensures you receive the latest security patches.
+          * **Retention**: From 2026-10-26, releases older than 90 days (beyond the newest 30 per image) are removed from the registry, so a pinned semver tag such as \`$version_tag\` will eventually stop resolving. \`:latest\` is never removed.
          
 
           **Dockerfile Examples:**
