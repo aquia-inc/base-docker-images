@@ -1,0 +1,57 @@
+# Weekly GHCR retention report. REPORT ONLY: nothing is deleted or retagged.
+#
+# Policy (README "Image Retention"): each image keeps its newest 30 releases
+# and every release younger than 90 days; latest, still-moving tracking tags
+# and the frozen or retired FIPS tags are never removed; stale tracking tags
+# on out-of-window releases are retired with an end-of-life marker.
+# Deletion is a later, separately reviewed change.
+name: GHCR Retention Report
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ghcr-retention.py
+      - scripts/test_ghcr_retention.py
+      - .github/workflows/ghcr-retention.yml
+
+permissions: {}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Unit tests
+        run: python3 scripts/test_ghcr_retention.py
+
+      - name: Retention report (dry run)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          python3 scripts/ghcr-retention.py --report retention-report.json | tee report.txt
+          {
+            echo '```'
+            cat report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload retention report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: retention-report
+          path: retention-report.json
+          retention-days: 90
+          if-no-files-found: warn
