@@ -1063,7 +1063,7 @@ jobs:
           * **Recommended for CI/CD**: Pin to major.minor (e.g., \`${MINOR_AMD64:-X.Y}\`) - Gets security patches, avoids breaking changes
           * **Use with caution**: \`:latest\` tag - May introduce breaking changes unexpectedly  
           * **Avoid in CI**: Specific semver tags (e.g., \`$version_tag\`) - Misses important security updates
-          * **Retention**: From 2026-10-26, releases older than 90 days (beyond the newest 30 per image) are removed from the registry, so a pinned semver tag such as \`$version_tag\` will eventually stop resolving. Tracking tags (major.minor, \`:latest\`) are never removed.
+          * **Retention**: From 2026-10-26, releases older than 90 days (beyond the newest 30 per image) are removed from the registry, so a pinned semver tag such as \`$version_tag\` will eventually stop resolving. Tracking tags that still receive updates (major.minor, \`:latest\`) are never removed.
           * **High risk**: Major-only tags (e.g., \`${MAJOR_AMD64:-X}\`) - May include breaking changes within major versions
 
           **Dockerfile Examples:**
