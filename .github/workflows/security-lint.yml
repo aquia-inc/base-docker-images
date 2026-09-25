@@ -38,6 +38,6 @@ jobs:
           persist-credentials: false
 
       - name: TruffleHog scan
-        uses: trufflesecurity/trufflehog@f51616494fc81ef15427b88c7b03d7f7d75230e6 # v3.97.7
+        uses: trufflesecurity/trufflehog@4dd8831c5f12599465d4d45c3c447b4018a34c85 # v3.97.9
         with:
           extra_args: --only-verified
