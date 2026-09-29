@@ -20,13 +20,31 @@ env:
 
 jobs:
   publish_image:
-    runs-on: ubuntu-latest
+    # Each architecture builds on a runner of its own architecture. Emulating
+    # arm64 on an amd64 runner was expensive in a way that is easy to miss:
+    # measured across recent publishes, the arm64 leg took 2918-4454s for
+    # fips-140-3 and 484-648s for nginx-base, against 373-483s and 182-299s for
+    # amd64. Both compile from source, and QEMU only penalises CPU-bound work,
+    # so the images that merely install apk packages already ran at parity and
+    # gain nothing here. fips-140-3 alone accounted for roughly two thirds of
+    # all arm64 runner time, every day, and the arm64 leg sets the critical
+    # path because the manifest job needs both digests.
+    #
+    # ubuntu-24.04-arm is free for public repositories, which this one is.
+    runs-on: ${{ matrix.runner }}
     env:  # Add GH_TOKEN at the job level
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     strategy:
+      # Independent legs. One architecture failing must not cancel the other and
+      # hide its logs; nothing publishes until both pass anyway, because the
+      # manifest is composed from both digests.
       fail-fast: false
       matrix:
-        platform: [linux/amd64, linux/arm64]
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     permissions:
       contents: write
       packages: write
@@ -35,6 +53,11 @@ jobs:
       attestations: write
       id-token: write
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -180,25 +203,40 @@ jobs:
         # installed with sudo. The storage.googleapis.com ".../latest/" URL used
         # previously is unversioned and unverified, and had silently stopped
         # updating (it still served v1.16.0 after v1.22.1 shipped).
-        # The digest is the one GitHub's release API reports for this asset.
+        # The digests are the ones GitHub's release API reports for these assets.
+        #
+        # The architecture is selected from the matrix platform rather than
+        # hardcoded: each leg now runs on a runner of its own architecture, so a
+        # fixed amd64 binary would not execute on the arm64 runner. Both assets
+        # stay pinned by digest, and an unrecognised platform is a hard failure
+        # rather than an unverified download.
         env:
           CST_VERSION: v1.22.1
-          CST_SHA256: fa35e89512a8978585f76cf41397956d2e3a30c62c2ad3fb857b1597074d14ca
+          CST_SHA256_AMD64: fa35e89512a8978585f76cf41397956d2e3a30c62c2ad3fb857b1597074d14ca
+          CST_SHA256_ARM64: 801826ed107222120eb6df8c143b7de752cfebbe3aebfeea576e7098486917c2
+          PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
-          asset=container-structure-test-linux-amd64
+          case "$PLATFORM" in
+            linux/amd64) cst_arch=amd64; cst_sha="$CST_SHA256_AMD64" ;;
+            linux/arm64) cst_arch=arm64; cst_sha="$CST_SHA256_ARM64" ;;
+            *) echo "::error::No container-structure-test checksum pinned for $PLATFORM" >&2; exit 1 ;;
+          esac
+          asset="container-structure-test-linux-${cst_arch}"
           curl -fsSLo "$asset" \
             "https://github.com/GoogleContainerTools/container-structure-test/releases/download/${CST_VERSION}/${asset}"
-          echo "${CST_SHA256}  ${asset}" | sha256sum -c -
+          echo "${cst_sha}  ${asset}" | sha256sum -c -
           chmod +x "$asset"
           sudo mv "$asset" /usr/local/bin/container-structure-test
           container-structure-test version
 
       - name: Run Container Structure Tests for ${{ matrix.platform }}
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
-        # --platform is required: the tool creates its test container for the
-        # host platform (linux/amd64 on this runner) unless told otherwise, so
-        # the arm64 image would be rejected rather than run under emulation.
+        # --platform is kept explicit: the tool creates its test container for
+        # the host platform unless told otherwise. That now matches the runner,
+        # since each leg runs on its own architecture, but stating it means the
+        # test still targets the image actually being published rather than
+        # silently following the runner if the matrix ever changes.
         env:
           PLATFORM: ${{ matrix.platform }}
         run: |
@@ -830,6 +868,11 @@ jobs:
       contents: write
       actions: read
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1189,6 +1232,11 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1454,6 +1502,11 @@ jobs:
     permissions:
       pull-requests: write
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
       - name: Auto-approve renovate PR
         run: gh pr review --approve "$PR_URL"
         env:
