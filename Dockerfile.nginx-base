@@ -1,10 +1,10 @@
 # The runtime image, named once so the builder can read its exact nginx
 # version. Keep this digest identical to the final FROM below (Renovate bumps
 # both together).
-FROM cgr.dev/chainguard/nginx:latest@sha256:567df6c255a4f25814a8c089b6d498d79771ba1b0dd825ad3a70c2bbe4388e86 AS runtime
+FROM cgr.dev/chainguard/nginx:latest@sha256:98b92f87f0ceb43d45a63db62df6e7b6ec6e2efe1bcf09975a2af1ed7edfc438 AS runtime
 
 # Using the custom NGINX image from chainguard
-FROM cgr.dev/chainguard/nginx:latest-dev@sha256:6d475b49f168aa0912bc11fdf6a31ea7a9c1a0cf237a484adc6d7236f2de09bc AS builder
+FROM cgr.dev/chainguard/nginx:latest-dev@sha256:8282208478775661eed085c6c226de1e079960b48a040e7ad4d3511464f35ae6 AS builder
 
 # Switching to root user for package installation
 USER root
@@ -63,7 +63,7 @@ USER nginx
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
 # Start the second stage of the Dockerfile
-FROM cgr.dev/chainguard/nginx:latest@sha256:567df6c255a4f25814a8c089b6d498d79771ba1b0dd825ad3a70c2bbe4388e86
+FROM cgr.dev/chainguard/nginx:latest@sha256:98b92f87f0ceb43d45a63db62df6e7b6ec6e2efe1bcf09975a2af1ed7edfc438
 
 # Copy compiled modules only if the directory exists
 COPY --from=builder /usr/local/nginx/modules/*.so /var/lib/nginx/modules/
