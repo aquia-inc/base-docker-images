@@ -1,5 +1,5 @@
 name: 'Setup Docker Environment'
-description: 'Sets up Docker buildx, QEMU, and logs into GHCR'
+description: 'Sets up Docker buildx and logs into GHCR'
 inputs:
   registry:
     description: 'Container registry URL'
@@ -33,10 +33,12 @@ runs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
-      with:
-        platforms: all
+    # QEMU is deliberately not installed. Every consumer of this action now
+    # builds, tests and inspects images for the architecture of the runner it is
+    # already on: publish-base-images runs each matrix leg on a runner of its own
+    # architecture, and daily-scan-and-rebuild only reads remote manifests and
+    # scans registry images, neither of which executes a foreign-architecture
+    # binary. Installing emulation that nothing uses only costs time.
 
     - name: Generate cache key
       id: cache-key

@@ -1,0 +1,11 @@
+---
+# actionlint ships a hardcoded list of GitHub-hosted runner labels and rejects
+# anything outside it. That list has not caught up with the Linux arm64 hosted
+# runners, so "ubuntu-24.04-arm" is reported as an unknown label even though it
+# is a standard GitHub-hosted runner and is free for public repositories.
+#
+# Declaring it here silences that false positive without weakening the check for
+# genuinely misspelled labels.
+self-hosted-runner:
+  labels:
+    - ubuntu-24.04-arm
