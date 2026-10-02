@@ -18,6 +18,11 @@ jobs:
       images_matrix: ${{ steps.build_matrix.outputs.images_to_build }}
       has_changes: ${{ steps.build_matrix.outputs.has_changes }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -30,7 +35,7 @@ jobs:
           # get changed Dockerfiles from git diff
           changed_files=$(git diff --name-only ${{ github.event.before }} \
             ${{ github.event.after }} | grep '^Dockerfile\.' | xargs)
-          echo "changed_dockerfiles=$changed_files" >> $GITHUB_OUTPUT
+          echo "changed_dockerfiles=$changed_files" >> "$GITHUB_OUTPUT"
 
           # get image names from Dockerfile extensions
           if [ -n "$changed_files" ]; then
@@ -46,12 +51,12 @@ jobs:
             # Remove trailing comma and space, add closing bracket
             output_string=$(echo "$output_string" | sed 's/, $//')"]"
 
-            echo "images_to_build=$output_string" >> $GITHUB_OUTPUT
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "images_to_build=$output_string" >> "$GITHUB_OUTPUT"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
             echo "Found changed images: $images"
           else
-            echo "images_to_build=[]" >> $GITHUB_OUTPUT
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "images_to_build=[]" >> "$GITHUB_OUTPUT"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
             echo "No Dockerfile changes detected"
           fi
 
@@ -72,6 +77,11 @@ jobs:
       matrix:
         image_name: ${{ fromJSON(needs.detect_changed_images.outputs.images_matrix) }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -103,7 +113,7 @@ jobs:
             echo "No existing tags found, starting from $semver"
           fi
 
-          echo "current_semver=$semver" >> $GITHUB_OUTPUT
+          echo "current_semver=$semver" >> "$GITHUB_OUTPUT"
 
       - name: Calculate next version
         id: next_version
