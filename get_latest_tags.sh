@@ -3,14 +3,20 @@
 # Function to increment patch version
 increment_version() {
   local version=$1
-  # Extract version number (remove release/image-name/v prefix)
-  local ver_num=$(echo "$version" | sed 's/.*\/v//')
+  # Extract version number (remove release/image-name/v prefix).
+  # Declared and assigned separately throughout: combining "local" with a
+  # command substitution makes "local" the command whose exit status is
+  # reported, so a failure in the substitution is masked (shellcheck SC2155).
+  local ver_num
+  ver_num=$(echo "$version" | sed 's/.*\/v//')
   # Split into major.minor.patch
-  local major=$(echo "$ver_num" | cut -d. -f1)
-  local minor=$(echo "$ver_num" | cut -d. -f2)
-  local patch=$(echo "$ver_num" | cut -d. -f3)
+  local major minor patch
+  major=$(echo "$ver_num" | cut -d. -f1)
+  minor=$(echo "$ver_num" | cut -d. -f2)
+  patch=$(echo "$ver_num" | cut -d. -f3)
   # Increment patch
-  local new_patch=$((patch + 1))
+  local new_patch
+  new_patch=$((patch + 1))
   echo "$major.$minor.$new_patch"
 }
 

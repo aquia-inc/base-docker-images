@@ -72,11 +72,11 @@ jobs:
           if [ -n "$modified_dockerfile" ]; then
             detected_image=$(echo "$modified_dockerfile" | sed 's/^Dockerfile\.//')
             detected_tag="release/${detected_image}/v0.0.0-pr"
-            echo "TAG=$detected_tag" >> $GITHUB_ENV
-            echo "dockerfile_found=true" >> $GITHUB_OUTPUT
+            echo "TAG=$detected_tag" >> "$GITHUB_ENV"
+            echo "dockerfile_found=true" >> "$GITHUB_OUTPUT"
             echo "Detected image from PR: $detected_image, using tag: $detected_tag"
           else
-            echo "dockerfile_found=false" >> $GITHUB_OUTPUT
+            echo "dockerfile_found=false" >> "$GITHUB_OUTPUT"
             echo "No Dockerfile changes detected in PR, will exit early"
           fi
 
@@ -300,10 +300,10 @@ jobs:
           echo "Processing image: $image_name"
           
           # Initialize outputs
-          echo "has_version_tags=false" >> $GITHUB_OUTPUT
-          echo "major_tag=" >> $GITHUB_OUTPUT
-          echo "minor_tag=" >> $GITHUB_OUTPUT
-          echo "tool_version=" >> $GITHUB_OUTPUT
+          echo "has_version_tags=false" >> "$GITHUB_OUTPUT"
+          echo "major_tag=" >> "$GITHUB_OUTPUT"
+          echo "minor_tag=" >> "$GITHUB_OUTPUT"
+          echo "tool_version=" >> "$GITHUB_OUTPUT"
           
           case "$image_name" in
             # Language images - extract runtime versions from /tmp/versions.txt
@@ -338,9 +338,9 @@ jobs:
                 esac
                 
                 if [ -n "$MAJOR_TAG" ] && [ -n "$MINOR_TAG" ]; then
-                  echo "major_tag=$MAJOR_TAG" >> $GITHUB_OUTPUT
-                  echo "minor_tag=$MINOR_TAG" >> $GITHUB_OUTPUT
-                  echo "has_version_tags=true" >> $GITHUB_OUTPUT
+                  echo "major_tag=$MAJOR_TAG" >> "$GITHUB_OUTPUT"
+                  echo "minor_tag=$MINOR_TAG" >> "$GITHUB_OUTPUT"
+                  echo "has_version_tags=true" >> "$GITHUB_OUTPUT"
                   echo "[ok] Runtime version tags: major=$MAJOR_TAG, minor=$MINOR_TAG"
                 fi
                 rm -f versions.txt
@@ -359,10 +359,10 @@ jobs:
                 FIPS_MAJOR=$(echo "$FIPS_MODULE_VERSION" | cut -d'.' -f1)
                 FIPS_MINOR=$(echo "$FIPS_MODULE_VERSION" | cut -d'.' -f1-2)
                 if [ -n "$FIPS_MAJOR" ] && [ -n "$FIPS_MINOR" ]; then
-                  echo "major_tag=fips$FIPS_MAJOR" >> $GITHUB_OUTPUT
-                  echo "minor_tag=fips$FIPS_MINOR" >> $GITHUB_OUTPUT
-                  echo "tool_version=$FIPS_MODULE_VERSION" >> $GITHUB_OUTPUT
-                  echo "has_version_tags=true" >> $GITHUB_OUTPUT
+                  echo "major_tag=fips$FIPS_MAJOR" >> "$GITHUB_OUTPUT"
+                  echo "minor_tag=fips$FIPS_MINOR" >> "$GITHUB_OUTPUT"
+                  echo "tool_version=$FIPS_MODULE_VERSION" >> "$GITHUB_OUTPUT"
+                  echo "has_version_tags=true" >> "$GITHUB_OUTPUT"
                   echo "[ok] FIPS 140-3 version tags: major=fips$FIPS_MAJOR, minor=fips$FIPS_MINOR"
                 fi
               else
@@ -389,10 +389,10 @@ jobs:
                 NGINX_MINOR=$(echo "$NGINX_VERSION" | cut -d'.' -f1-2)
                 
                 if [ -n "$NGINX_MAJOR" ] && [ -n "$NGINX_MINOR" ]; then
-                  echo "major_tag=nginx$NGINX_MAJOR" >> $GITHUB_OUTPUT
-                  echo "minor_tag=nginx$NGINX_MINOR" >> $GITHUB_OUTPUT
-                  echo "tool_version=$NGINX_VERSION" >> $GITHUB_OUTPUT
-                  echo "has_version_tags=true" >> $GITHUB_OUTPUT
+                  echo "major_tag=nginx$NGINX_MAJOR" >> "$GITHUB_OUTPUT"
+                  echo "minor_tag=nginx$NGINX_MINOR" >> "$GITHUB_OUTPUT"
+                  echo "tool_version=$NGINX_VERSION" >> "$GITHUB_OUTPUT"
+                  echo "has_version_tags=true" >> "$GITHUB_OUTPUT"
                   echo "[ok] Nginx version tags: major=nginx$NGINX_MAJOR, minor=nginx$NGINX_MINOR"
                 fi
               else
@@ -426,7 +426,7 @@ jobs:
 
       - name: Generate build timestamp
         id: build_timestamp
-        run: echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+        run: echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -517,8 +517,8 @@ jobs:
           # Generate CycloneDX format SBOM  
           syft "$image_ref" $platform_flag -o "cyclonedx-json=${base}.cyclonedx.json"
           
-          echo "sbom_spdx_file=${base}.spdx.json" >> $GITHUB_OUTPUT
-          echo "sbom_cyclonedx_file=${base}.cyclonedx.json" >> $GITHUB_OUTPUT
+          echo "sbom_spdx_file=${base}.spdx.json" >> "$GITHUB_OUTPUT"
+          echo "sbom_cyclonedx_file=${base}.cyclonedx.json" >> "$GITHUB_OUTPUT"
           
           # Show SBOM summary
           pkg_count=$(jq '.packages | length' "${base}.spdx.json")
@@ -593,7 +593,7 @@ jobs:
             grep -oP 'Rekor: \K[0-9a-f]{64}' | head -n1)
           
           if [ -n "$REKOR_UUID" ]; then
-            echo "rekor_uuid=$REKOR_UUID" >> $GITHUB_OUTPUT
+            echo "rekor_uuid=$REKOR_UUID" >> "$GITHUB_OUTPUT"
             echo "Rekor UUID: $REKOR_UUID"
           fi
 
@@ -672,8 +672,8 @@ jobs:
             fi
             
             if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
-              echo "logindex=$LOG_INDEX" >> $GITHUB_OUTPUT
-              echo "sigstore_url=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> $GITHUB_OUTPUT
+              echo "logindex=$LOG_INDEX" >> "$GITHUB_OUTPUT"
+              echo "sigstore_url=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> "$GITHUB_OUTPUT"
               echo "Found Sigstore logIndex: $LOG_INDEX"
               echo "Sigstore URL: https://search.sigstore.dev/?logIndex=$LOG_INDEX"
               
@@ -720,8 +720,8 @@ jobs:
               
               # Set outputs based on what we found
               if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
-                echo "logindex=$LOG_INDEX" >> $GITHUB_OUTPUT
-                echo "sigstore_url=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> $GITHUB_OUTPUT
+                echo "logindex=$LOG_INDEX" >> "$GITHUB_OUTPUT"
+                echo "sigstore_url=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> "$GITHUB_OUTPUT"
                 echo "Successfully recovered logIndex: $LOG_INDEX"
                 
                 # Save to file for release page generation
@@ -730,8 +730,8 @@ jobs:
                 echo "LOG_INDEX=$LOG_INDEX" >> "$output_file"
               else
                 echo "Unable to extract logIndex from any source"
-                echo "logindex=" >> $GITHUB_OUTPUT
-                echo "sigstore_url=" >> $GITHUB_OUTPUT
+                echo "logindex=" >> "$GITHUB_OUTPUT"
+                echo "sigstore_url=" >> "$GITHUB_OUTPUT"
                 
                 # Save GitHub attestation URL only
                 if [ -n "$ATTESTATION_URL" ]; then
@@ -744,8 +744,8 @@ jobs:
               fi
             fi
           else
-            echo "logindex=" >> $GITHUB_OUTPUT
-            echo "sigstore_url=" >> $GITHUB_OUTPUT
+            echo "logindex=" >> "$GITHUB_OUTPUT"
+            echo "sigstore_url=" >> "$GITHUB_OUTPUT"
             echo "Attestation bundle file not found"
             
             # Create empty file
@@ -754,7 +754,7 @@ jobs:
             echo "LOG_INDEX=" >> "$output_file"
           fi
           
-          echo "provenance_file_path=$output_file" >> $GITHUB_OUTPUT
+          echo "provenance_file_path=$output_file" >> "$GITHUB_OUTPUT"
 
       - name: Upload provenance artifact for ${{ matrix.platform }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -785,10 +785,10 @@ jobs:
           echo "Raw type from API: '$OWNER_TYPE_JSON', Parsed type: '$OWNER_TYPE'"
 
           if [ "$OWNER_TYPE" = "User" ]; then
-            echo "api_path_segment=users" >> $GITHUB_OUTPUT
+            echo "api_path_segment=users" >> "$GITHUB_OUTPUT"
             echo "Determined owner type for $OWNER_LOGIN: User"
           elif [ "$OWNER_TYPE" = "Organization" ]; then
-            echo "api_path_segment=orgs" >> $GITHUB_OUTPUT
+            echo "api_path_segment=orgs" >> "$GITHUB_OUTPUT"
             echo "Determined owner type for $OWNER_LOGIN: Organization"
           else
             echo "::error::Could not determine owner type for '$OWNER_LOGIN'. Received type: '$OWNER_TYPE'."
@@ -1209,9 +1209,9 @@ jobs:
           fi
 
           echo "Setting BODY_TEXT environment variable..."
-          echo "BODY_TEXT<<EOF" >> $GITHUB_ENV
-          echo "$body" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          echo "BODY_TEXT<<EOF" >> "$GITHUB_ENV"
+          echo "$body" >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
@@ -1285,9 +1285,9 @@ jobs:
               echo "Downloaded version artifact for $platform"
               if [ -f "version_artifacts/version_tags.env" ]; then
                 source "version_artifacts/version_tags.env"
-                echo "major_tag=$major_tag" >> $GITHUB_OUTPUT
-                echo "minor_tag=$minor_tag" >> $GITHUB_OUTPUT
-                echo "has_version_tags=true" >> $GITHUB_OUTPUT
+                echo "major_tag=$major_tag" >> "$GITHUB_OUTPUT"
+                echo "minor_tag=$minor_tag" >> "$GITHUB_OUTPUT"
+                echo "has_version_tags=true" >> "$GITHUB_OUTPUT"
                 echo "Found version tags: major=$major_tag, minor=$minor_tag"
                 break
               fi
@@ -1296,7 +1296,7 @@ jobs:
           
           # If no version tags found, mark as false
           if [ ! -f "version_artifacts/version_tags.env" ]; then
-            echo "has_version_tags=false" >> $GITHUB_OUTPUT
+            echo "has_version_tags=false" >> "$GITHUB_OUTPUT"
             echo "No version tags found"
           fi
         env:
