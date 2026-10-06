@@ -71,7 +71,7 @@ jobs:
     if: needs.detect_changed_images.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: read  # checkout only; the tag push authenticates with RELEASE_PAT
+      contents: read  # checkout only; the tag push authenticates with the deploy key
     strategy:
       fail-fast: false
       matrix:
@@ -86,7 +86,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-          persist-credentials: false # credential supplied explicitly on push (RELEASE_PAT)
+          # The tag push authenticates with a repository deploy key rather than
+          # a personal access token. Both can trigger the downstream publish
+          # workflow, which the default GITHUB_TOKEN cannot, but a deploy key is
+          # scoped to this repository alone, where a PAT carries whatever its
+          # owner can reach.
+          #
+          # persist-credentials is therefore true here: the key has to remain
+          # configured for the push step below. The runner removes it in
+          # post-job cleanup.
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          persist-credentials: true
 
       - name: Display processing image
         env:
@@ -131,17 +141,26 @@ jobs:
       - name: Create and push release tag
         if: github.event.ref == 'refs/heads/main'
         env:
-          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
-          GH_REPO: ${{ github.repository }}
           IMAGE_NAME: ${{ matrix.image_name }}
           NEXT_PATCH: ${{ steps.next_version.outputs.patch }}
         run: |
-          # RELEASE_PAT is required: tags pushed with the default GITHUB_TOKEN do NOT
-          # trigger the downstream publish-base-images workflow. A PAT does.
-          if [ -z "${RELEASE_PAT}" ]; then
-            echo "::error::RELEASE_PAT secret is not set. Create a PAT with contents:write that can trigger workflows before this workflow can push release tags."
-            exit 1
-          fi
+          # A tag pushed with the default GITHUB_TOKEN does NOT trigger the
+          # downstream publish-base-images workflow; one pushed with a deploy
+          # key does. If the DEPLOY_KEY secret were missing or empty, checkout
+          # would silently fall back to token authentication and the push would
+          # SUCCEED while triggering nothing - a release that looks published
+          # and never builds.
+          #
+          # So the remote is checked rather than the secret: an ssh remote is
+          # proof the key was actually used.
+          origin_url="$(git remote get-url origin)"
+          case "$origin_url" in
+            git@github.com:*|ssh://git@github.com/*) ;;
+            *)
+              echo "::error::origin is '${origin_url}', not ssh. The DEPLOY_KEY secret is missing or empty, so this tag would be pushed with GITHUB_TOKEN and would not trigger publish-base-images."
+              exit 1
+              ;;
+          esac
 
           # Configure git for bot user
           git config user.email "aquia-base-images-bot@users.noreply.github.com"
@@ -155,7 +174,9 @@ jobs:
           echo "Tag message: $tag_message"
 
           git tag -a "$new_tag" -m "$tag_message"
-          # Push via RELEASE_PAT so the release/* tag triggers publish-base-images
-          git push "https://x-access-token:${RELEASE_PAT}@github.com/${GH_REPO}.git" "$new_tag"
+
+          # Pushed over ssh with the deploy key configured by checkout, so no
+          # credential appears on the command line or in the remote URL.
+          git push origin "$new_tag"
 
           echo "[ok] Successfully created and pushed tag: $new_tag"
