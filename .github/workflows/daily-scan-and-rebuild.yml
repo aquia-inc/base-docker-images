@@ -16,7 +16,9 @@ jobs:
   scan_and_rebuild:
     runs-on: ubuntu-latest
     permissions:
-      contents: write    # Needed to push new tags
+      # Read only: rebuild tags are pushed with the repository deploy key, not
+      # with GITHUB_TOKEN, so this token needs no write access at all.
+      contents: read
       packages: read     # Needed to pull images and inspect manifests
       actions: read
     steps:
@@ -29,7 +31,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0 # Required to list tags
-          persist-credentials: false # token supplied explicitly on push below
+          # Rebuild tags are pushed with a repository deploy key rather than a
+          # personal access token. Both can trigger the downstream publish
+          # workflow, which GITHUB_TOKEN cannot, but a deploy key is scoped to
+          # this repository alone. persist-credentials keeps the key configured
+          # for the push below; the runner removes it in post-job cleanup.
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          persist-credentials: true
 
       - name: Discover available base images
         id: discover_images
@@ -183,25 +191,23 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # RELEASE_PAT is required: tags pushed with the default GITHUB_TOKEN do NOT
-          # trigger the downstream publish-base-images workflow, so a rebuild tag pushed
-          # with GITHUB_TOKEN would be a silent no-op. A PAT does trigger it.
-          if [ -z "${RELEASE_PAT}" ]; then
-            echo "::error::RELEASE_PAT secret is not set; rebuild tags cannot trigger publish."
-            exit 1
-          fi
-
-          # Supply the credential through a helper that reads it from the
-          # environment, rather than interpolating it into each push URL. A URL
-          # argument is visible in the runner's process table to anything else
-          # running in this job, and can be echoed by git into error output;
-          # the environment is neither. Actions masks the value in logs either
-          # way, but masking does not cover argv. Configured once here because
-          # the push below runs per image.
-          # shellcheck disable=SC2016  # $RELEASE_PAT must be expanded by the
-          # helper when git invokes it, not by this shell, which is the whole
-          # point of keeping it out of the command line.
-          git config credential.helper '!f() { printf "username=x-access-token\npassword=%s\n" "$RELEASE_PAT"; }; f'
+          # A tag pushed with the default GITHUB_TOKEN does NOT trigger the
+          # downstream publish-base-images workflow, so it would be a silent
+          # no-op: the rebuild would appear to have been requested and nothing
+          # would build. A deploy key does trigger it.
+          #
+          # If the DEPLOY_KEY secret were missing or empty, checkout would fall
+          # back to token authentication and every push below would succeed
+          # while triggering nothing. The remote is therefore checked rather
+          # than the secret: an ssh remote is proof the key was actually used.
+          origin_url="$(git remote get-url origin)"
+          case "$origin_url" in
+            git@github.com:*|ssh://git@github.com/*) ;;
+            *)
+              echo "::error::origin is '${origin_url}', not ssh. The DEPLOY_KEY secret is missing or empty, so rebuild tags would be pushed with GITHUB_TOKEN and would trigger nothing."
+              exit 1
+              ;;
+          esac
 
           for base_name in $unique_needs_rebuild; do
             echo "Creating rebuild tag for $base_name..."
@@ -249,7 +255,7 @@ jobs:
 
             echo "Creating and pushing rebuild tag: $new_tag"
             git tag "$new_tag"
-            if git push "https://github.com/${GH_REPO}.git" "$new_tag"; then
+            if git push origin "$new_tag"; then
               echo "[ok] Rebuild triggered for $base_name by pushing tag $new_tag"
             else
               echo "::warning::Could not push $new_tag for $base_name; continuing with the remaining images."
@@ -257,8 +263,6 @@ jobs:
               push_failures="${push_failures} ${base_name}"
             fi
           done
-
-          git config --unset credential.helper
 
           # Surface problems that were deliberately not allowed to abort the run.
           # A scan error is not a vulnerability finding, but it does mean an image
@@ -272,8 +276,6 @@ jobs:
           if [ -n "$scan_errors" ] || [ -n "$push_failures" ]; then
             exit 1
           fi
-        env:
-          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
 
       # The FIPS 140-2 image was retired on 2026-09-21. Its openssl3 / openssl3.0
       # tags were deliberately frozen at the final 140-2 build rather than moved,
