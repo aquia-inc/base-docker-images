@@ -354,15 +354,23 @@ def reconcile_wheel_interior(wheel: pathlib.Path) -> bool:
             name: code_version_in_wheel(archive, name) for name in declared
         }
         in_bom = {}
+        # Only the read is guarded, and only against a missing member: pip
+        # releases older than the bundled CycloneDX BOM have no such file, which
+        # harden-pip-vendor.py tolerates the same way. Guarding the loop as well
+        # would let a KeyError raised while parsing a BOM that IS present pass
+        # for an absent one, leaving the declarations unchecked but reported as
+        # handled.
         try:
-            for component in json.loads(
-                archive.read("pip/_vendor/bom.cdx.json")
-            ).get("components", []):
+            bom_payload = archive.read("pip/_vendor/bom.cdx.json")
+        except KeyError:
+            bom_payload = None
+            print("    interior: no bom.cdx.json in this wheel, nothing to reconcile")
+
+        if bom_payload is not None:
+            for component in json.loads(bom_payload).get("components", []):
                 version = str(component.get("version", "")).strip()
                 if version:
                     in_bom[str(component.get("name", "")).lower()] = version
-        except KeyError:
-            pass
         has_pkg_resources = any(
             info.filename.startswith("pip/_vendor/pkg_resources/")
             for info, _ in members
@@ -476,13 +484,18 @@ def reconcile_wheel_interior(wheel: pathlib.Path) -> bool:
         )
 
     # RECORD describes every other file in the wheel, so it is rebuilt last
-    # from what actually survived rather than patched line by line.
+    # from what actually survived rather than patched line by line. Filtering
+    # on the surviving members instead of on the paths removed here keeps the
+    # listing true by construction: an entry for a file the wheel does not
+    # contain is dropped even if this pass was not what removed it.
+    surviving = {info.filename for info, _ in rewritten}
+    surviving.add(record_info.filename)
     record_text = []
     for line in dict(members)[record_info].decode().splitlines():
         if not line.strip():
             continue
         path = line.split(",")[0]
-        if path in dropped_paths:
+        if path not in surviving:
             continue
         record_text.append(changed_records.get(path, line))
     record_payload = ("\n".join(record_text) + "\n").encode()
