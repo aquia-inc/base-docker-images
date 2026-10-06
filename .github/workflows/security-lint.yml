@@ -5,6 +5,17 @@ on:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    # Mondays 08:00 UTC, clear of the retention report (06:00) and the daily
+    # image scan (10:00).
+    #
+    # This is the only trigger that scans the FULL history. On a pull request
+    # the action scans that pull request's diff range, and on a push the range
+    # between before and after, so a credential committed before this workflow
+    # existed has never been looked at. The scheduled run is what closes that,
+    # and it is also the only thing that would notice a secret that was already
+    # in the history when the scanner was added.
+    - cron: '0 8 * * 1'
   workflow_dispatch:
 
 permissions: {}
@@ -44,10 +55,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # Required by the scheduled full-history scan. With the default
+          # shallow checkout it would see a single commit, succeed, and report
+          # clean - indistinguishable from a history that genuinely holds no
+          # secrets.
           fetch-depth: 0
           persist-credentials: false
 
       - name: TruffleHog scan
         uses: trufflesecurity/trufflehog@b2b0a92070f206ab7b5a1105d82a7f2f48d92341 # v3.99.0
         with:
+          # The action is pinned by SHA but pulls its scanner image at runtime
+          # and defaults that to latest, so without this the binary doing the
+          # actual work floats while everything around it is pinned. Kept
+          # current by Renovate, as the other pins here are.
+          # renovate: datasource=github-releases depName=trufflesecurity/trufflehog
+          version: 3.99.0
+          # Reports a credential only once it has been confirmed live, which is
+          # what makes this safe to block on. The action already passes --fail.
+          #
+          # If this fires, rotate the credential first. Do not add an exclusion
+          # to go green: the finding means the secret is live right now, and
+          # removing the commit does not revoke it.
           extra_args: --only-verified

@@ -168,6 +168,62 @@ def test_multi_arch_package_maps_to_its_image():
     assert gr.image_of("go-base-1.27") == "go-base-1.27"
 
 
+def test_registered_secret_is_scrubbed_from_error_text():
+    secret = "ghp_" + "a" * 36
+    gr.remember_secret(secret)
+    leaked = f'{{"message":"bad credentials for {secret}"}}'
+    assert secret not in gr.redact(leaked)
+    assert "<redacted>" in gr.redact(leaked)
+
+
+def test_base64_form_of_a_secret_is_also_scrubbed():
+    # The registry takes HTTP Basic, so the credential travels base64-encoded.
+    # Scrubbing only the raw value would leave a trivially decodable copy.
+    import base64 as b64
+
+    secret = "ghp_" + "b" * 36
+    gr.remember_secret(secret)
+    encoded = b64.b64encode(f"x:{secret}".encode()).decode()
+    assert secret not in gr.redact(f"Authorization: Basic {encoded}")
+
+
+def test_short_values_are_not_registered_as_secrets():
+    # Guards against a degenerate value turning redact() into a text mangler
+    # that corrupts every message it touches.
+    gr.remember_secret("abc")
+    assert gr.redact("abc def") == "abc def"
+
+
+def test_no_deletion_code_path_exists():
+    """The safety claim of this script is that it cannot delete. Enforce it.
+
+    Report-only is the basis on which this runs unattended against a registry,
+    so it is asserted rather than left as an intention in a docstring. If a
+    deletion path is ever added deliberately, this test should be what fails
+    and forces that decision to be explicit.
+
+    Checked structurally rather than by searching the text, because the word
+    appears legitimately twice over: the module docstring says the script never
+    deletes, and "delete" is a key in the report describing what a policy WOULD
+    remove. Matching raw text would fail on both and teach the next reader to
+    ignore this test.
+
+    urllib can only issue a DELETE via Request(method=...) or by overriding
+    get_method on a Request subclass, so those are the two things to forbid.
+    """
+    import ast
+
+    source = pathlib.Path(__file__).with_name("ghcr-retention.py").read_text()
+    tree = ast.parse(source)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            assert node.name != "get_method", "get_method override found"
+        if isinstance(node, ast.keyword) and node.arg == "method":
+            value = getattr(node.value, "value", None)
+            assert str(value).upper() != "DELETE", "Request(method='DELETE') found"
+
+
 def test_invariants_hold_on_a_realistic_plan():
     versions, children, releases = daily_releases(35)
     versions[-2].tags.append("latest")
