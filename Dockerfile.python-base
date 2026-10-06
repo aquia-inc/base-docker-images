@@ -18,12 +18,22 @@ ENV POETRY_HOME=/home/nonroot \
     PATH=$PATH:/home/nonroot/.local/bin \
     PYTHONPATH=/home/nonroot/.local/lib/python3/site-packages
 
+# pip is deliberately absent from the install list below. ensurepip bootstraps it
+# from the distro py3-pip-wheel, which carries Wolfi's backported fixes to pip's
+# own vendored tree - currently urllib3 2.8.0, where the PyPI build of the same
+# pip version vendors the vulnerable 2.7.0. Wolfi backports without bumping pip's
+# version string, so "pip install --upgrade pip" sees 26.2.1 on both sides, finds
+# nothing newer on PyPI, and still replaces the patched copy with the unpatched
+# one. Re-adding pip here silently reintroduces that downgrade.
 RUN python3 -m ensurepip --user --upgrade && \
-    python3 -m pip install --no-cache-dir --upgrade --user -v pip poetry cryptography virtualenv
+    python3 -m pip install --no-cache-dir --upgrade --user -v poetry cryptography virtualenv
 
 # Raise pip's own bundled dependencies to their fixed versions:
 # msgpack 1.1.2 -> 1.2.1 (GHSA-6v7p-g79w-8964) and pkg_resources removed
 # (CVE-2025-47273, CVE-2026-59890 - setuptools dropped it in 82.0.0).
+# It then reconciles pip's vendor.txt and bom.cdx.json against the vendored
+# code. The distro wheel carries backports that update the code but not
+# bom.cdx.json, which otherwise reports versions the image does not contain.
 COPY --chown=nonroot:nonroot scripts/harden-pip-vendor.py /tmp/harden-pip-vendor.py
 RUN python3 /tmp/harden-pip-vendor.py && rm -f /tmp/harden-pip-vendor.py
 
@@ -69,5 +79,11 @@ RUN apk del libcurl-openssl4 curl
 
 USER nonroot
 RUN python3 --version
+
+# Running the interpreter is the only meaningful liveness signal for a base
+# image with no service in it: if python3 cannot start, nothing built on this
+# image can either. Exec form, because the check must not depend on a shell.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD ["python3", "--version"]
 
 

@@ -1,3 +1,8 @@
 **/.DS_Store
 github-actions-deploy-key
 test-workflows-e2e.sh
+
+# Local working notes, investigation write-ups and reports. These are kept
+# alongside the repository for convenience but are not part of it, so they are
+# never committed.
+artifacts/
