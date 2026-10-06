@@ -38,17 +38,38 @@ misreport the contents of the image.
 Nothing is pinned to a version. The highest version present of each project is
 kept and every older copy is removed, so a future virtualenv that bundles a new
 stale wheel is handled without editing this file.
+
+Removing the superseded copies is not sufficient on its own. The wheel that
+survives is the one virtualenv actually seeds into every environment it
+creates, and its INTERIOR carries its own vendored tree. virtualenv takes that
+wheel from PyPI, so it ships the unpatched vendored code even when the distro
+packages a patched build of the identical version - currently urllib3 2.7.0
+against the distro's 2.8.0. No scanner reads inside a .whl, so an image can
+seed a vulnerable pip into every environment while scanning perfectly clean.
+
+The second pass therefore prefers the distro's own wheel of the same project
+whenever one is present and not older. That is deliberately framed as "not
+behind the distro-patched copy of the same artifact" rather than a list of
+names and floors kept here: it is self-healing, and it cannot drift out of
+agreement with what the distro actually ships. Projects with no distro
+counterpart are named in the output rather than passed over silently.
 """
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import pathlib
 import re
 import sys
+import zipfile
 from collections import defaultdict
 
 LIB_ROOT = pathlib.Path("/home/nonroot/.local/lib")
+
+# Where the distro keeps the wheels it has applied its backports to.
+DISTRO_WHEELS = pathlib.Path("/usr/share/python-wheels")
 
 # The embed directory is located by glob rather than a fixed path because the
 # python3 compatibility symlink is created later in the Dockerfile and does not
@@ -178,6 +199,403 @@ def rewrite_inventory(site_packages: pathlib.Path, replacements: dict[str, str])
             print("  RECORD: removed wheel entries dropped")
 
 
+def prefer_distro_wheels(embed: pathlib.Path) -> list[str]:
+    """Replace each seed wheel with the distro's build of the same project.
+
+    virtualenv bundles wheels from PyPI. The distro ships the same pip version
+    with security backports applied to pip's own vendored tree, so the two
+    differ in content while agreeing on version. The distro build is the one
+    that belongs in the image.
+
+    Returns the names of the projects that had no distro counterpart, so the
+    caller can report them rather than imply they were checked.
+    """
+    unmatched: list[str] = []
+    swapped = 0
+
+    for wheel in sorted(embed.glob("*.whl")):
+        name, version = wheel.name.split("-", 2)[:2]
+        candidates = sorted(DISTRO_WHEELS.glob(f"{name}-*.whl"))
+        if not candidates:
+            unmatched.append(f"{name} {version}")
+            continue
+
+        # Take the newest distro build, and never move backwards.
+        candidates.sort(key=lambda path: version_key(path.name.split("-", 2)[1]))
+        distro = candidates[-1]
+        distro_version = distro.name.split("-", 2)[1]
+        if version_key(distro_version) < version_key(version):
+            print(
+                f"  {name}: distro has {distro_version}, bundled has {version}; "
+                "keeping the bundled copy"
+            )
+            continue
+
+        before = wheel.read_bytes()
+        after = distro.read_bytes()
+        old_digest = hashlib.sha256(before).hexdigest()
+
+        if before == after:
+            print(f"  {name} {version}: already identical to the distro wheel")
+            current = wheel
+        elif version_key(distro_version) != version_key(version):
+            # A different version means a different filename, which
+            # BUNDLE_SUPPORT refers to by name.
+            current = embed / distro.name
+            current.write_bytes(after)
+            wheel.unlink()
+            rewrite_bundle_support(embed, {wheel.name: distro.name})
+            print(
+                f"  {name}: seed wheel replaced with the distro build "
+                f"({version} -> {distro_version})"
+            )
+        else:
+            wheel.write_bytes(after)
+            current = wheel
+            print(
+                f"  {name}: seed wheel replaced with the distro build "
+                f"({version} -> {distro_version})"
+            )
+
+        # The distro build is closer to correct but not correct: its interior
+        # declarations still describe the versions its own backport replaced.
+        reconcile_wheel_interior(current)
+
+        new_digest = hashlib.sha256(current.read_bytes()).hexdigest()
+        if new_digest == old_digest:
+            continue
+
+        # virtualenv hashes each bundled wheel before handing it to pip and
+        # raises on a mismatch, so the recorded digest has to move with the
+        # bytes. The stale literal is replaced wherever it appears: the
+        # rename above can leave more than one entry keyed by the same name.
+        init = embed / "__init__.py"
+        source = init.read_text(encoding="utf-8")
+        if old_digest not in source:
+            sys.exit(
+                f"harden-virtualenv-seeds: {name} {version} sha256 {old_digest} "
+                "is not recorded in BUNDLE_SHA256; refusing to leave an "
+                "unverifiable wheel in place"
+            )
+        init.write_text(source.replace(old_digest, new_digest), encoding="utf-8")
+        for cached in embed.glob("__pycache__/*.pyc"):
+            cached.unlink()
+        swapped += 1
+
+    if not swapped:
+        print("  no seed wheel needed replacing with a distro build")
+    return unmatched
+
+
+def code_version_in_wheel(archive: zipfile.ZipFile, name: str) -> str | None:
+    """Read a vendored package's version from its sources inside the wheel."""
+    module = name.replace("-", "_")
+    for candidate in (
+        f"pip/_vendor/{module}/_version.py",
+        f"pip/_vendor/{module}/version.py",
+        f"pip/_vendor/{module}/package_data.py",
+        f"pip/_vendor/{module}/__about__.py",
+        f"pip/_vendor/{module}/__init__.py",
+        f"pip/_vendor/{module}.py",
+    ):
+        try:
+            source = archive.read(candidate).decode("utf-8", errors="replace")
+        except KeyError:
+            continue
+        for line in source.splitlines():
+            # Must be an assignment of a version literal. Matching any quoted
+            # string on a line that merely mentions __version__ picks up
+            # import statements and f-strings instead, which is why the
+            # captured value is required to start with a digit.
+            assigned = re.match(
+                r"""__version__\s*(?::\s*[^=]+?)?=\s*"""
+                r"""(?:[A-Za-z_][A-Za-z_0-9]*\s*=\s*)*"""
+                r"""['"]([0-9][^'"]*)['"]""",
+                line.strip(),
+            )
+            if assigned:
+                return assigned.group(1)
+    return None
+
+
+def record_line(path: str, payload: bytes) -> str:
+    digest = base64.urlsafe_b64encode(hashlib.sha256(payload).digest())
+    return f"{path},sha256={digest.rstrip(b'=').decode()},{len(payload)}"
+
+
+def reconcile_wheel_interior(wheel: pathlib.Path) -> bool:
+    """Correct the declarations and vendored code inside a seed wheel.
+
+    The seed wheel is what virtualenv unpacks into every environment it
+    creates, so its interior is what consumers end up scanning. Two things are
+    wrong in it even after taking the distro's build:
+
+      * ``pip/_vendor/bom.cdx.json`` is left at the versions the distro's
+        backport replaced, so it declares urllib3 and msgpack versions the
+        wheel does not contain.
+
+      * ``pip/_vendor/pkg_resources`` is present. That is the setuptools code
+        the ``setuptools`` entry refers to, and it carries CVE-2025-47273 and
+        CVE-2026-59890 with no release that both ships the module and fixes
+        them - upstream's fixed state is removal, which is what
+        harden-pip-vendor.py already does for the installed pip.
+
+    Both are corrected here so the seeded environment matches the one the
+    image itself ships. Returns True when the wheel was rewritten.
+    """
+    with zipfile.ZipFile(wheel) as archive:
+        members = [(info, archive.read(info.filename)) for info in archive.infolist()]
+        declared = {}
+        for line in archive.read("pip/_vendor/vendor.txt").decode().splitlines():
+            stripped = line.strip()
+            if "==" in stripped and not stripped.startswith("#"):
+                declared[stripped.partition("==")[0].strip().lower()] = stripped
+        actual = {
+            name: code_version_in_wheel(archive, name) for name in declared
+        }
+        in_bom = {}
+        # Only the read is guarded, and only against a missing member: pip
+        # releases older than the bundled CycloneDX BOM have no such file, which
+        # harden-pip-vendor.py tolerates the same way. Guarding the loop as well
+        # would let a KeyError raised while parsing a BOM that IS present pass
+        # for an absent one, leaving the declarations unchecked but reported as
+        # handled.
+        try:
+            bom_payload = archive.read("pip/_vendor/bom.cdx.json")
+        except KeyError:
+            bom_payload = None
+            print("    interior: no bom.cdx.json in this wheel, nothing to reconcile")
+
+        if bom_payload is not None:
+            for component in json.loads(bom_payload).get("components", []):
+                version = str(component.get("version", "")).strip()
+                if version:
+                    in_bom[str(component.get("name", "")).lower()] = version
+        has_pkg_resources = any(
+            info.filename.startswith("pip/_vendor/pkg_resources/")
+            for info, _ in members
+        )
+
+    drop_prefixes = ("pip/_vendor/pkg_resources/",) if has_pkg_resources else ()
+
+    # Both declarations are compared against the code independently. They
+    # disagree with each other as well as with it, so correcting only the
+    # names one file gets wrong leaves the other's stale entries behind.
+    corrections: dict[str, str] = {}
+    for name, version in actual.items():
+        if version is None:
+            continue
+        declared_txt = declared[name].partition("==")[2].split()[0]
+        stale_txt = version_key(version) != version_key(declared_txt)
+        stale_bom = name in in_bom and version_key(version) != version_key(
+            in_bom[name]
+        )
+        if stale_txt or stale_bom:
+            corrections[name] = version
+
+    # Where the code carries no readable version, vendor.txt is the better
+    # declaration: it is pip's primary one and the distro's backport updates
+    # it. Aligning the BOM to it removes a contradiction between two files in
+    # the same wheel without inventing a version for either. Writing the same
+    # value back to vendor.txt is a no-op, which is why these can share the
+    # correction map.
+    for name, version in actual.items():
+        if version is not None or name in corrections:
+            continue
+        declared_txt = declared[name].partition("==")[2].split()[0]
+        if name in in_bom and version_key(in_bom[name]) != version_key(declared_txt):
+            corrections[name] = declared_txt
+            print(
+                f"    interior: {name} has no readable version in code; "
+                f"aligning bom.cdx.json {in_bom[name]} to vendor.txt "
+                f"{declared_txt}"
+            )
+
+    if not corrections and not drop_prefixes:
+        print("    wheel interior already consistent")
+        return False
+
+    for name, version in sorted(corrections.items()):
+        print(
+            f"    interior: {name} code has {version}, declared "
+            f"{declared[name].partition('==')[2].split()[0]} in vendor.txt "
+            f"and {in_bom.get(name, '-')} in bom.cdx.json"
+        )
+    unreadable = sorted(name for name, version in actual.items() if version is None)
+    if unreadable:
+        print(f"    interior: no version readable from code: {', '.join(unreadable)}")
+    if drop_prefixes:
+        print("    interior: removing vendored pkg_resources and its declaration")
+
+    rewritten: list[tuple[zipfile.ZipInfo, bytes]] = []
+    record_info = None
+    changed_records: dict[str, str] = {}
+    dropped_paths: set[str] = set()
+
+    for info, payload in members:
+        if any(info.filename.startswith(prefix) for prefix in drop_prefixes):
+            dropped_paths.add(info.filename)
+            continue
+        if info.filename.endswith(".dist-info/RECORD"):
+            record_info = info
+            continue
+
+        if info.filename == "pip/_vendor/vendor.txt":
+            lines = []
+            for line in payload.decode().splitlines():
+                stripped = line.strip()
+                if "==" in stripped and not stripped.startswith("#"):
+                    name = stripped.partition("==")[0].strip().lower()
+                    if drop_prefixes and name == "setuptools":
+                        continue
+                    if name in corrections:
+                        indent = line[: len(line) - len(line.lstrip())]
+                        project = stripped.partition("==")[0].strip()
+                        line = f"{indent}{project}=={corrections[name]}"
+                lines.append(line)
+            payload = ("\n".join(lines) + "\n").encode()
+            changed_records[info.filename] = record_line(info.filename, payload)
+
+        elif info.filename == "pip/_vendor/bom.cdx.json":
+            document = json.loads(payload)
+            kept = []
+            for component in document.get("components", []):
+                name = str(component.get("name", "")).lower()
+                if drop_prefixes and name == "setuptools":
+                    continue
+                if name in corrections:
+                    component["version"] = corrections[name]
+                    purl = component.get("purl")
+                    if isinstance(purl, str) and "@" in purl:
+                        component["purl"] = (
+                            f"{purl.split('@', 1)[0]}@{corrections[name]}"
+                        )
+                kept.append(component)
+            document["components"] = kept
+            payload = (json.dumps(document, indent=2) + "\n").encode()
+            changed_records[info.filename] = record_line(info.filename, payload)
+
+        rewritten.append((info, payload))
+
+    if record_info is None:
+        sys.exit(
+            f"harden-virtualenv-seeds: {wheel.name} has no RECORD; refusing to "
+            "repack a wheel whose integrity listing cannot be updated"
+        )
+
+    # RECORD describes every other file in the wheel, so it is rebuilt last
+    # from what actually survived rather than patched line by line. Filtering
+    # on the surviving members instead of on the paths removed here keeps the
+    # listing true by construction: an entry for a file the wheel does not
+    # contain is dropped even if this pass was not what removed it.
+    surviving = {info.filename for info, _ in rewritten}
+    surviving.add(record_info.filename)
+    record_text = []
+    for line in dict(members)[record_info].decode().splitlines():
+        if not line.strip():
+            continue
+        path = line.split(",")[0]
+        if path not in surviving:
+            continue
+        record_text.append(changed_records.get(path, line))
+    record_payload = ("\n".join(record_text) + "\n").encode()
+
+    with zipfile.ZipFile(wheel, "w", zipfile.ZIP_DEFLATED) as out:
+        for info, payload in rewritten:
+            out.writestr(info, payload)
+        out.writestr(record_info, record_payload)
+
+    print(f"    wheel interior rewritten ({len(dropped_paths)} file(s) removed)")
+    return True
+
+
+def verify_seeded_environment() -> None:
+    """Create a real environment and read its pip's vendored tree from disk.
+
+    Versions alone would not prove this: the wheel is only exercised when
+    virtualenv seeds it, and reading ``pip._vendor`` from the current
+    interpreter reports the SYSTEM pip, not the one the environment received.
+    """
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        target = pathlib.Path(tmp) / "env"
+        # --app-data keeps virtualenv's unpacked copy of the seed wheel inside
+        # the temporary directory. Without it the check leaves an extracted
+        # pip tree in the image's cache, which both ships a second copy of
+        # every vendored package and is read by scanners as installed content.
+        created = subprocess.run(
+            [
+                sys.executable, "-m", "virtualenv",
+                "--app-data", str(pathlib.Path(tmp) / "app-data"),
+                str(target),
+            ],
+            capture_output=True, text=True,
+        )
+        if created.returncode != 0:
+            sys.exit(
+                "harden-virtualenv-seeds: virtualenv could not create an "
+                f"environment after hardening: {created.stderr.strip()}"
+            )
+
+        vendored = sorted(target.glob("lib/python3*/site-packages/pip/_vendor"))
+        if not vendored:
+            sys.exit(
+                "harden-virtualenv-seeds: the created environment has no "
+                "seeded pip to check"
+            )
+
+        vendor = vendored[0]
+        text = vendor / "vendor.txt"
+        declared = {}
+        for line in text.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if "==" in stripped and not stripped.startswith("#"):
+                declared[stripped.partition("==")[0].strip().lower()] = (
+                    stripped.partition("==")[2].split()[0]
+                )
+
+        # The declarations in the environment must match its own code, or a
+        # consumer scanning the environment sees versions it does not have.
+        bom = vendor / "bom.cdx.json"
+        if bom.is_file():
+            for component in json.loads(bom.read_text()).get("components", []):
+                name = str(component.get("name", "")).lower()
+                version = str(component.get("version", "")).strip()
+                if not version or name not in declared:
+                    continue
+                if version_key(version) != version_key(declared[name]):
+                    sys.exit(
+                        "harden-virtualenv-seeds: the seeded environment "
+                        f"declares {name} {version} in bom.cdx.json but "
+                        f"{declared[name]} in vendor.txt"
+                    )
+
+        if (vendor / "pkg_resources").exists():
+            sys.exit(
+                "harden-virtualenv-seeds: the seeded environment still "
+                "contains pip/_vendor/pkg_resources"
+            )
+
+        # Function, not just versions: the seeded pip has to actually run,
+        # and it is the vendored tree that was changed underneath it.
+        pip_run = subprocess.run(
+            [str(target / "bin" / "pip"), "--version"],
+            capture_output=True, text=True,
+        )
+        if pip_run.returncode != 0:
+            sys.exit(
+                "harden-virtualenv-seeds: the seeded pip does not run: "
+                f"{pip_run.stderr.strip()}"
+            )
+
+        print("  seeded environment vendored versions:")
+        for name, version in sorted(declared.items()):
+            print(f"    {name}=={version}")
+        print(f"  seeded pip runs: {pip_run.stdout.strip()}")
+
+
 def verify(embed: pathlib.Path, site_packages: pathlib.Path,
            replacements: dict[str, str]) -> None:
     """Fail the build if a removed version is still present or still declared.
@@ -235,13 +653,20 @@ def main() -> None:
     print(f"harden-virtualenv-seeds: hardening {embed}")
 
     replacements = remove_superseded(embed)
-    if not replacements:
-        print("harden-virtualenv-seeds: nothing superseded, done")
-        return
+    if replacements:
+        rewrite_bundle_support(embed, replacements)
+        rewrite_inventory(site_packages, replacements)
+        verify(embed, site_packages, replacements)
+    else:
+        print("  nothing superseded")
 
-    rewrite_bundle_support(embed, replacements)
-    rewrite_inventory(site_packages, replacements)
-    verify(embed, site_packages, replacements)
+    # Always runs, including when nothing was superseded: the surviving wheel
+    # is the one that gets seeded, and its interior is the exposure.
+    unmatched = prefer_distro_wheels(embed)
+    if unmatched:
+        print(f"  no distro wheel to compare against: {', '.join(unmatched)}")
+
+    verify_seeded_environment()
     print("harden-virtualenv-seeds: done")
 
 
