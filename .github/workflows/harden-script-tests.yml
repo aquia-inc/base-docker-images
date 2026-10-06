@@ -1,0 +1,62 @@
+# Unit tests for the image hardening scripts.
+#
+# These scripts rewrite pip's vendored tree and virtualenv's seed wheels inside
+# the images, so a regression in them ships a vulnerable or mis-declared image
+# while every other check stays green. The tests are hermetic: synthetic
+# fixtures in a temporary directory, no Docker, no network, no built image.
+#
+# The image build is the other half of this. It fails closed if the hardening
+# misbehaves against the real distro wheel; these tests cover the logic and the
+# error paths that a successful build never exercises.
+name: Hardening Script Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/harden-pip-vendor.py
+      - scripts/harden-virtualenv-seeds.py
+      - scripts/test_harden_pip_vendor.py
+      - scripts/test_harden_virtualenv_seeds.py
+      - .github/workflows/harden-script-tests.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/harden-pip-vendor.py
+      - scripts/harden-virtualenv-seeds.py
+      - scripts/test_harden_pip_vendor.py
+      - scripts/test_harden_virtualenv_seeds.py
+      - .github/workflows/harden-script-tests.yml
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  test:
+    name: Hardening script unit tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Run under the interpreter the scripts actually run under in the image.
+      - name: Show interpreter
+        run: python3 --version
+
+      # Each file is run separately so a failure names the suite that broke.
+      # set -o pipefail is not needed here: nothing is piped, and piping would
+      # mask the exit code these steps exist to report.
+      - name: pip vendor declaration tests
+        run: python3 scripts/test_harden_pip_vendor.py
+
+      - name: virtualenv seed wheel tests
+        run: python3 scripts/test_harden_virtualenv_seeds.py
