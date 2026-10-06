@@ -37,6 +37,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import concurrent.futures
 import datetime as dt
 import json
@@ -231,6 +232,33 @@ def check_invariants(plan: Plan, versions: list[Version]) -> list[str]:
 # I/O
 # ---------------------------------------------------------------------------
 
+# Credential material this process has handled, scrubbed from any text that
+# might reach a log before it is raised.
+#
+# This matters more for the registry's bearer token than for the configured
+# one. GitHub Actions masks a secret it injected, so an accidental echo of
+# GH_TOKEN appears as ***; the registry token is minted at runtime from that
+# secret and the log filter has never seen it, so it would be published in
+# full. Both are registered here, along with the base64 Basic form, because
+# base64 is an encoding and not a protection.
+_SECRETS: set[str] = set()
+
+
+def remember_secret(secret: str | None) -> None:
+    """Register a credential so redact() will scrub it."""
+    if not secret or len(secret) < 8:
+        return
+    _SECRETS.add(secret)
+    _SECRETS.add(base64.b64encode(f"x:{secret}".encode()).decode())
+
+
+def redact(text: str) -> str:
+    """Remove every registered credential from text."""
+    for secret in _SECRETS:
+        text = text.replace(secret, "<redacted>")
+    return text
+
+
 def _https_only_opener() -> urllib.request.OpenerDirector:
     """An opener with no handler for file://, ftp:// or plain http://.
 
@@ -256,8 +284,10 @@ def http_json(url: str, headers: dict[str, str]) -> tuple[object, dict[str, str]
             return json.load(response), dict(response.headers)
     except urllib.error.HTTPError as error:
         # Keep GitHub's explanation: a bare "400 Bad Request" is undiagnosable.
-        detail = error.read(500).decode("utf-8", "replace")
-        raise urllib.error.HTTPError(error.url, error.code,
+        # Both the body and the URL are scrubbed first - a server is free to
+        # echo what it was sent, and this error text ends up in CI logs.
+        detail = redact(error.read(500).decode("utf-8", "replace"))
+        raise urllib.error.HTTPError(redact(error.url), error.code,
                                      f"{error.reason}: {detail}", error.headers, None) from None
 
 
@@ -306,11 +336,28 @@ def package_versions(org: str, repo: str, package: str, token: str) -> list[Vers
             for v in api_pages(f"/orgs/{org}/packages/container/{name}/versions", token)]
 
 
-def index_children(org: str, repo: str, package: str,
-                   digests: list[str]) -> dict[str, list[str]]:
-    """Fetch each manifest and return the digests it references."""
+def index_children(org: str, repo: str, package: str, digests: list[str],
+                   token: str | None = None) -> dict[str, list[str]]:
+    """Fetch each manifest and return the digests it references.
+
+    The registry pull token is requested WITH credentials when one is
+    available. An anonymous token only works while every package is public, and
+    a private one answers 401 "authentication required" - which reads as a
+    broken script rather than a visibility difference, and surfaces only on
+    whichever package happens to be private and sorts first.
+    """
     scope = f"repository:{org}/{repo}/{package}:pull"
-    token_data, _ = http_json(f"https://{REGISTRY}/token?scope={urllib.parse.quote(scope)}", {})
+    token_headers = {}
+    if token:
+        # The registry's token endpoint takes HTTP Basic; GHCR ignores the
+        # username and reads only the password.
+        basic = base64.b64encode(f"x:{token}".encode()).decode()
+        token_headers["Authorization"] = "Basic " + basic
+    token_data, _ = http_json(
+        f"https://{REGISTRY}/token?scope={urllib.parse.quote(scope)}", token_headers)
+    # Registered before use: this one is minted here, so nothing upstream knows
+    # to mask it if it ends up in a traceback.
+    remember_secret(token_data.get("token"))
     headers = {"Authorization": "Bearer " + token_data["token"], "Accept": MANIFEST_ACCEPT}
 
     def fetch(digest: str) -> tuple[str, list[str]]:
@@ -340,6 +387,7 @@ def main() -> int:
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if not token:
         sys.exit("ghcr-retention: set GH_TOKEN to a token with read:packages")
+    remember_secret(token)
 
     releases = release_tags(args.org, args.repo, token)
 
@@ -359,12 +407,12 @@ def main() -> int:
         # Every tagged version is fetched, signature tags included: those can
         # be indexes whose children are live attestation bundles.
         tagged = [v.digest for v in versions if v.tags]
-        children = index_children(args.org, args.repo, package, tagged)
+        children = index_children(args.org, args.repo, package, tagged, token)
         plan = plan_package(package, versions, children, releases, args.today,
                             args.releases, args.days)
         problems += check_invariants(plan, versions)
         orphan_groups = classify_orphans(
-            plan, index_children(args.org, args.repo, package, plan.orphans))
+            plan, index_children(args.org, args.repo, package, plan.orphans, token))
         row = [len(versions), len(plan.keep), len(plan.delete), len(plan.retire),
                len(plan.orphans), len(plan.unknown)]
         totals = [a + b for a, b in zip(totals, row)]
