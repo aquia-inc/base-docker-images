@@ -20,6 +20,20 @@ env:
 
 jobs:
   publish_image:
+    # Pinned so the check name does not depend on the shape of the matrix.
+    #
+    # GitHub composes a matrix job's display name from EVERY matrix value, so
+    # adding the runner dimension below silently renamed these checks from
+    # "publish_image (linux/amd64)" to "publish_image (linux/amd64,
+    # ubuntu-latest)". Branch protection requires the former by exact string,
+    # so both required contexts stopped matching anything and sat as "expected,
+    # waiting for status to be reported" - leaving every pull request blocked
+    # while reporting all checks green, which is the hard way to notice.
+    #
+    # Naming the job explicitly decouples the required contexts from the matrix
+    # dimensions, so a future dimension cannot break the gate again. Keep this
+    # string identical to the required status checks on main.
+    name: publish_image (${{ matrix.platform }})
     # Each architecture builds on a runner of its own architecture. Emulating
     # arm64 on an amd64 runner was expensive in a way that is easy to miss:
     # measured across recent publishes, the arm64 leg took 2918-4454s for
