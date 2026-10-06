@@ -191,6 +191,18 @@ jobs:
             exit 1
           fi
 
+          # Supply the credential through a helper that reads it from the
+          # environment, rather than interpolating it into each push URL. A URL
+          # argument is visible in the runner's process table to anything else
+          # running in this job, and can be echoed by git into error output;
+          # the environment is neither. Actions masks the value in logs either
+          # way, but masking does not cover argv. Configured once here because
+          # the push below runs per image.
+          # shellcheck disable=SC2016  # $RELEASE_PAT must be expanded by the
+          # helper when git invokes it, not by this shell, which is the whole
+          # point of keeping it out of the command line.
+          git config credential.helper '!f() { printf "username=x-access-token\npassword=%s\n" "$RELEASE_PAT"; }; f'
+
           for base_name in $unique_needs_rebuild; do
             echo "Creating rebuild tag for $base_name..."
 
@@ -237,7 +249,7 @@ jobs:
 
             echo "Creating and pushing rebuild tag: $new_tag"
             git tag "$new_tag"
-            if git push "https://x-access-token:${RELEASE_PAT}@github.com/${GH_REPO}.git" "$new_tag"; then
+            if git push "https://github.com/${GH_REPO}.git" "$new_tag"; then
               echo "[ok] Rebuild triggered for $base_name by pushing tag $new_tag"
             else
               echo "::warning::Could not push $new_tag for $base_name; continuing with the remaining images."
@@ -245,6 +257,8 @@ jobs:
               push_failures="${push_failures} ${base_name}"
             fi
           done
+
+          git config --unset credential.helper
 
           # Surface problems that were deliberately not allowed to abort the run.
           # A scan error is not a vulnerability finding, but it does mean an image
