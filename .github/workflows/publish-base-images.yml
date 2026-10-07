@@ -273,6 +273,19 @@ jobs:
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
         with:
+          # Stated explicitly so this gate and the daily scan run the same
+          # scanner. Passing no version inherits the action's own default,
+          # which at this pinned commit is v0.69.3, while the daily job pins
+          # 0.74.0 - two versions scanning the same images can attribute one
+          # CVE to different packages, or disagree on whether it is present.
+          #
+          # Bumped deliberately after measuring: all eight published images
+          # were scanned with 0.69.3 and 0.74.0, separate caches per version,
+          # and both reported zero findings with no fatal errors on every one.
+          # Re-measure before moving this, because a scanner bump can turn the
+          # whole fleet red at once.
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.74.0
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
           format: table
