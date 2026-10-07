@@ -285,7 +285,7 @@ jobs:
           # Re-measure before moving this, because a scanner bump can turn the
           # whole fleet red at once.
           # renovate: datasource=github-releases depName=aquasecurity/trivy
-          version: v0.74.0
+          version: v0.75.0
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
           format: table
