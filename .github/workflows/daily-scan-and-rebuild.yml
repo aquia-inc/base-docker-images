@@ -22,6 +22,8 @@ env:
 jobs:
   scan_and_rebuild:
     runs-on: ubuntu-latest
+    outputs:
+      frozen_tag_violations: ${{ steps.frozen_tags.outputs.violations }}
     permissions:
       # Read only: rebuild tags are pushed with the repository deploy key, not
       # with GITHUB_TOKEN, so this token needs no write access at all.
@@ -329,6 +331,7 @@ jobs:
       # every reference is a marker this step is permanently green and can be
       # removed.
       - name: Monitor frozen FIPS 140-2 tags
+        id: frozen_tags
         if: ${{ !cancelled() }}
         env:
           EOL_DATE: "2026-09-30"
@@ -392,17 +395,99 @@ jobs:
             done
           done
 
-          failed=0
+          # Violations are reported as an output and acted on by the job
+          # below, rather than failing here.
+          #
+          # This step is not what was wrong: when openssl3 was left unretired
+          # it named the exact references, correctly, every day. What failed is
+          # that the only place it said so was a red run nobody opened, so a
+          # compliance violation sat unaddressed for seven days while the
+          # workflow's failure rate stopped meaning anything.
+          #
+          # The condition still fails the workflow - a frozen tag that is still
+          # served and still vulnerable is a real exposure, and silence would be
+          # worse - but it now also leaves a tracking issue behind, and the
+          # failure is attributed to a job named for this rather than to the
+          # scan.
+          violations=""
           if [ -n "$findings" ]; then
             echo "::error::Frozen FIPS 140-2 tags have scanner findings (vulnerabilities or secrets) and cannot be rebuilt. Retire them now with eol/retire-fips-base-tag.sh (see FIPS.md):${findings}"
-            failed=1
+            violations="${violations}- Scanner findings, so these cannot be rebuilt:${findings}"$'\n'
           fi
           if [ -n "$scan_errors" ]; then
             echo "::error::Frozen FIPS 140-2 tags that could not be scanned:${scan_errors}"
-            failed=1
+            violations="${violations}- Could not be scanned, so their state is unknown:${scan_errors}"$'\n'
           fi
           if [ -n "$present" ] && [[ "$today" > "$EOL_DATE" ]]; then
             echo "::error::The end-of-life date for the frozen FIPS 140-2 tags (${EOL_DATE}) has passed but they still resolve. Retire them with eol/retire-fips-base-tag.sh (see FIPS.md):${present}"
-            failed=1
+            violations="${violations}- Past the end-of-life date of ${EOL_DATE} but still resolving:${present}"$'\n'
           fi
-          exit "$failed"
+
+          # Heredoc delimiter, because the value is multi-line.
+          {
+            echo "violations<<FROZEN_TAG_EOF"
+            printf '%s' "$violations"
+            echo "FROZEN_TAG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ -z "$violations" ]; then
+            echo "[ok] every frozen FIPS 140-2 tag is retired or absent"
+          fi
+
+  # Separate job so that issues: write is granted to twelve lines of reporting
+  # rather than to the job that pulls images and runs a scanner, and so that a
+  # frozen-tag violation is attributed to a job named for it instead of
+  # appearing as "the daily scan failed again".
+  report_frozen_tag_violation:
+    name: Frozen FIPS 140-2 tag violation
+    needs: scan_and_rebuild
+    if: ${{ !cancelled() && needs.scan_and_rebuild.outputs.frozen_tag_violations != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+
+      - name: Open or update the tracking issue, then fail
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          VIOLATIONS: ${{ needs.scan_and_rebuild.outputs.frozen_tag_violations }}
+        run: |
+          set -euo pipefail
+
+          title="Frozen FIPS 140-2 tags are not retired"
+          label="fips-frozen-tags"
+
+          # An existing issue is commented on rather than duplicated, so a
+          # condition that persists for days produces one thread with a history
+          # instead of a new issue every morning.
+          existing=$(gh issue list --repo "$REPO" --state open --label "$label" \
+            --json number --jq '.[0].number // empty')
+
+          body="$(printf '%s\n\n%s\n\n%s\n%s\n' \
+            "The daily scan found frozen FIPS 140-2 tags that are still served and not retired:" \
+            "${VIOLATIONS}" \
+            "Retire them with \`eol/retire-fips-base-tag.sh <tag>\` (see FIPS.md). It needs a credential with write:packages, and must be run once per tag - a half-finished retirement is how this last went unnoticed." \
+            "Run: ${RUN_URL}")"
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" --body "$body"
+            echo "commented on existing issue #${existing}"
+          else
+            gh label create "$label" --repo "$REPO" \
+              --description "Frozen FIPS 140-2 tags still served after end of life" \
+              --color B60205 2>/dev/null || true
+            gh issue create --repo "$REPO" --title "$title" --label "$label" --body "$body"
+          fi
+
+          # Still a failure. A frozen tag that is served and vulnerable is a
+          # real exposure; the issue is the durable record, not a substitute
+          # for the build going red.
+          echo "::error::Frozen FIPS 140-2 tags are not retired. See the tracking issue."
+          exit 1
