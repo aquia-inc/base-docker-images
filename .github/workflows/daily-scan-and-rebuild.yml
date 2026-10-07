@@ -11,6 +11,13 @@ env:
   REGISTRY: ghcr.io
   GH_REPO: ${{ github.repository }}
   TRIGGER_SEVERITIES: "CRITICAL,HIGH,MEDIUM"
+  # One source of truth for the scanner version, because it is needed in two
+  # places: the installer input and the check that the install produced what
+  # was asked for. Renovate updates this line; it cannot rewrite a bare string
+  # inside a run block, so a second hardcoded copy silently goes stale and
+  # fails the job on the next bump.
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: "0.75.0"
 
 jobs:
   scan_and_rebuild:
@@ -74,8 +81,7 @@ jobs:
       - name: Install Trivy scanner
         uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
-          # renovate: datasource=github-releases depName=aquasecurity/trivy
-          version: v0.75.0
+          version: v${{ env.TRIVY_VERSION }}
           cache: false
 
       - name: Confirm the scanner version actually installed
@@ -84,10 +90,13 @@ jobs:
           # different version would change what this gate reports. Grep for the
           # Version line specifically - "trivy --version" can lead with a
           # config-load line.
+          #
+          # Compared against the same variable the installer was given, so this
+          # cannot disagree with the pin.
           trivy --version
           installed="$(trivy --version | awk '/^Version:/ {print $2; exit}')"
-          if [ "$installed" != "0.74.0" ]; then
-            echo "::error::expected trivy 0.74.0, got '${installed}'"
+          if [ "$installed" != "${TRIVY_VERSION}" ]; then
+            echo "::error::expected trivy ${TRIVY_VERSION}, got '${installed}'"
             exit 1
           fi
 
