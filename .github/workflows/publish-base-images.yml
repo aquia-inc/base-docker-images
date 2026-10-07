@@ -305,7 +305,7 @@ jobs:
           platform-suffix: ${{ steps.context.outputs.platform-suffix }}
 
       - name: Upload versions artifact for ${{ matrix.platform }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: steps.extract_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
         with:
           name: versions-file-${{ steps.context.outputs.platform-suffix }}
@@ -442,7 +442,7 @@ jobs:
           echo "has_version_tags=${{ steps.version_tags.outputs.has_version_tags }}" >> version_artifacts/version_tags.env
 
       - name: Upload version tags as artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
         with:
           name: version-tags-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
@@ -586,7 +586,7 @@ jobs:
           echo "[ok] SBOM validation passed"
 
       - name: Upload SBOM artifacts for ${{ matrix.platform }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.generate_sbom.outputs.sbom_spdx_file != ''
         with:
           name: >-
@@ -784,7 +784,7 @@ jobs:
           echo "provenance_file_path=$output_file" >> "$GITHUB_OUTPUT"
 
       - name: Upload provenance artifact for ${{ matrix.platform }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.extract_logindex.outputs.provenance_file_path != ''
         with:
           name: provenance-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
@@ -920,7 +920,7 @@ jobs:
           steps.parse_tag_release.outputs.image-base-name == 'openjdk17-base' ||
           steps.parse_tag_release.outputs.image-base-name == 'go-base'
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: versions-file-linux-amd64
           path: .
@@ -933,7 +933,7 @@ jobs:
           steps.parse_tag_release.outputs.image-base-name == 'openjdk17-base' ||
           steps.parse_tag_release.outputs.image-base-name == 'go-base'
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: versions-file-linux-arm64
           path: .
@@ -941,7 +941,7 @@ jobs:
       - name: Download AMD64 provenance artifact
         id: download_provenance_amd64
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: provenance-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-amd64
           path: .
@@ -949,7 +949,7 @@ jobs:
       - name: Download ARM64 provenance artifact
         id: download_provenance_arm64
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: >-
             provenance-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-arm64
@@ -958,7 +958,7 @@ jobs:
       - name: Download AMD64 SBOM artifact
         id: download_sbom_amd64
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: >-
             sbom-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-amd64
@@ -967,7 +967,7 @@ jobs:
       - name: Download ARM64 SBOM artifact
         id: download_sbom_arm64
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: >-
             sbom-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-arm64
