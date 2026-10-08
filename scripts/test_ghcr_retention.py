@@ -1,9 +1,12 @@
 """Unit tests for the planning logic in ghcr-retention.py (no network)."""
 
 import datetime as dt
+import http.client
 import importlib.util
+import io
 import pathlib
 import sys
+import urllib.error
 
 _spec = importlib.util.spec_from_file_location(
     "ghcr_retention", pathlib.Path(__file__).with_name("ghcr-retention.py"))
@@ -230,6 +233,89 @@ def test_invariants_hold_on_a_realistic_plan():
     p = plan(versions, children, releases)
     assert gr.check_invariants(p, versions) == []
 
+
+
+class _Response:
+    def __init__(self, body: bytes):
+        self._body = io.BytesIO(body)
+        self.headers = {"Link": ""}
+
+    def read(self, *args):
+        return self._body.read(*args)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class _Opener:
+    """Replays a scripted sequence: an exception to raise, or a body to return."""
+
+    def __init__(self, outcomes):
+        self.outcomes = list(outcomes)
+        self.calls = 0
+
+    def open(self, request, timeout=None):
+        self.calls += 1
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return _Response(outcome)
+
+
+def _http_error(code: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError("https://api.github.com/x", code, "err", {},
+                                  io.BytesIO(b"{}"))
+
+
+def with_opener(outcomes):
+    """Run http_json against scripted outcomes; return (result or error, calls, sleeps)."""
+    opener, sleeps = _Opener(outcomes), []
+    saved = gr._OPENER, gr._sleep
+    gr._OPENER, gr._sleep = opener, sleeps.append
+    try:
+        try:
+            result = gr.http_json("https://api.github.com/x", {})
+        except Exception as error:  # noqa: BLE001 - the error is the result
+            result = error
+    finally:
+        gr._OPENER, gr._sleep = saved
+    return result, opener.calls, sleeps
+
+
+def test_dropped_connection_is_retried_then_succeeds():
+    result, calls, sleeps = with_opener([
+        http.client.RemoteDisconnected("closed"),
+        http.client.RemoteDisconnected("closed"),
+        b'[{"id": 1}]'])
+    assert result[0] == [{"id": 1}]
+    assert calls == 3 and sleeps == [2, 4]
+
+
+def test_server_error_is_retried():
+    result, calls, sleeps = with_opener([_http_error(503), b"[]"])
+    assert result[0] == [] and calls == 2 and sleeps == [2]
+
+
+def test_client_error_is_raised_at_once_and_never_retried():
+    result, calls, sleeps = with_opener([_http_error(404), b"[]"])
+    assert isinstance(result, urllib.error.HTTPError) and result.code == 404
+    assert calls == 1 and sleeps == []
+
+
+def test_persistent_failure_is_raised_after_bounded_attempts():
+    result, calls, sleeps = with_opener(
+        [http.client.RemoteDisconnected("closed")] * (gr.RETRIES + 1))
+    assert isinstance(result, http.client.RemoteDisconnected)
+    assert calls == gr.RETRIES + 1 and sleeps == [2, 4, 8]
+
+
+def test_persistent_server_error_keeps_its_status():
+    result, calls, _ = with_opener([_http_error(502)] * (gr.RETRIES + 1))
+    assert isinstance(result, urllib.error.HTTPError) and result.code == 502
+    assert calls == gr.RETRIES + 1
 
 if __name__ == "__main__":
     # Runnable without pytest, so CI needs no extra dependency.

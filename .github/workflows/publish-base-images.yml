@@ -48,6 +48,10 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:  # Add GH_TOKEN at the job level
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The SBOM generator. A release tag, so the installer is fetched from that
+      # tag rather than from a branch, and the SBOMs name a reproducible version.
+      # renovate: datasource=github-releases depName=anchore/syft
+      SYFT_VERSION: "v1.54.1"
     strategy:
       # Independent legs. One architecture failing must not cancel the other and
       # hide its logs; nothing publishes until both pass anyway, because the
@@ -102,7 +106,7 @@ jobs:
 
       - name: Parse image context
         id: context
-        uses: $/.github/actions/parse-image-context
+        uses: $/.github/actions/parse-image-context  # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag - a $/ self-repository ref resolves at this workflow's own commit and cannot be repointed
         with:
           tag: ${{ env.TAG }}
           platform: ${{ matrix.platform }}
@@ -148,7 +152,7 @@ jobs:
 
       - name: Setup Docker environment
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
-        uses: $/.github/actions/setup-docker
+        uses: $/.github/actions/setup-docker  # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag - a $/ self-repository ref resolves at this workflow's own commit and cannot be repointed
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -271,7 +275,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           # Stated explicitly so this gate and the daily scan run the same
           # scanner. Passing no version inherits the action's own default,
@@ -297,7 +301,7 @@ jobs:
       - name: Extract language versions
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         id: extract_versions
-        uses: $/.github/actions/extract-versions
+        uses: $/.github/actions/extract-versions  # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag - a $/ self-repository ref resolves at this workflow's own commit and cannot be repointed
         with:
           image-base-name: ${{ steps.context.outputs.image-base-name }}
           image-tag: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
@@ -517,11 +521,27 @@ jobs:
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
 
+      # Previously the install script was piped straight from syft's main
+      # branch, so whatever that branch held ran in this job, which can push
+      # images. The action is pinned by SHA, installs the exact SYFT_VERSION
+      # tag, verifies the binary against that release's checksums, and puts
+      # syft on PATH.
       - name: Install Syft for SBOM generation
         if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          syft-version: ${{ env.SYFT_VERSION }}
+
+      - name: Confirm the Syft version installed
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | \
-            sh -s -- -b /usr/local/bin
+          set -euo pipefail
+          installed="$(syft version -o json | jq -r .version)"
+          if [ "v${installed#v}" != "$SYFT_VERSION" ]; then
+            echo "::error::expected syft ${SYFT_VERSION}, got '${installed}'"
+            exit 1
+          fi
+          echo "syft ${installed}"
 
       - name: Generate SBOM for ${{ matrix.platform }}
         id: generate_sbom
@@ -907,7 +927,7 @@ jobs:
 
       - name: Parse tag for release info
         id: parse_tag_release
-        uses: $/.github/actions/parse-image-context
+        uses: $/.github/actions/parse-image-context  # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag - a $/ self-repository ref resolves at this workflow's own commit and cannot be repointed
         with:
           tag: ${{ github.ref }}
           platform: linux/amd64  # Platform doesn't matter for release parsing
@@ -1463,11 +1483,10 @@ jobs:
         # FROM ...<image>-linux-<arch>:latest, so leaving those behind would
         # keep that documented path on the retired 140-2 image.
         #
-        # Deliberately NOT written here: openssl3 / openssl3.0 (frozen at the
-        # final 140-2 build) and the 2 / 2.0 / 2.0.0 semver markers (a one-time
-        # cutover freeze applied by the runbook in FIPS.md). Re-pointing those on
-        # every rebuild would defeat the "frozen" signal, so the mirror only
-        # moves the tracking tags.
+        # Deliberately NOT written here: the retired FIPS 140-2 tags (now
+        # end-of-life markers, which a mirror would silently un-retire) and the
+        # 2 / 2.0 / 2.0.0 semver markers (a one-time cutover freeze applied by
+        # the runbook in FIPS.md). The mirror only moves the tracking tags.
         if: steps.parse_tag.outputs.image_base_name == 'fips-140-3'
         env:
           REGISTRY_REPO: ${{ env.REGISTRY }}/${{ github.repository }}

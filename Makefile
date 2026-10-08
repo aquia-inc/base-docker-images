@@ -30,9 +30,10 @@ trivy-python:
 # info/style noise (tracked as tech debt) while still catching warning+ issues.
 lint:
 	SHELLCHECK_OPTS='--severity=warning' actionlint -ignore 'specifying action "\$$/.+" in invalid format' .github/workflows/*.yml
-# Preview the workflow security findings CI reports to code-scanning
-# (zizmorcore/zizmor-action, regular persona). Advisory only: the CI job uploads
-# results and does not fail on them. --offline skips online-only audits (CI runs
-# those too); drop it and export GH_TOKEN to match CI exactly.
+# Run the workflow security analysis that the required `zizmor` check runs
+# (zizmorcore/zizmor-action: regular persona, low severity and above). A
+# finding fails that check. Inputs are named explicitly rather than `.` so a
+# local node_modules is not scanned. --offline skips the online-only audits CI
+# also runs; drop it and export GH_TOKEN to match CI exactly.
 zizmor:
-	zizmor --offline .github/workflows/*.yml
+	zizmor --persona regular --min-severity low --offline .github/workflows/*.yml .github/actions/*/action.yml

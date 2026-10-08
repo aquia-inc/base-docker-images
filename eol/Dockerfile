@@ -1,5 +1,6 @@
-# End-of-life marker image, pushed over a retired tag by hand (see the
-# "Retiring a frozen tag" runbook in FIPS.md). It is deliberately not named
+# End-of-life marker image, pushed by hand over the retired FIPS 140-2
+# fips-base tags; the script that did it, with the exact build arguments, is in
+# git history (eol/retire-fips-base-tag.sh). It is deliberately not named
 # Dockerfile.* at the repository root, so no build workflow discovers it.
 #
 # The result is a scratch image holding one static binary, installed as both

@@ -14,7 +14,7 @@
 # | Dockerfile.fips-140-3 with no image-reference change for                |
 # | consumers:                                                              |
 # |   latest, fips3, fips3.1   track the 140-3 image on every rebuild       |
-# |   openssl3, openssl3.0     frozen at the final 140-2 build              |
+# |   (140-2 tags)             retired to end-of-life markers               |
 # |   2, 2.0, 2.0.0            mark the 140-2 -> 140-3 cutover              |
 # |                                                                         |
 # | Compatibility and the exact tag mapping are documented in               |
