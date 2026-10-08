@@ -8,6 +8,10 @@
 # The image build is the other half of this. It fails closed if the hardening
 # misbehaves against the real distro wheel; these tests cover the logic and the
 # error paths that a successful build never exercises.
+#
+# The GHCR retention planner's tests run here too. They are hermetic in the same
+# way, and the live report itself runs only on its weekly schedule
+# (ghcr-retention.yml).
 name: Hardening Script Tests
 
 on:
@@ -16,16 +20,20 @@ on:
     paths:
       - scripts/harden-pip-vendor.py
       - scripts/harden-virtualenv-seeds.py
+      - scripts/ghcr-retention.py
       - scripts/test_harden_pip_vendor.py
       - scripts/test_harden_virtualenv_seeds.py
+      - scripts/test_ghcr_retention.py
       - .github/workflows/harden-script-tests.yml
   push:
     branches: [main]
     paths:
       - scripts/harden-pip-vendor.py
       - scripts/harden-virtualenv-seeds.py
+      - scripts/ghcr-retention.py
       - scripts/test_harden_pip_vendor.py
       - scripts/test_harden_virtualenv_seeds.py
+      - scripts/test_ghcr_retention.py
       - .github/workflows/harden-script-tests.yml
   workflow_dispatch:
 
@@ -60,3 +68,6 @@ jobs:
 
       - name: virtualenv seed wheel tests
         run: python3 scripts/test_harden_virtualenv_seeds.py
+
+      - name: GHCR retention planner tests
+        run: python3 scripts/test_ghcr_retention.py
