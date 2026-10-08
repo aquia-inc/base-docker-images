@@ -244,7 +244,9 @@ For Go applications, see the <a href="examples/">examples</a> directory for a si
 
 ### Add New Image
 
-PR to `main` with new Dockerfile in format `Dockerfile.<image-name>`. This will build your Docker image with semver tag `0.0.1`.
+PR to `main` with new Dockerfile in format `Dockerfile.<image-name>` and its container structure tests in `tests/container-structure/<image-name>.yaml`. This will build your Docker image with semver tag `0.0.1`.
+
+The structure-test config is required: a build whose image has no config at that exact path fails, and the error lists the configs that do exist so a misnamed file is easy to spot.
 
 ### Update Image
 
