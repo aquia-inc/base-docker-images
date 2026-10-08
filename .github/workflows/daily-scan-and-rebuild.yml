@@ -22,6 +22,9 @@ env:
 jobs:
   scan_and_rebuild:
     runs-on: ubuntu-latest
+    outputs:
+      stale_checked: ${{ steps.stale_latest.outputs.checked }}
+      stale_report: ${{ steps.stale_latest.outputs.report }}
     permissions:
       # Read only: rebuild tags are pushed with the repository deploy key, not
       # with GITHUB_TOKEN, so this token needs no write access at all.
@@ -310,3 +313,63 @@ jobs:
           if [ -n "$scan_errors" ] || [ -n "$push_failures" ]; then
             exit 1
           fi
+
+      # Scanning :latest says whether the published image is clean; it cannot
+      # say whether it is the image that should be published. A release whose
+      # publish failed, or a tag that never started one, leaves :latest on an
+      # older build that may scan clean, and nothing else would notice.
+      #
+      # So each image's :latest (both architectures and the multi-arch tag) is
+      # compared with its newest release tag. A publish still running is fine;
+      # anything else is reported, with the reason, by the job below.
+      - name: Check that each published :latest is the newest release
+        id: stale_latest
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JUST_REBUILT: ${{ steps.scan_check_rebuild.outputs.rebuild_list }}
+        run: |
+          set -euo pipefail
+          python3 scripts/publish-report.py stale --repo "$GH_REPO" --registry "$REGISTRY" \
+            --images "$IMAGE_BASE_NAMES" --skip "${JUST_REBUILT:-}" --out stale-latest.md
+          {
+            echo "checked=true"
+            echo "report<<STALE_LATEST_EOF"
+            cat stale-latest.md
+            echo "STALE_LATEST_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  # Separate job so issues: write is granted to the reporting only, not to the
+  # job that holds the deploy key and pulls images. Keeps one tracking issue:
+  # opened or commented on while any :latest is behind, closed once none is.
+  report_stale_latest:
+    needs: scan_and_rebuild
+    if: ${{ !cancelled() && needs.scan_and_rebuild.outputs.stale_checked == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REPORT: ${{ needs.scan_and_rebuild.outputs.stale_report }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$REPORT" > stale-latest.md
+          python3 scripts/publish-report.py tracking-issue --repo "$REPO" \
+            --label stale-latest --title "Published :latest is behind its newest release" \
+            --intro "The daily scan found images whose published :latest is not their newest release, so that release never reached consumers:" \
+            --report stale-latest.md --run-url "$RUN_URL"

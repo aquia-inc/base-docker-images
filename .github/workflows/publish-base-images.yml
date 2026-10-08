@@ -248,6 +248,15 @@ jobs:
           sudo mv "$asset" /usr/local/bin/container-structure-test
           container-structure-test version
 
+      # The gate's own output is kept as files so a failed publish can carry
+      # it into the tracking issue (report_publish_result), rather than
+      # pointing at a log someone has to dig through.
+      - name: Prepare gate report directory
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
+        env:
+          GATE_DIR: gate-report/${{ steps.context.outputs.platform-suffix }}
+        run: mkdir -p "$GATE_DIR"
+
       - name: Run Container Structure Tests for ${{ matrix.platform }}
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         # --platform is kept explicit: the tool creates its test container for
@@ -257,7 +266,9 @@ jobs:
         # silently following the runner if the matrix ever changes.
         env:
           PLATFORM: ${{ matrix.platform }}
+          GATE_DIR: gate-report/${{ steps.context.outputs.platform-suffix }}
         run: |
+          set -o pipefail
           image_base_name="${{ steps.context.outputs.image-base-name }}"
           test_config="tests/container-structure/${image_base_name}.yaml"
 
@@ -268,7 +279,7 @@ jobs:
             container-structure-test test \
               --platform "$PLATFORM" \
               --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-              --config "$test_config"
+              --config "$test_config" 2>&1 | tee "$GATE_DIR/structure-tests.txt"
           else
             echo "No container structure test config found at $test_config, skipping tests"
           fi
@@ -293,10 +304,28 @@ jobs:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
           format: table
+          # Written to a file so it can travel into the failure issue; the
+          # next step prints it, so the log still shows the table.
+          output: gate-report/${{ steps.context.outputs.platform-suffix }}/trivy.txt
           exit-code: "1"
           ignore-unfixed: true
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH,MEDIUM"
+
+      - name: Show Trivy gate output for ${{ matrix.platform }}
+        if: ${{ !cancelled() && steps.dockerfile_check.outputs.dockerfile_changed == 'true' }}
+        env:
+          TRIVY_OUT: gate-report/${{ steps.context.outputs.platform-suffix }}/trivy.txt
+        run: cat "$TRIVY_OUT" 2>/dev/null || echo "Trivy wrote no output."
+
+      - name: Upload gate report for ${{ matrix.platform }}
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'tag' && steps.dockerfile_check.outputs.dockerfile_changed == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: gate-report-${{ steps.context.outputs.platform-suffix }}
+          path: gate-report/
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Extract language versions
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
@@ -1539,6 +1568,64 @@ jobs:
             fi
           done
           exit "$failed"
+
+  # One issue per image for a failed release publish, closed again by that
+  # image's next successful publish. A red run nobody opens is how a gate
+  # failure went unnoticed for days; the issue is the durable record.
+  #
+  # Kept as its own job so issues: write is granted to the reporting only,
+  # never to the jobs that build, sign and push images.
+  report_publish_result:
+    needs: [publish_image, create_release, create_multiarch_manifests]
+    if: ${{ always() && github.event_name == 'push' && github.ref_type == 'tag' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read   # the failed jobs and steps of this run
+      issues: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download gate reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        continue-on-error: true  # absent when the run failed before the gate
+        with:
+          pattern: gate-report-*
+          path: gate-reports
+          merge-multiple: true
+
+      - name: Open, update or close the image's publish issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PUBLISH: ${{ needs.publish_image.result }}
+          RELEASE: ${{ needs.create_release.result }}
+          MANIFESTS: ${{ needs.create_multiarch_manifests.result }}
+        run: |
+          set -euo pipefail
+          # Success means every stage landed; a cancelled run says nothing
+          # about the image either way.
+          if [ "$PUBLISH" = success ] && [ "$RELEASE" = success ] && [ "$MANIFESTS" = success ]; then
+            outcome=success
+          elif [ "$PUBLISH" = cancelled ] || [ "$RELEASE" = cancelled ] || [ "$MANIFESTS" = cancelled ]; then
+            outcome=cancelled
+          else
+            outcome=failure
+          fi
+          echo "publish=$PUBLISH release=$RELEASE manifests=$MANIFESTS -> $outcome"
+          python3 scripts/publish-report.py publish --repo "$REPO" --tag "$TAG" \
+            --run-id "$RUN_ID" --run-url "$RUN_URL" --outcome "$outcome" --gate-dir gate-reports
 
   # Auto-approve renovate PRs after successful builds
   auto_approve_renovate:

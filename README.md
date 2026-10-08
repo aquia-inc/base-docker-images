@@ -259,6 +259,12 @@ python3 scripts/release-inputs.py inputs python-base
 python3 scripts/release-inputs.py changed
 ```
 
+### When a Publish Fails
+
+A failed release publish opens an issue for that image, labelled `publish-failure`. The title names what failed: the number of fixable findings when the Trivy gate blocked it, "Trivy could not scan the image" when the scanner itself failed, or the failing step otherwise. The body links the run and carries the gate's own Trivy and structure-test output. A further failure of the same image comments on that issue, and the image's next successful publish closes it. Only an image's newest release opens or closes its issue, so re-running an older tag changes nothing.
+
+The daily scan also compares every image's published `:latest`, on both architectures and the multi-arch tag, with its newest release tag. If they differ and that release is not still publishing, it opens or updates a `stale-latest` issue that says why (the publish failed, or never started) and fails the run. The issue closes once every `:latest` has caught up.
+
 ### CI Checks
 
 Every pull request to `main` must pass these required checks:
