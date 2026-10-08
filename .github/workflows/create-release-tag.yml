@@ -9,6 +9,12 @@ on:
 # Minimal default; each job opts into exactly what it needs.
 permissions: {}
 
+# One run at a time. Two merges in quick succession would otherwise both read
+# the same newest release tag and compute the same next version for an image.
+concurrency:
+  group: create-release-tag
+  cancel-in-progress: false
+
 jobs:
   detect_changed_images:
     runs-on: ubuntu-latest
@@ -27,44 +33,31 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-          persist-credentials: false  # read-only job (git diff only); no push here
+          persist-credentials: false  # read-only job (git diff against release tags); no push here
 
-      - name: Detect changed Dockerfiles and build matrix
+      # An image is released when anything that goes into it changed since its
+      # newest release tag: its Dockerfile, its structure tests, every local
+      # file the Dockerfile COPYs or ADDs, and the inputs shared by all images.
+      # The set is derived from each Dockerfile (scripts/release-inputs.py), so
+      # a new COPY is covered the day it is added.
+      #
+      # Comparing against the release tag rather than this push's previous
+      # commit also means a change merged while tagging failed is picked up by
+      # the next run instead of never shipping. The script fails rather than
+      # report "nothing changed" when it cannot tell.
+      - name: Detect images whose build inputs changed
         id: build_matrix
         run: |
-          # get changed Dockerfiles from git diff
-          changed_files=$(git diff --name-only ${{ github.event.before }} \
-            ${{ github.event.after }} | grep '^Dockerfile\.' | xargs)
-          echo "changed_dockerfiles=$changed_files" >> "$GITHUB_OUTPUT"
-
-          # get image names from Dockerfile extensions
-          if [ -n "$changed_files" ]; then
-            images=$(for filename in $changed_files; do \
-              echo -n "${filename#Dockerfile.} "; done)
-
-            # create JSON array for matrix (e.g., ["nodejs-base", "wolfi-base"])
-            read -ra image_array <<< "$images"
-            output_string="["
-            for item in "${image_array[@]}"; do
-              output_string+="\"$item\", "
-            done
-            # Remove trailing comma and space, add closing bracket
-            output_string=$(echo "$output_string" | sed 's/, $//')"]"
-
-            echo "images_to_build=$output_string" >> "$GITHUB_OUTPUT"
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            echo "Found changed images: $images"
-          else
-            echo "images_to_build=[]" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          images="$(python3 scripts/release-inputs.py changed)"
+          echo "images_to_build=${images}" >> "$GITHUB_OUTPUT"
+          if [ "$images" = "[]" ]; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
-            echo "No Dockerfile changes detected"
+            echo "No image has a changed build input."
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "Releasing: ${images}"
           fi
-
-      - name: Exit early if no changes
-        if: steps.build_matrix.outputs.has_changes != 'true'
-        run: |
-          echo "No Dockerfile changes detected in this commit, exiting."
-          exit 0
 
   create_release_tags:
     needs: detect_changed_images
