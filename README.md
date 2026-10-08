@@ -13,7 +13,7 @@ This repository is a work in progress, but the produced images are considered st
 
 These images are **scanned daily and rebuilt whenever a fixable vulnerability is found**, so a quiet day means the published images were already clean rather than stale. Package fixes usually ship as apk updates with no base-image change, so the rebuild is driven by the scan result rather than by base-image freshness.
 
-**Ensure you are using the `--pull` flag in yoiur build scripts/CI/CD to pick up the latests CVE fixes.**
+**Ensure you are using the `--pull` flag in your build scripts/CI/CD to pick up the latest CVE fixes.**
 
 ## Available Images
 
@@ -179,7 +179,7 @@ The beta images are tested within limited scope and are generally stable but not
 
 **`fips-base` was retired on 2026-09-21** and is no longer built. Its FIPS 140-2 certificates (#4282 / #4811, OpenSSL 3.0.9) reached their NIST sunset date and moved to the Historical list; after that date an image branded "FIPS 140-2" is not defensible in a compliance audit.
 
-**Nothing broke for consumers.** Rather than retiring the name, the `fips-base` tags were republished onto the FIPS 140-3 image, so an existing `FROM ...fips-base...` keeps resolving and transparently moved to 140-3 - no Dockerfile change was required. The tracking tags (`:latest`, `:fips3`, `:fips3.1`) follow the 140-3 image on every rebuild; the frozen `:openssl3` / `:openssl3.0` tags and the `:2.0.0` cutover marker are handled separately. The full per-tag mapping is in [FIPS.md](./FIPS.md#how-the-tags-are-republished).
+**Nothing broke for consumers.** Rather than retiring the name, the `fips-base` tags were republished onto the FIPS 140-3 image, so an existing `FROM ...fips-base...` keeps resolving and transparently moved to 140-3 - no Dockerfile change was required. The tracking tags (`:latest`, `:fips3`, `:fips3.1`) follow the 140-3 image on every rebuild; the `:2` / `:2.0` / `:2.0.0` cutover markers are written once and never move. The full per-tag mapping is in [FIPS.md](./FIPS.md#how-the-tags-are-republished).
 
 **What to check:** for most workloads, nothing. Two things matter, because the 140-3 image is built on Wolfi/glibc where the 140-2 `fips-base` was Alpine/musl:
 
@@ -188,10 +188,10 @@ The beta images are tested within limited scope and are generally stable but not
 
 The old `/usr/local/ssl` OpenSSL config paths are preserved on the 140-3 image, so FIPS stayed enforced through the cutover rather than silently turning off.
 
-**Pinning after the cutover:** the cutover shipped as a new major version (`fips-base:2.0.0`) and swapped the descriptive tag from `openssl3.0` (FIPS 140-2) to `fips3.1` (FIPS 140-3):
+**Pinning after the cutover:** the cutover shipped as a new major version (`fips-base:2.0.0`) and introduced the descriptive tag `fips3.1` (FIPS 140-3):
 
 - `fips-base:latest` or `fips-base:fips3.1` resolve to the FIPS 140-3 image. Referencing `fips-140-3` directly is clearer for new work.
-- `fips-base:openssl3.0` (and the pre-cutover `v1.x` tags) are frozen at the last FIPS 140-2 build and no longer receive patches, so treat them as a signal to move rather than a place to stay.
+- The pre-cutover `v1.x` tags are frozen at the last FIPS 140-2 build and no longer receive patches, so treat them as a signal to move rather than a place to stay. The FIPS 140-2 descriptive tags are retired; see [FIPS.md](./FIPS.md#how-the-tags-are-republished).
 
 Full compliance detail is in [FIPS.md](./FIPS.md).
 
@@ -249,8 +249,36 @@ PR to `main` with new Dockerfile in format `Dockerfile.<image-name>`. This will 
 ### Update Image
 
 1. Merge PR to main.
-2. Workflow will diff which Dockerfiles changed and create release tags for them.
-3. Workflow triggered by creation of new release tag will build new Docker image, incrementing the patch version and setting it to `latest`.
+2. The release-tag workflow finds which `Dockerfile.<image-name>` files the merge changed and pushes a release tag for each, one patch version above that image's newest release.
+3. The release tag triggers the publish workflow, which builds, tests and scans the image, then publishes it under that version and `latest`.
+
+Only a change to the Dockerfile itself creates a release today. A change to a file the Dockerfile copies in (for example `scripts/harden-pip-vendor.py`) ships nothing until the image is next rebuilt, so tag it manually as described below.
+
+### CI Checks
+
+Every pull request to `main` must pass these required checks:
+
+- `publish_image (linux/amd64)` and `publish_image (linux/arm64)`: build, structure-test and Trivy-scan any image whose Dockerfile the pull request changes.
+- `zizmor`: workflow security analysis. Findings fail the job rather than being uploaded to code scanning, so a finding has to be fixed or explicitly waived to merge.
+- `Secret scanning`: TruffleHog, reporting only credentials it has confirmed are live. If it fires, rotate the credential first; removing the commit does not revoke it.
+- `Analyze (python)`: CodeQL.
+
+Branch protection matches these by name. Renaming a job's `name:`, or adding a matrix dimension that changes it, blocks every pull request until branch protection is updated to match.
+
+Pinning rules for workflow changes:
+
+- Every action, including composite actions under `.github/actions/`, is pinned to a full commit SHA with its version as a trailing comment: `uses: owner/action@<40-character SHA> # v1.2.3`. zizmor rejects tag and branch references, and Renovate needs the comment to know which version the SHA is.
+- A tool version that is set apart from its action's pin (the version of the scanner an action downloads, for example) lives in a `NAME_VERSION` env var with a Renovate annotation directly above it:
+
+  ```yaml
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: "0.75.0"
+  ```
+
+  Renovate reads only this form; a `# renovate:` comment above any other key is ignored. It updates each scanner's action pin and version pin together in one pull request.
+- Never install a tool by piping a script fetched from a branch (`curl .../main/install.sh | sh`): what runs is whatever that branch holds at the time.
+
+Before pushing a workflow change, run `make lint` (actionlint) and `make zizmor`.
 
 ### Run the Structure Tests Locally
 

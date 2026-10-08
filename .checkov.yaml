@@ -1,0 +1,9 @@
+# Repository-wide checkov skips. Every entry carries its reason; a finding with
+# no defensible reason gets fixed, not listed here. Narrower skips live inline,
+# next to the line they cover.
+skip-check:
+  # CKV_DOCKER_2 (no HEALTHCHECK): every Dockerfile here builds a base image or
+  # the end-of-life marker. None runs a service of its own, so there is nothing
+  # to probe; the image a consumer builds FROM them adds the HEALTHCHECK that
+  # fits its own process.
+  - CKV_DOCKER_2

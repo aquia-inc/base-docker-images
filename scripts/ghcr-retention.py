@@ -40,10 +40,12 @@ import argparse
 import base64
 import concurrent.futures
 import datetime as dt
+import http.client
 import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -53,8 +55,9 @@ API = "https://api.github.com"
 REGISTRY = "ghcr.io"
 
 # Tags that are never removed, whatever version they sit on: the tracking
-# tag every consumer is told to use, and the FIPS tags that are frozen or
-# already retired to an end-of-life marker (see FIPS.md).
+# tag every consumer is told to use, the frozen 2 / 2.0 / 2.0.0 cutover
+# markers, and the retired FIPS 140-2 tags. Those now hold end-of-life marker
+# images; deleting one would turn an explained failure into MANIFEST_UNKNOWN.
 ALWAYS_KEEP = {"latest", "openssl3", "openssl3.0", "2", "2.0", "2.0.0"}
 
 RELEASE_SHAPE = re.compile(r"^v?\d+\.\d+\.\d+$")
@@ -277,7 +280,36 @@ def _https_only_opener() -> urllib.request.OpenerDirector:
 _OPENER = _https_only_opener()
 
 
+# The API occasionally drops a connection or answers 5xx partway through a
+# multi-page walk, and one such blip failed a whole report. Every request here
+# is a GET, so a short bounded retry is safe. A 4xx is never retried: it will
+# not change on its own, and retrying would only hide it.
+RETRIES = 3
+RETRY_STATUS = {500, 502, 503, 504}
+_sleep = time.sleep
+
+
 def http_json(url: str, headers: dict[str, str]) -> tuple[object, dict[str, str]]:
+    for attempt in range(RETRIES + 1):
+        try:
+            return _http_json_once(url, headers)
+        except urllib.error.HTTPError as error:
+            if error.code not in RETRY_STATUS or attempt == RETRIES:
+                raise
+            reason = f"HTTP {error.code}"
+        except (urllib.error.URLError, http.client.HTTPException,
+                ConnectionError, TimeoutError) as error:
+            if attempt == RETRIES:
+                raise
+            reason = type(error).__name__
+        delay = 2 ** (attempt + 1)
+        print(f"retry {attempt + 1}/{RETRIES} in {delay}s after {reason}: {redact(url)}",
+              file=sys.stderr)
+        _sleep(delay)
+    raise AssertionError("unreachable")
+
+
+def _http_json_once(url: str, headers: dict[str, str]) -> tuple[object, dict[str, str]]:
     request = urllib.request.Request(url, headers=headers)
     try:
         with _OPENER.open(request, timeout=60) as response:

@@ -1,6 +1,8 @@
 # Stage 1: Build environment
 # Use Aquia's python-base image for installing dependencies
-FROM ghcr.io/aquia-inc/python-base-linux-arm64:latest AS builder
+# checkov:skip=CKV_DOCKER_7: examples follow the README's advice to build FROM :latest
+# with --pull, so each rebuild picks up the newest patched base image.
+FROM ghcr.io/aquia-inc/base-docker-images/python-base-linux-arm64:latest AS builder
 
 # Set working directory
 WORKDIR /app

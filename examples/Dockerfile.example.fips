@@ -17,6 +17,8 @@
 #
 # NOTE: Replace :latest with a current version tag from
 # https://github.com/aquia-inc/base-docker-images/releases
+# checkov:skip=CKV_DOCKER_7: examples follow the README's advice to build FROM :latest
+# with --pull, so each rebuild picks up the newest patched base image.
 FROM ghcr.io/aquia-inc/base-docker-images/fips-140-3:latest
 
 USER root

@@ -1,5 +1,7 @@
 # Example: Building a frontend app with nodejs-base and serving with nginx-base
 # NOTE: Replace :latest with current version tag from https://github.com/aquia-inc/base-docker-images/releases
+# checkov:skip=CKV_DOCKER_7: examples follow the README's advice to build FROM :latest
+# with --pull, so each rebuild picks up the newest patched base image.
 FROM ghcr.io/aquia-inc/base-docker-images/nodejs-base:latest AS builder
 
 # Set the working directory for the build

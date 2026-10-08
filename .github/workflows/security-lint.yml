@@ -22,7 +22,10 @@ permissions: {}
 
 jobs:
   zizmor:
-    name: Workflow security analysis
+    # The display name is the required status check, so it stays "zizmor" and
+    # must not change without updating branch protection in the same breath.
+    # Without the code-scanning upload nothing else posts a check by that name.
+    name: zizmor
     runs-on: ubuntu-latest
     permissions:
       # No security-events: write. Findings are reported in the job and fail
@@ -64,6 +67,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      # The scanner image version. Held here rather than on the action's
+      # version input because Renovate reads this NAME_VERSION form; it does not
+      # recognise the trufflehog action's input, and a comment above that input
+      # was being silently ignored while the action pin moved on without it.
+      # renovate: datasource=github-releases depName=trufflesecurity/trufflehog extractVersion=^v(?<version>.+)$
+      TRUFFLEHOG_VERSION: "3.99.2"
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -85,10 +95,9 @@ jobs:
         with:
           # The action is pinned by SHA but pulls its scanner image at runtime
           # and defaults that to latest, so without this the binary doing the
-          # actual work floats while everything around it is pinned. Kept
-          # current by Renovate, as the other pins here are.
-          # renovate: datasource=github-releases depName=trufflesecurity/trufflehog
-          version: 3.99.0
+          # actual work floats while everything around it is pinned. Renovate
+          # moves TRUFFLEHOG_VERSION in the same pull request as the action pin.
+          version: ${{ env.TRUFFLEHOG_VERSION }}
           # Reports a credential only once it has been confirmed live, which is
           # what makes this safe to block on. The action already passes --fail.
           #

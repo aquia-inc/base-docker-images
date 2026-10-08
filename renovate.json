@@ -3,7 +3,8 @@
   "extends": [
     "config:recommended",
     "docker:pinDigests",
-    "default:automergeDigest"
+    "default:automergeDigest",
+    "customManagers:githubActionsVersions"
   ],
   "pre-commit": {"enabled": true},
   "assigneesFromCodeOwners": true,
@@ -47,6 +48,12 @@
       "matchManagers": ["dockerfile"],
       "groupName": "{{{replace '.*/' '' dep.paths.[0]}}} dependencies",
       "groupSlug": "{{{replace '.*/' '' dep.paths.[0]}}}-dependencies"
+    },
+    {
+      "description": "Scanner versions are pinned in two places each (the action or installer, and a NAME_VERSION env var). Move them in one PR so the two never disagree, and apart from unrelated bumps because a scanner bump can turn the whole fleet red.",
+      "matchDepNames": ["aquasecurity/trivy", "trufflesecurity/trufflehog"],
+      "groupName": "{{depName}} scanner",
+      "groupSlug": "scanner-{{{replace '/' '-' depName}}}"
     }
   ]
 }

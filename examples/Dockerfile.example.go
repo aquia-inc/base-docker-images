@@ -4,6 +4,8 @@
 
 # Build stage: Use our Go base image pinned to Go 1.25
 # NOTE: Replace :latest with current version tag from https://github.com/aquia-inc/base-docker-images/releases
+# checkov:skip=CKV_DOCKER_7: examples follow the README's advice to build FROM :latest
+# with --pull, so each rebuild picks up the newest patched base image.
 FROM ghcr.io/aquia-inc/base-docker-images/go-base-linux-amd64:latest AS builder
 
 USER nonroot
