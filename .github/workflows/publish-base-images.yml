@@ -272,17 +272,37 @@ jobs:
           image_base_name="${{ steps.context.outputs.image-base-name }}"
           test_config="tests/container-structure/${image_base_name}.yaml"
 
-          # Run tests if config exists
-          test_config="tests/container-structure/${{ steps.context.outputs.image-base-name }}.yaml"
-          if [ -f "$test_config" ]; then
-            echo "Running container structure tests with config: $test_config"
-            container-structure-test test \
-              --platform "$PLATFORM" \
-              --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-              --config "$test_config" 2>&1 | tee "$GATE_DIR/structure-tests.txt"
-          else
-            echo "No container structure test config found at $test_config, skipping tests"
+          # Fails closed. A missing config used to print "skipping tests" and
+          # pass, so a renamed or misspelled file silently turned the gate off
+          # for that image. The message lists what does exist, so a near-miss
+          # (python_base.yaml, python-base.yml) is visible at a glance.
+          if [ ! -f "$test_config" ]; then
+            stem="$(printf '%s' "${image_base_name%%-*}" | tr '[:upper:]' '[:lower:]')"
+            present="" near=""
+            for f in tests/container-structure/*; do
+              [ -e "$f" ] || continue
+              name="${f##*/}"
+              present="${present}  ${name}"$'\n'
+              case "$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')" in
+                *"$stem"*) near="${near} ${name}" ;;
+              esac
+            done
+            {
+              echo "No container structure test config for image '${image_base_name}'."
+              echo "Expected: ${test_config}"
+              echo "Configs present in tests/container-structure/:"
+              printf '%s' "${present:-  (none)$'\n'}"
+              if [ -n "$near" ]; then echo "Similar names:${near}"; fi
+            } | tee "$GATE_DIR/structure-tests.txt"
+            echo "::error::No container structure test config at ${test_config} for ${image_base_name}. Every image must have one; add it or fix the filename."
+            exit 1
           fi
+
+          echo "Running container structure tests with config: $test_config"
+          container-structure-test test \
+            --platform "$PLATFORM" \
+            --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
+            --config "$test_config" 2>&1 | tee "$GATE_DIR/structure-tests.txt"
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
