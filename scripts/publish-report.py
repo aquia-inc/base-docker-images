@@ -138,9 +138,13 @@ def failure_body(tag: str, run_url: str, failed: list[tuple[str, str]],
         lines.append("- no failed step was reported; the run did not complete")
     lines.append("")
     for platform in sorted(gate):
-        lines.append(section(f"Trivy gate output, {platform}", gate[platform].get("trivy", "")))
+        reports = gate[platform]
+        lines.append(section(f"Trivy gate output, {platform}", reports.get("trivy", "")))
         lines.append(section(f"Container structure test output, {platform}",
-                             gate[platform].get("structure-tests", "")))
+                             reports.get("structure-tests", "")))
+        # Guard outputs (check-*.txt), so a new guard is carried with no edit here.
+        for name in sorted(n for n in reports if n not in ("trivy", "structure-tests")):
+            lines.append(section(f"{name} output, {platform}", reports[name]))
     lines.append("This issue closes automatically when this image's next release publishes.")
     return "\n".join(line for line in lines if line is not None)
 

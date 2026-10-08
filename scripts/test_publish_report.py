@@ -126,6 +126,13 @@ def test_body_carries_the_run_the_steps_and_the_gate_output_truncated():
     assert len(body) < 65536
 
 
+def test_guard_outputs_are_carried_without_naming_them():
+    gate = {"linux-arm64": {"check-virtualenv-seeds": "::error::pip has 2 seed wheels"}}
+    body = pr.failure_body("release/python-base/v1.1.509", "u", [], gate)
+    assert "check-virtualenv-seeds output, linux-arm64" in body
+    assert "pip has 2 seed wheels" in body
+
+
 def test_stale_reason_covers_every_outcome():
     latest_old = {"amd64": "v1.1.493", "arm64": "v1.1.493", "multi-arch": "v1.1.493"}
     tag = "release/python-base/v1.1.499"
