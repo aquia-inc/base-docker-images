@@ -147,6 +147,19 @@ docker build --pull -t your-app .
 FROM ghcr.io/aquia-inc/base-docker-images/<image-name>:latest
 ```
 
+### Verify an Image's Signature
+
+Every tag a release publishes is signed before it is applied: the per-architecture images (`<image>-linux-amd64`, `<image>-linux-arm64`), the multi-arch `<image>` tags and the `fips-base` tracking tags. This holds for releases from 2026-10-08 on; earlier multi-arch and `fips-base` releases were published unsigned, as were the end-of-life markers and the frozen `fips-base:2.0.0` cutover tags. Verify with **cosign v3**. A v2 client cannot see v3 signatures and reports "no signatures found" against a correctly signed image.
+
+```shell
+cosign verify \
+  --certificate-identity-regexp "^https://github.com/aquia-inc/base-docker-images/.github/workflows/" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  ghcr.io/aquia-inc/base-docker-images/python-base:latest
+```
+
+The `:unsigned-staging` tag is internal: it is where a multi-arch index is assembled before it is signed. Never pull it.
+
 ### Authenticating to GHCR
 
 While these images are public and can be pulled without authentication, anonymous pulls are subject to stricter rate limits. For use in CI/CD pipelines or for frequent local development, it is highly recommended to authenticate with a Personal Access Token (PAT) to avoid potential rate-limiting issues.
@@ -254,7 +267,7 @@ The structure-test config is required: a build whose image has no config at that
 2. The release-tag workflow works out which images had a build input change since their newest release, and pushes a release tag for each, one patch version above that release.
 3. The release tag triggers the publish workflow, which builds, tests and scans the image, then publishes it under that version and `latest`.
 
-An image's build inputs are its `Dockerfile.<image-name>`, its `tests/container-structure/<image-name>.yaml`, every local file its Dockerfile `COPY`s or `ADD`s (for example `scripts/harden-pip-vendor.py` for `python-base`), and the inputs every image shares: `trivy.yaml`, `.trivyignore.yaml` and the publish workflow and its actions. The list is derived from each Dockerfile by `scripts/release-inputs.py`, so a new `COPY` needs no extra wiring. To see what an image depends on, or what would be released from your checkout:
+An image's build inputs are its `Dockerfile.<image-name>`, its `tests/container-structure/<image-name>.yaml`, every local file its Dockerfile `COPY`s or `ADD`s (for example `scripts/harden-pip-vendor.py` for `python-base`), and the inputs every image shares: `trivy.yaml`, `.trivyignore.yaml`, the publish workflow and its actions, and `scripts/sign-and-tag.sh`. The list is derived from each Dockerfile by `scripts/release-inputs.py`, so a new `COPY` needs no extra wiring. To see what an image depends on, or what would be released from your checkout:
 
 ```shell
 python3 scripts/release-inputs.py inputs python-base

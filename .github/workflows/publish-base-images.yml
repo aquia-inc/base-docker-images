@@ -17,6 +17,12 @@ env:
   REGISTRY: ghcr.io
   # For tag pushes, use the actual ref. For PRs, detect from modified Dockerfiles
   TAG: ${{ github.ref }}
+  # The cosign that signs everything here, stated rather than inherited from
+  # the installer's default. A verifier must use the same major version: a v2
+  # client cannot see v3 signatures and reports "no signatures found" against
+  # a correctly signed image.
+  # renovate: datasource=github-releases depName=sigstore/cosign
+  COSIGN_VERSION: "v3.0.6"
 
 jobs:
   publish_image:
@@ -561,11 +567,14 @@ jobs:
         with:
           pull: true
           file: Dockerfile.${{ steps.context.outputs.image-base-name }}
-          push: true
           platforms: ${{ matrix.platform }}
           build-args: |
             CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }}
-          tags: ${{ steps.meta.outputs.tags }}
+          # Pushed by digest with NO tags. The tags are applied only after the
+          # digest is signed and attested ("Apply the release tags" below), so
+          # no consumer tag ever points at an unsigned image. If signing fails
+          # the only thing left in the registry is an untagged manifest.
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
@@ -669,6 +678,8 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         if: github.event_name == 'push' && github.ref_type == 'tag'
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
         
       - name: Sign container image with Cosign
         id: cosign_sign
@@ -721,6 +732,20 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
           subject-digest: ${{ steps.docker_build.outputs.digest }}
           push-to-registry: true
+
+      # The tags are applied last: only once the digest is signed and both its
+      # SBOM and provenance attestations exist. Each tag is pointed at exactly
+      # that digest and checked, so every consumer tag is a signed image.
+      - name: Apply the release tags to the signed digest for ${{ matrix.platform }}
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}@${{ steps.docker_build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          mapfile -t tags < <(printf '%s\n' "$TAGS" | sed '/^[[:space:]]*$/d')
+          scripts/sign-and-tag.sh verify "$IMAGE_REF"
+          scripts/sign-and-tag.sh tag-digest "$IMAGE_REF" "${tags[@]}"
 
       - name: Extract Sigstore logIndex for ${{ matrix.platform }}
         id: extract_logindex
@@ -1250,7 +1275,7 @@ jobs:
             fi
             body+=$'\n\n**Public Verification (No authentication required):**'
             body+=$'\n```bash'
-            body+=$'\n# Install cosign: https://docs.sigstore.dev/cosign/installation'
+            body+=$'\n# Install cosign v3 (https://docs.sigstore.dev/cosign/installation); a v2 client cannot see these signatures and reports "no signatures found"'
             body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:%s | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-latest}")
             body+=$'\n'
             body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-arm64:%s | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_ARM64:-latest}")
@@ -1296,7 +1321,7 @@ jobs:
           
           base_practices+=$'\n\n**Public Verification (No authentication required):**'
           base_practices+=$'\n```bash'
-          base_practices+=$'\n# Install cosign: https://docs.sigstore.dev/cosign/installation'
+          base_practices+=$'\n# Install cosign v3 (https://docs.sigstore.dev/cosign/installation); a v2 client cannot see these signatures and reports "no signatures found"'
           base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
           base_practices+=$'\n'
           base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-arm64:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
@@ -1327,6 +1352,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write  # keyless signing of the multi-arch indexes and the fips-base mirror
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -1361,6 +1387,11 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
 
       - name: Extract version tags from artifacts
         id: version_info
@@ -1398,98 +1429,49 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create multi-arch manifests
+      # Built, signed, and only then tagged. Before this the multi-arch tags were
+      # never signed at all: cosign verify against python-base:latest reported
+      # "no signatures found" while the per-architecture packages verified.
+      #
+      # The index is created under the internal :unsigned-staging tag, its
+      # digest signed, and the consumer tags then pointed at that exact digest
+      # (scripts/sign-and-tag.sh). If signing fails, :unsigned-staging is the
+      # only tag that moved.
+      - name: Create, sign and tag the multi-arch manifests
+        env:
+          IMAGE_BASE_NAME: ${{ steps.parse_tag.outputs.image_base_name }}
+          VERSION: ${{ steps.parse_tag.outputs.version }}
+          REGISTRY_REPO: ${{ env.REGISTRY }}/${{ github.repository }}
+          HAS_VERSION_TAGS: ${{ steps.version_info.outputs.has_version_tags }}
+          MAJOR_TAG: ${{ steps.version_info.outputs.major_tag }}
+          MINOR_TAG: ${{ steps.version_info.outputs.minor_tag }}
         run: |
-          image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
-          version="${{ steps.parse_tag.outputs.version }}"
-          registry="${{ env.REGISTRY }}/${{ github.repository }}"
-          
-          echo "Creating multi-arch manifests for $image_base_name"
-          
-          # Base images for manifest creation
-          amd64_image="$registry/$image_base_name-linux-amd64"
-          arm64_image="$registry/$image_base_name-linux-arm64"
-          universal_image="$registry/$image_base_name"
-          
-          echo "Checking if source images exist:"
-          echo "AMD64: $amd64_image:$version"
-          docker manifest inspect "$amd64_image:$version" >/dev/null && echo "[ok] AMD64 image exists" || echo "[fail] AMD64 image missing"
-          echo "ARM64: $arm64_image:$version"
-          docker manifest inspect "$arm64_image:$version" >/dev/null && echo "[ok] ARM64 image exists" || echo "[fail] ARM64 image missing"
-          
-          echo "AMD64: $amd64_image:latest"
-          docker manifest inspect "$amd64_image:latest" >/dev/null && echo "[ok] AMD64 latest exists" || echo "[fail] AMD64 latest missing"
-          echo "ARM64: $arm64_image:latest"
-          docker manifest inspect "$arm64_image:latest" >/dev/null && echo "[ok] ARM64 latest exists" || echo "[fail] ARM64 latest missing"
-          
-          # Get digests for specific platforms
-          echo "Getting platform-specific digests..."
-          amd64_digest=$(docker manifest inspect "$amd64_image:$version" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
-          arm64_digest=$(docker manifest inspect "$arm64_image:$version" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
-          
-          echo "AMD64 version digest: $amd64_digest"
-          echo "ARM64 version digest: $arm64_digest"
-          
-          # Create unified manifest for semver version using digests
-          echo "Creating manifest for $universal_image:$version"
-          docker manifest create "$universal_image:$version" \
-            "$amd64_image@$amd64_digest" \
-            "$arm64_image@$arm64_digest" || \
-          docker manifest create --amend "$universal_image:$version" \
-            "$amd64_image@$amd64_digest" \
-            "$arm64_image@$arm64_digest"
-          docker manifest push "$universal_image:$version"
-          
-          # Create unified manifest for latest.
-          # IMPORTANT: reuse the same digests as the version tag ($amd64_digest,
-          # $arm64_digest), for the same reason the major/minor tags below do.
-          # This previously re-inspected "$amd64_image:latest" separately, so
-          # :latest could resolve to different content than the release it was
-          # published with - drift that showed up as :latest and :<version>
-          # carrying different SHAs. Every tag for a release must point at the
-          # same signed image.
-          echo "Creating manifest for $universal_image:latest"
-          docker manifest create "$universal_image:latest" \
-            "$amd64_image@$amd64_digest" \
-            "$arm64_image@$arm64_digest" || \
-          docker manifest create --amend "$universal_image:latest" \
-            "$amd64_image@$amd64_digest" \
-            "$arm64_image@$arm64_digest"
-          docker manifest push "$universal_image:latest"
-          
-          # Create version-specific manifests if available
-          # IMPORTANT: Reuse the same digests as version tag ($amd64_digest, $arm64_digest)
-          # All tags for a release should point to the same signed image
-          # Previously this code re-inspected manifests for :major_tag/:minor_tag which
-          # caused cross-architecture tag pollution due to cosign signature manifests
-          if [[ "${{ steps.version_info.outputs.has_version_tags }}" == "true" ]]; then
-            major_tag="${{ steps.version_info.outputs.major_tag }}"
-            minor_tag="${{ steps.version_info.outputs.minor_tag }}"
+          set -euo pipefail
+          amd64_image="$REGISTRY_REPO/$IMAGE_BASE_NAME-linux-amd64"
+          arm64_image="$REGISTRY_REPO/$IMAGE_BASE_NAME-linux-arm64"
+          universal_image="$REGISTRY_REPO/$IMAGE_BASE_NAME"
 
-            if [[ -n "$major_tag" ]]; then
-              echo "Creating manifest for $universal_image:$major_tag (using version digest)"
-              docker manifest create "$universal_image:$major_tag" \
-                "$amd64_image@$amd64_digest" \
-                "$arm64_image@$arm64_digest" || \
-              docker manifest create --amend "$universal_image:$major_tag" \
-                "$amd64_image@$amd64_digest" \
-                "$arm64_image@$arm64_digest"
-              docker manifest push "$universal_image:$major_tag"
-            fi
+          # Every tag for a release points at the same index, built from the
+          # platform images behind the per-architecture VERSION tags. Re-reading
+          # :latest or the major/minor tags instead once let :latest and
+          # :<version> resolve to different content, and picked up cosign
+          # signature manifests as if they were platforms.
+          amd64_digest=$(docker buildx imagetools inspect --raw "$amd64_image:$VERSION" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
+          arm64_digest=$(docker buildx imagetools inspect --raw "$arm64_image:$VERSION" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
+          for d in "$amd64_digest" "$arm64_digest"; do
+            case "$d" in sha256:*) ;; *) echo "::error::could not resolve a platform digest for $IMAGE_BASE_NAME $VERSION"; exit 1 ;; esac
+          done
+          echo "AMD64 platform digest: $amd64_digest"
+          echo "ARM64 platform digest: $arm64_digest"
 
-            if [[ -n "$minor_tag" ]]; then
-              echo "Creating manifest for $universal_image:$minor_tag (using version digest)"
-              docker manifest create "$universal_image:$minor_tag" \
-                "$amd64_image@$amd64_digest" \
-                "$arm64_image@$arm64_digest" || \
-              docker manifest create --amend "$universal_image:$minor_tag" \
-                "$amd64_image@$amd64_digest" \
-                "$arm64_image@$arm64_digest"
-              docker manifest push "$universal_image:$minor_tag"
-            fi
+          tags=( "$universal_image:$VERSION" "$universal_image:latest" )
+          if [ "$HAS_VERSION_TAGS" = "true" ]; then
+            if [ -n "$MAJOR_TAG" ]; then tags+=( "$universal_image:$MAJOR_TAG" ); fi
+            if [ -n "$MINOR_TAG" ]; then tags+=( "$universal_image:$MINOR_TAG" ); fi
           fi
-          
-          echo "[ok] Multi-arch manifests created successfully"
+
+          scripts/sign-and-tag.sh publish-index "$universal_image" "${tags[@]}" -- \
+            "$amd64_image@$amd64_digest" "$arm64_image@$arm64_digest"
 
       - name: Verify multi-arch manifests
         run: |
@@ -1553,13 +1535,13 @@ jobs:
             [ -n "${MAJOR_TAG}" ] && tags+=( "${dst}:${MAJOR_TAG}" )
             [ -n "${MINOR_TAG}" ] && tags+=( "${dst}:${MINOR_TAG}" )
 
-            local tag_args=()
-            for t in "${tags[@]}"; do
-              tag_args+=( --tag "$t" )
-            done
-
-            echo "Republishing $src onto: ${tags[*]}"
-            docker buildx imagetools create "${tag_args[@]}" "$src"
+            # Copied by digest, signed in the destination package, and only then
+            # tagged: a mirror copies the manifest but not its signature, so
+            # without this every fips-base tag was unsigned.
+            local digest
+            digest="$(digest_of "$src")"
+            echo "Republishing $src ($digest) onto: ${tags[*]}"
+            scripts/sign-and-tag.sh mirror "${src%:*}@${digest}" "$dst" "${tags[@]}"
           }
 
           # Resolve the digest behind a tag. imagetools returns the digest of

@@ -163,6 +163,12 @@ def test_the_publish_workflow_is_a_shared_input():
     assert changed(repo) == ["nginx-base", "nodejs-base", "python-base"]
 
 
+def test_the_signing_script_is_a_shared_input():
+    repo = fixture_repo()
+    change(repo, "scripts/sign-and-tag.sh", "#!/bin/sh\n")
+    assert changed(repo) == ["nginx-base", "nodejs-base", "python-base"]
+
+
 def test_a_readme_change_releases_nothing():
     repo = fixture_repo()
     change(repo, "README.md", "# readme v2\n")
