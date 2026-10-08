@@ -10,7 +10,8 @@ it is added:
   - tests/container-structure/<image>.yaml
   - every local COPY / ADD source in the Dockerfile
   - SHARED_INPUTS, which affect every image (the scanner policy, and the
-    workflow, actions and signing script that build, test, gate and sign it)
+    workflow, actions, guard scripts and signing script that build, test,
+    gate and sign it)
 
 Comparing against the previous release tag, not the previous commit, means a
 change that was merged while tagging failed or was skipped is still picked up
@@ -40,6 +41,7 @@ SHARED_INPUTS = (
     ".github/workflows/publish-base-images.yml",
     ".github/actions",
     "scripts/sign-and-tag.sh",
+    "scripts/check-*.sh",
 )
 
 DOCKERFILE_PREFIX = "Dockerfile."

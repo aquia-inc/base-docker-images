@@ -267,7 +267,7 @@ The structure-test config is required: a build whose image has no config at that
 2. The release-tag workflow works out which images had a build input change since their newest release, and pushes a release tag for each, one patch version above that release.
 3. The release tag triggers the publish workflow, which builds, tests and scans the image, then publishes it under that version and `latest`.
 
-An image's build inputs are its `Dockerfile.<image-name>`, its `tests/container-structure/<image-name>.yaml`, every local file its Dockerfile `COPY`s or `ADD`s (for example `scripts/harden-pip-vendor.py` for `python-base`), and the inputs every image shares: `trivy.yaml`, `.trivyignore.yaml`, the publish workflow and its actions, and `scripts/sign-and-tag.sh`. The list is derived from each Dockerfile by `scripts/release-inputs.py`, so a new `COPY` needs no extra wiring. To see what an image depends on, or what would be released from your checkout:
+An image's build inputs are its `Dockerfile.<image-name>`, its `tests/container-structure/<image-name>.yaml`, every local file its Dockerfile `COPY`s or `ADD`s (for example `scripts/harden-pip-vendor.py` for `python-base`), and the inputs every image shares: `trivy.yaml`, `.trivyignore.yaml`, the publish workflow and its actions, the guard scripts (`scripts/check-*.sh`) and `scripts/sign-and-tag.sh`. The list is derived from each Dockerfile by `scripts/release-inputs.py`, so a new `COPY` needs no extra wiring. To see what an image depends on, or what would be released from your checkout:
 
 ```shell
 python3 scripts/release-inputs.py inputs python-base
@@ -284,10 +284,14 @@ The daily scan also compares every image's published `:latest`, on both architec
 
 Every pull request to `main` must pass these required checks:
 
-- `publish_image (linux/amd64)` and `publish_image (linux/arm64)`: build, structure-test and Trivy-scan any image whose Dockerfile the pull request changes.
+- `publish_image (linux/amd64)` and `publish_image (linux/arm64)`: build, structure-test and Trivy-scan any image whose Dockerfile the pull request changes, and run the guards below.
 - `zizmor`: workflow security analysis. Findings fail the job rather than being uploaded to code scanning, so a finding has to be fixed or explicitly waived to merge.
 - `Secret scanning`: TruffleHog, reporting only credentials it has confirmed are live. If it fires, rotate the credential first; removing the commit does not revoke it.
 - `Analyze (python)`: CodeQL.
+
+Guards cover what the scanner cannot see. Each runs against the built image before anything is pushed, says so when an image has nothing for it to check, and fails when it cannot inspect one:
+
+- `scripts/check-virtualenv-seeds.sh`: virtualenv's seed wheels, which seed every virtualenv and poetry environment and which no scanner reads inside. One wheel per project, an inventory that matches the disk, nothing vendored older than the distro-patched wheel of the same version, and a new virtualenv that runs pip.
 
 Branch protection matches these by name. Renaming a job's `name:`, or adding a matrix dimension that changes it, blocks every pull request until branch protection is updated to match.
 

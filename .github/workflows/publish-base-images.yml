@@ -310,6 +310,24 @@ jobs:
             --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
             --config "$test_config" 2>&1 | tee "$GATE_DIR/structure-tests.txt"
 
+      # Guards for what the scanner cannot see. Each inspects the built test
+      # image, before anything is pushed, and fails the build on a regression
+      # of a fix that a scanner would not notice. Each says so when an image
+      # has nothing for it to check, and fails when it cannot inspect one.
+      #
+      # virtualenv seeds every environment it creates - poetry's included - from
+      # wheels no scanner reads inside, so a stale seed wheel ships while the
+      # image scans clean.
+      - name: Guard virtualenv seed wheels for ${{ matrix.platform }}
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
+        env:
+          IMAGE_REF: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          PLATFORM: ${{ matrix.platform }}
+          GATE_DIR: gate-report/${{ steps.context.outputs.platform-suffix }}
+        run: |
+          set -o pipefail
+          scripts/check-virtualenv-seeds.sh "$IMAGE_REF" "$PLATFORM" 2>&1 | tee "$GATE_DIR/check-virtualenv-seeds.txt"
+
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
