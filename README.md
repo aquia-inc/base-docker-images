@@ -249,10 +249,15 @@ PR to `main` with new Dockerfile in format `Dockerfile.<image-name>`. This will 
 ### Update Image
 
 1. Merge PR to main.
-2. The release-tag workflow finds which `Dockerfile.<image-name>` files the merge changed and pushes a release tag for each, one patch version above that image's newest release.
+2. The release-tag workflow works out which images had a build input change since their newest release, and pushes a release tag for each, one patch version above that release.
 3. The release tag triggers the publish workflow, which builds, tests and scans the image, then publishes it under that version and `latest`.
 
-Only a change to the Dockerfile itself creates a release today. A change to a file the Dockerfile copies in (for example `scripts/harden-pip-vendor.py`) ships nothing until the image is next rebuilt, so tag it manually as described below.
+An image's build inputs are its `Dockerfile.<image-name>`, its `tests/container-structure/<image-name>.yaml`, every local file its Dockerfile `COPY`s or `ADD`s (for example `scripts/harden-pip-vendor.py` for `python-base`), and the inputs every image shares: `trivy.yaml`, `.trivyignore.yaml` and the publish workflow and its actions. The list is derived from each Dockerfile by `scripts/release-inputs.py`, so a new `COPY` needs no extra wiring. To see what an image depends on, or what would be released from your checkout:
+
+```shell
+python3 scripts/release-inputs.py inputs python-base
+python3 scripts/release-inputs.py changed
+```
 
 ### CI Checks
 
