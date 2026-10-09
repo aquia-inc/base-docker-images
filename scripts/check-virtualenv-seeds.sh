@@ -199,19 +199,19 @@ print("DONE %d" % problems)
 }
 printf '  %s\n' "${result//$'\n'/$'\n'  }"
 
-if ! printf '%s\n' "${result}" | grep -qE '^DONE [0-9]+$' && ! printf '%s\n' "${result}" | grep -q '^NOSEEDS '; then
+if ! grep -qE '^DONE [0-9]+$' <<< "${result}" && ! grep -q '^NOSEEDS ' <<< "${result}"; then
   echo "::error::the in-image checks did not complete; refusing to report clean" >&2
   exit 1
 fi
-if printf '%s\n' "${result}" | grep -q '^NOSEEDS '; then
+if grep -q '^NOSEEDS ' <<< "${result}"; then
   echo "::error::the shell found seed wheels but python3 did not; refusing to report clean" >&2
   exit 1
 fi
-if printf '%s\n' "${result}" | grep -q '^BEHIND '; then
+if grep -q '^BEHIND ' <<< "${result}"; then
   echo "::error::a virtualenv seed wheel vendors a dependency older than the distro wheel of the same version. Every environment created from it inherits that code, and no scanner reads inside a .whl." >&2
   exit 1
 fi
-if ! printf '%s\n' "${result}" | grep -qE '^DONE 0$'; then
+if ! grep -qE '^DONE 0$' <<< "${result}"; then
   echo "::error::check-virtualenv-seeds found problems (see above)" >&2
   exit 1
 fi
