@@ -75,6 +75,10 @@ jobs:
       security-events: write
       actions: read
       attestations: write
+      # attest-build-provenance also records where the image is stored, through
+      # the artifact metadata API, which needs this; without it every publish
+      # warned "Failed to create storage record".
+      artifact-metadata: write
       id-token: write
     steps:
       - name: Harden Runner
@@ -964,96 +968,6 @@ jobs:
         if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
           echo "SHA256 digest for ${{ steps.context.outputs.image-name }}: ${{ steps.docker_build.outputs.digest }}"
-
-      - name: Determine Repository Owner Type for ${{ matrix.platform }}
-        id: owner_type
-        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
-        env:
-          OWNER_LOGIN: ${{ github.repository_owner }} 
-          # GH_TOKEN is inherited from the job-level env
-        run: |
-          echo "Determining owner type for $OWNER_LOGIN"
-          OWNER_TYPE_JSON=$(gh api "users/$OWNER_LOGIN" --jq '.type')
-          # Remove quotes from JSON string output by jq
-          OWNER_TYPE=$(echo "$OWNER_TYPE_JSON" | tr -d '"')
-
-          echo "Raw type from API: '$OWNER_TYPE_JSON', Parsed type: '$OWNER_TYPE'"
-
-          if [ "$OWNER_TYPE" = "User" ]; then
-            echo "api_path_segment=users" >> "$GITHUB_OUTPUT"
-            echo "Determined owner type for $OWNER_LOGIN: User"
-          elif [ "$OWNER_TYPE" = "Organization" ]; then
-            echo "api_path_segment=orgs" >> "$GITHUB_OUTPUT"
-            echo "Determined owner type for $OWNER_LOGIN: Organization"
-          else
-            echo "::error::Could not determine owner type for '$OWNER_LOGIN'. Received type: '$OWNER_TYPE'."
-            echo "Full API response for users/$OWNER_LOGIN:"
-            gh api "users/$OWNER_LOGIN"
-            exit 1
-          fi
-
-      - name: Make Package Public on GHCR for ${{ matrix.platform }}
-        if: steps.docker_build.outputs.digest != '' && steps.owner_type.outputs.api_path_segment != '' && github.event_name == 'push' && github.ref_type == 'tag'
-        continue-on-error: true
-        env:
-          PACKAGE_NAME: ${{ github.event.repository.name }}/${{ steps.context.outputs.image-name }}
-          OWNER: ${{ github.repository_owner }}
-          API_PATH_SEGMENT: ${{ steps.owner_type.outputs.api_path_segment }}
-          # GH_TOKEN is now inherited from the job-level env
-        run: |
-          # URL encode the package name (replace / with %2F)
-          ENCODED_PACKAGE_NAME=$(echo "$PACKAGE_NAME" | sed 's|/|%2F|g')
-          API_URL_PATH="/${API_PATH_SEGMENT}/${OWNER}/packages/container/${ENCODED_PACKAGE_NAME}"
-          echo "Package name: $PACKAGE_NAME"
-          echo "Encoded package name: $ENCODED_PACKAGE_NAME"
-          echo "Target API path: $API_URL_PATH"
-
-          # Wait for package to be available in GHCR API
-          echo "Waiting 10 seconds for package to be available in GHCR API..."
-          sleep 10
-
-          max_attempts=5
-          attempt_num=1
-          success=false
-          while [ $attempt_num -le $max_attempts ]; do
-            echo "Attempt $attempt_num of $max_attempts to set package visibility for '$PACKAGE_NAME'..."
-            if gh api \
-              --method PATCH \
-              -H "Accept: application/vnd.github.package-deletes-preview+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "$API_URL_PATH" \
-              -f visibility='public' \
-              --silent; then
-              echo "Successfully set package '$PACKAGE_NAME' to public."
-              success=true
-              break
-            else
-              ERROR_CODE=$?
-              echo "Attempt $attempt_num failed with exit code $ERROR_CODE."
-              # Check if it's already public, which is a success condition.
-              CURRENT_VISIBILITY=$(gh api "$API_URL_PATH" --jq .visibility --silent 2>/dev/null | tr -d '"')
-              if [ "$CURRENT_VISIBILITY" = "public" ]; then
-                echo "Package '$PACKAGE_NAME' is already public. Considering this a success."
-                success=true
-                break
-              fi
-
-              if [ $attempt_num -eq $max_attempts ]; then
-                break # Exit loop on final attempt
-              fi
-
-              echo "Waiting 5 seconds before retrying..."
-              sleep 5
-              ((attempt_num++))
-            fi
-          done
-
-          if [ "$success" = "false" ]; then
-            echo "::warning::Failed to set package '$PACKAGE_NAME' to public after $max_attempts attempts."
-            echo "Full package details for diagnostics:"
-            gh api "$API_URL_PATH" --silent || echo "::warning::Fetching package details also failed, which may happen if the package was never created."
-            echo "::warning::Package visibility could not be set to public, but build will continue."
-          fi
 
   create_release:
     runs-on: ubuntu-latest
