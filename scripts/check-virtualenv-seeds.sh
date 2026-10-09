@@ -19,32 +19,40 @@
 #   4. function: a virtualenv created from the seed wheels runs pip
 #
 # An image with no seed wheels prints that it had nothing to check. An image
-# that cannot be inspected at all fails: a check that did not run must never
-# read as a pass.
+# whose filesystem cannot be read fails: a check that did not run must never
+# read as a pass. Listing reads the filesystem without running anything, so
+# images with no shell are covered too.
 #
 # Usage: check-virtualenv-seeds.sh <image-ref> <platform>
 set -euo pipefail
 
 IMAGE="${1:?usage: check-virtualenv-seeds.sh <image-ref> <platform>}"
 PLATFORM="${2:?usage: check-virtualenv-seeds.sh <image-ref> <platform>}"
-SENTINEL="check-virtualenv-seeds-listing-complete"
 
 echo "check-virtualenv-seeds: ${IMAGE} (${PLATFORM})"
 
-in_image() {  # run a shell snippet in the image
-  docker run --rm --platform "${PLATFORM}" --entrypoint sh "${IMAGE}" -c "$1"
+# The image's file list, read from its filesystem rather than by running a
+# command in it, so an image with no shell (nginx-base) is listed like any
+# other. The container is created, never started.
+list_files() {
+  local cid rc=0
+  cid="$(docker create --platform "${PLATFORM}" "${IMAGE}" /guard-never-run)" || return 1
+  docker export "${cid}" | tar -tf - || rc=1
+  docker rm "${cid}" > /dev/null || true
+  return "${rc}"
 }
 
-# The sentinel proves the listing ran to the end, so an image that could not
-# be started is a failure here, not an empty result.
-listing="$(in_image "find / -xdev -path '*/virtualenv/seed/wheels/embed/*.whl' 2>/dev/null | sed 's|.*/||' | sort; echo ${SENTINEL}" 2>&1)" \
-  && rc=0 || rc=$?
-if [ "${rc}" -ne 0 ] || [ "${listing##*$'\n'}" != "${SENTINEL}" ]; then
-  echo "::error::check-virtualenv-seeds: could not list the image's files (exit ${rc}); refusing to report clean" >&2
-  printf '  %s\n' "${listing//$'\n'/$'\n'  }" >&2
+# A listing that failed is a failure, never an empty result.
+if ! files="$(set -o pipefail; list_files 2>&1)"; then
+  echo "::error::check-virtualenv-seeds: could not read the image's filesystem; refusing to report clean" >&2
+  printf '  %s\n' "${files//$'\n'/$'\n'  }" | tail -5 >&2
   exit 1
 fi
-wheels="$(printf '%s\n' "${listing}" | grep -v "^${SENTINEL}\$" || true)"
+if [ -z "${files}" ]; then
+  echo "::error::check-virtualenv-seeds: the image's filesystem listing is empty; refusing to report clean" >&2
+  exit 1
+fi
+wheels="$(printf '%s\n' "${files}" | grep -E '(^|/)virtualenv/seed/wheels/embed/[^/]+\.whl$' | sed 's|.*/||' | sort -u || true)"
 
 if [ -z "${wheels}" ]; then
   echo "  no virtualenv seed wheels in this image - nothing to check"
@@ -73,15 +81,25 @@ done
 
 # 2. The declared inventory. Deleting the files but leaving the SBOM or RECORD
 # naming them misreports the image, and is why such a finding has no path.
-# Single quotes are deliberate: these expansions run inside the image.
-# shellcheck disable=SC2016
-declared="$(in_image '
-  for d in $(find / -xdev -type d -name "virtualenv-*.dist-info" 2>/dev/null); do
-    for f in "$d"/RECORD "$d"/sboms/*.json; do
-      [ -f "$f" ] || continue
-      grep -oE "(pip|setuptools|wheel)-[0-9][^\"/,[:space:]]*" "$f" 2>/dev/null
-    done
-  done | sed -E "s/(-py[0-9].*|\\.whl)$//" | sort -u' 2>/dev/null || true)"
+# Read with the image's python3, which any image carrying seed wheels has.
+if ! declared="$(docker run --rm --platform "${PLATFORM}" --entrypoint python3 "${IMAGE}" -c '
+import glob, re
+found = set()
+for d in glob.glob("/usr/lib/python3*/site-packages/virtualenv-*.dist-info") + \
+         glob.glob("/home/*/.local/lib/python3*/site-packages/virtualenv-*.dist-info"):
+    for f in [d + "/RECORD"] + glob.glob(d + "/sboms/*.json"):
+        try:
+            text = open(f, encoding="utf8", errors="ignore").read()
+        except OSError:
+            continue
+        for m in re.findall(r"(?:pip|setuptools|wheel)-[0-9][^\"/,\s]*", text):
+            found.add(re.sub(r"(-py[0-9].*|\.whl)$", "", m))
+print("\n".join(sorted(found)))
+' 2>&1)"; then
+  echo "::error::check-virtualenv-seeds: could not read virtualenv's inventory; refusing to report clean" >&2
+  printf '  %s\n' "${declared//$'\n'/$'\n'  }" >&2
+  exit 1
+fi
 for project in ${projects}; do
   kept="$(printf '%s\n' "${wheels}" | grep -E "^${project}-[0-9]" | sed -E "s/^${project}-([^-]+)-.*$/\1/" | sort -V | tail -n1)"
   bad="$(printf '%s\n' "${declared}" | grep -E "^${project}-[0-9]" | grep -vE "^${project}-${kept}([^0-9]|$)" || true)"
