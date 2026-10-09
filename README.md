@@ -292,6 +292,7 @@ Every pull request to `main` must pass these required checks:
 Guards cover what the scanner cannot see. Each runs against the built image before anything is pushed, says so when an image has nothing for it to check, and fails when it cannot inspect one:
 
 - `scripts/check-virtualenv-seeds.sh`: virtualenv's seed wheels, which seed every virtualenv and poetry environment and which no scanner reads inside. One wheel per project, an inventory that matches the disk, nothing vendored older than the distro-patched wheel of the same version, and a new virtualenv that runs pip.
+- `scripts/check-pip-vendor-bom.sh`: pip's vendored dependencies and the `vendor.txt` / `bom.cdx.json` that scanners read as their inventory. Runs `harden-pip-vendor.py`'s own checks against every pip tree in the image: both declarations agree with the vendored code, vendored msgpack meets the fix's floor, and pip works.
 
 Branch protection matches these by name. Renaming a job's `name:`, or adding a matrix dimension that changes it, blocks every pull request until branch protection is updated to match.
 
