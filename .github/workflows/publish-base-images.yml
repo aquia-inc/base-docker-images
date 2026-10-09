@@ -328,6 +328,20 @@ jobs:
           set -o pipefail
           scripts/check-virtualenv-seeds.sh "$IMAGE_REF" "$PLATFORM" 2>&1 | tee "$GATE_DIR/check-virtualenv-seeds.txt"
 
+      # pip's vendored tree and its declarations. Scanners read vendor.txt and
+      # bom.cdx.json as the inventory, so a stale entry reports a vulnerability
+      # that is not there or hides one that is, with no file path to inspect.
+      # Checked with harden-pip-vendor.py's own functions, not a second list.
+      - name: Guard pip's vendored tree for ${{ matrix.platform }}
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
+        env:
+          IMAGE_REF: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          PLATFORM: ${{ matrix.platform }}
+          GATE_DIR: gate-report/${{ steps.context.outputs.platform-suffix }}
+        run: |
+          set -o pipefail
+          scripts/check-pip-vendor-bom.sh "$IMAGE_REF" "$PLATFORM" 2>&1 | tee "$GATE_DIR/check-pip-vendor-bom.txt"
+
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
