@@ -292,6 +292,7 @@ Every pull request to `main` must pass these required checks:
 Guards cover what the scanner cannot see. Each runs against the built image before anything is pushed, says so when an image has nothing for it to check, and fails when it cannot inspect one:
 
 - `scripts/check-virtualenv-seeds.sh`: virtualenv's seed wheels, which seed every virtualenv and poetry environment and which no scanner reads inside. One wheel per project, an inventory that matches the disk, nothing vendored older than the distro-patched wheel of the same version, and a new virtualenv that runs pip.
+- `scripts/check-apk-sbom-disk.sh`: the distro's SPDX documents under `/var/lib/db/sbom`, which list the dependencies vendored inside each package. Every entry that names a manifest (a `package.json`, a lockfile, a wheel, Python metadata) must match that file, and the file must exist.
 
 Branch protection matches these by name. Renaming a job's `name:`, or adding a matrix dimension that changes it, blocks every pull request until branch protection is updated to match.
 
