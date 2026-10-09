@@ -2,7 +2,7 @@
 # This demonstrates how to use our pre-built, hardened Go base image.
 # Our go-base image provides the Go toolchain for building your applications.
 
-# Build stage: Use our Go base image pinned to Go 1.25
+# Build stage: Use our Go base image (the Go 1.26 line, as go-app/go.mod expects)
 # NOTE: Replace :latest with current version tag from https://github.com/aquia-inc/base-docker-images/releases
 # checkov:skip=CKV_DOCKER_7: examples follow the README's advice to build FROM :latest
 # with --pull, so each rebuild picks up the newest patched base image.

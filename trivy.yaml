@@ -31,3 +31,12 @@ pkg:
 
 vulnerability:
   ignore-unfixed: true
+
+# Comprehensive detection also reads what the default mode skips: npm's
+# bundled node_modules, jars inside the JDK, Go binaries and the npm lockfile
+# vendored in the Go toolchain. Measured on the published images, it adds
+# 324 node packages (nodejs-base), 103 jars (openjdk17-base), and 42 lockfile
+# packages plus the Go binaries (go-base). This key must sit under scan:; at
+# the top level it is ignored.
+scan:
+  detection-priority: comprehensive

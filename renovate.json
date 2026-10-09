@@ -7,6 +7,19 @@
     "customManagers:githubActionsVersions"
   ],
   "pre-commit": {"enabled": true},
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "examples/*",
+    "examples/fips-app/**",
+    "examples/frontend-app/**",
+    "examples/python-app/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/tests/**",
+    "**/__fixtures__/**"
+  ],
   "assigneesFromCodeOwners": true,
   "automergeType": "pr",
   "automergeStrategy": "squash",
@@ -48,6 +61,14 @@
       "matchManagers": ["dockerfile"],
       "groupName": "{{{replace '.*/' '' dep.paths.[0]}}} dependencies",
       "groupSlug": "{{{replace '.*/' '' dep.paths.[0]}}}-dependencies"
+    },
+    {
+      "description": "The example Go app's go directive is read by the scanner as the Go standard library it was built with, so it names the exact Go that go-base ships and follows its patches. Capped below the next minor: a go 1.27 floor would not build on go-base's Go 1.26. Raise the cap when go-base moves to a new Go line. ignorePaths is the ignoreModulesAndTests list with **/examples/** narrowed so that only examples/go-app is visible: the other examples stay unmanaged, as before.",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["golang"],
+      "matchFileNames": ["examples/go-app/go.mod"],
+      "rangeStrategy": "bump",
+      "allowedVersions": "<1.27.0"
     },
     {
       "description": "Scanner versions are pinned in two places each (the action or installer, and a NAME_VERSION env var). Move them in one PR so the two never disagree, and apart from unrelated bumps because a scanner bump can turn the whole fleet red.",
