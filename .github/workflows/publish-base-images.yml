@@ -375,6 +375,19 @@ jobs:
             echo "::warning::check-apk-sbom-disk found a problem (advisory; the publish continues and a tracking issue is opened)."
           fi
 
+      # Independent of any CVE database: is anything installed older than the
+      # repository offers right now? The scanner has been blind to real content
+      # before, so "Trivy found nothing" is not evidence an image is current.
+      - name: Guard package freshness for ${{ matrix.platform }}
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
+        env:
+          IMAGE_REF: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          PLATFORM: ${{ matrix.platform }}
+          GATE_DIR: gate-report/${{ steps.context.outputs.platform-suffix }}
+        run: |
+          set -o pipefail
+          scripts/check-package-freshness.sh "$IMAGE_REF" "$PLATFORM" 2>&1 | tee "$GATE_DIR/check-package-freshness.txt"
+
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
