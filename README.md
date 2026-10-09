@@ -292,6 +292,7 @@ Every pull request to `main` must pass these required checks:
 Guards cover what the scanner cannot see. Each runs against the built image before anything is pushed, says so when an image has nothing for it to check, and fails when it cannot inspect one:
 
 - `scripts/check-virtualenv-seeds.sh`: virtualenv's seed wheels, which seed every virtualenv and poetry environment and which no scanner reads inside. One wheel per project, an inventory that matches the disk, nothing vendored older than the distro-patched wheel of the same version, and a new virtualenv that runs pip.
+- `scripts/check-package-freshness.sh`: no installed apk package may be older than the live repository offers. It needs no CVE database, so it covers content the scanner cannot see. The index is fetched into an empty cache and the comparison runs offline against it, so an index baked into the image cannot make a stale image read as current.
 
 Branch protection matches these by name. Renaming a job's `name:`, or adding a matrix dimension that changes it, blocks every pull request until branch protection is updated to match.
 
