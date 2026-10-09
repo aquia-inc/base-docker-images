@@ -293,6 +293,7 @@ Guards cover what the scanner cannot see. Each runs against the built image befo
 
 - `scripts/check-virtualenv-seeds.sh`: virtualenv's seed wheels, which seed every virtualenv and poetry environment and which no scanner reads inside. One wheel per project, an inventory that matches the disk, nothing vendored older than the distro-patched wheel of the same version, and a new virtualenv that runs pip.
 - `scripts/check-pip-vendor-bom.sh`: pip's vendored dependencies and the `vendor.txt` / `bom.cdx.json` that scanners read as their inventory. Runs `harden-pip-vendor.py`'s own checks against every pip tree in the image: both declarations agree with the vendored code, vendored msgpack meets the fix's floor, and pip works.
+- `scripts/check-apk-sbom-disk.sh` (advisory): the distro's SPDX documents under `/var/lib/db/sbom`, which list the dependencies vendored inside each package. Every entry that names a manifest (a `package.json`, a lockfile, a wheel, Python metadata) must match that file, and the file must exist. Nothing in this repository writes those files, so a finding opens a `publish-advisory` issue instead of blocking the publish; it becomes a gate once a fix here edits apk-owned files.
 
 Branch protection matches these by name. Renaming a job's `name:`, or adding a matrix dimension that changes it, blocks every pull request until branch protection is updated to match.
 

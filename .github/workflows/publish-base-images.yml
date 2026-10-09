@@ -342,6 +342,35 @@ jobs:
           set -o pipefail
           scripts/check-pip-vendor-bom.sh "$IMAGE_REF" "$PLATFORM" 2>&1 | tee "$GATE_DIR/check-pip-vendor-bom.txt"
 
+      # The distro's own SPDX documents under /var/lib/db/sbom, which list the
+      # dependencies vendored inside each apk. Scanners read them as installed
+      # inventory, so an entry that disagrees with the file it names - or names
+      # one that is not there - is reported to consumers as fact.
+      #
+      # ADVISORY, not a gate. Nothing in this repository writes those files:
+      # a mismatch comes from the distro's own packaging, and blocking on it
+      # would halt every publish of that image - its daily CVE rebuilds
+      # included - with nothing here to fix. So a finding is saved as an
+      # advisory report, which report_publish_result turns into a tracking
+      # issue, and the publish continues. Once a fix script here edits
+      # apk-owned files (the npm tree, brief item 8), this becomes a gate.
+      - name: Check distro SBOMs against disk (advisory) for ${{ matrix.platform }}
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
+        env:
+          IMAGE_REF: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          PLATFORM: ${{ matrix.platform }}
+          GATE_DIR: gate-report/${{ steps.context.outputs.platform-suffix }}
+        run: |
+          set -o pipefail
+          report="$GATE_DIR/check-apk-sbom-disk.txt"
+          if scripts/check-apk-sbom-disk.sh "$IMAGE_REF" "$PLATFORM" > "$report" 2>&1; then
+            cat "$report"
+          else
+            cat "$report"
+            cp "$report" "$GATE_DIR/advisory-check-apk-sbom-disk.txt"
+            echo "::warning::check-apk-sbom-disk found a problem (advisory; the publish continues and a tracking issue is opened)."
+          fi
+
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

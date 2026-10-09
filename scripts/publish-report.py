@@ -36,6 +36,8 @@ from pathlib import Path
 
 PUBLISH_WORKFLOW = "publish-base-images.yml"
 FAILURE_LABEL = "publish-failure"
+ADVISORY_LABEL = "publish-advisory"
+ADVISORY_PREFIX = "advisory-"
 STALE_LABEL = "stale-latest"
 STALE_TITLE = "Published :latest is behind its newest release"
 RELEASE_TAG = re.compile(r"^release/(?P<image>[a-z0-9][a-z0-9.-]*)/(?P<version>v\d+\.\d+\.\d+)$")
@@ -143,10 +145,46 @@ def failure_body(tag: str, run_url: str, failed: list[tuple[str, str]],
         lines.append(section(f"Container structure test output, {platform}",
                              reports.get("structure-tests", "")))
         # Guard outputs (check-*.txt), so a new guard is carried with no edit here.
-        for name in sorted(n for n in reports if n not in ("trivy", "structure-tests")):
+        for name in sorted(n for n in reports if n not in ("trivy", "structure-tests")
+                           and not n.startswith(ADVISORY_PREFIX)):
             lines.append(section(f"{name} output, {platform}", reports[name]))
     lines.append("This issue closes automatically when this image's next release publishes.")
     return "\n".join(line for line in lines if line is not None)
+
+
+def advisories(gate: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+    """guard -> {platform: output} for every advisory guard that found a problem.
+
+    An advisory guard checks something this repository does not produce, so a
+    finding opens its own issue and never blocks the publish. The publish job
+    marks a finding by saving the guard's output as advisory-<guard>.txt.
+    """
+    found: dict[str, dict[str, str]] = {}
+    for platform, reports in gate.items():
+        for name, text in reports.items():
+            if name.startswith(ADVISORY_PREFIX):
+                found.setdefault(name[len(ADVISORY_PREFIX):], {})[platform] = text
+    return found
+
+
+def advisory_title(image: str, version: str, guards: list[str]) -> str:
+    return f"Advisory: {image} {version} - {', '.join(sorted(guards))} found a problem"
+
+
+def is_advisory_for(title: str, image: str) -> bool:
+    return title.startswith(f"Advisory: {image} ")
+
+
+def advisory_body(tag: str, run_url: str, found: dict[str, dict[str, str]]) -> str:
+    lines = [f"Publishing `{tag}` found an advisory problem: {run_url}", "",
+             "The publish was not blocked: these checks cover content this repository "
+             "does not produce, such as the distro's own packaging.", ""]
+    for guard in sorted(found):
+        for platform in sorted(found[guard]):
+            lines.append(section(f"{guard} output, {platform}", found[guard][platform]))
+    lines.append("This issue closes automatically when a publish of this image reports no "
+                 "advisory problem.")
+    return "\n".join(lines)
 
 
 def stale_reason(image: str, newest_tag: str | None, latest_versions: dict[str, str | None],
@@ -261,6 +299,9 @@ def cmd_publish(args) -> int:
         print("Run was cancelled; leaving the issue state as it is.")
         return 0
 
+    gate = read_gate(Path(args.gate_dir))
+    report_advisories(args, image, version, gate)
+
     existing = open_issue(args.repo, FAILURE_LABEL, lambda t: is_issue_for(t, image))
     if args.outcome == "success":
         if existing:
@@ -272,7 +313,6 @@ def cmd_publish(args) -> int:
         return 0
 
     failed = failed_steps(run_jobs(args.repo, args.run_id))
-    gate = read_gate(Path(args.gate_dir))
     reason = classify(failed, [g.get("trivy", "") for g in gate.values()])
     title = failure_title(image, version, reason)
     body = failure_body(args.tag, args.run_url, failed, gate)
@@ -287,6 +327,31 @@ def cmd_publish(args) -> int:
         run("gh", "issue", "create", "--repo", args.repo, "--title", title,
             "--label", FAILURE_LABEL, "--body-file", "-", stdin=body)
     return 0
+
+
+def report_advisories(args, image: str, version: str, gate: dict[str, dict[str, str]]) -> None:
+    """Open, update or close the image's advisory issue. Never affects the publish."""
+    found = advisories(gate)
+    existing = open_issue(args.repo, ADVISORY_LABEL, lambda t: is_advisory_for(t, image))
+    if found:
+        title = advisory_title(image, version, list(found))
+        body = advisory_body(args.tag, args.run_url, found)
+        print(f"::warning::{title} ({args.run_url})")
+        if existing:
+            number = str(existing["number"])
+            run("gh", "issue", "edit", number, "--repo", args.repo, "--title", title)
+            run("gh", "issue", "comment", number, "--repo", args.repo, "--body-file", "-", stdin=body)
+            print(f"updated advisory #{number}")
+        else:
+            ensure_label(args.repo, ADVISORY_LABEL, "An advisory check found a problem; publish not blocked")
+            run("gh", "issue", "create", "--repo", args.repo, "--title", title,
+                "--label", ADVISORY_LABEL, "--body-file", "-", stdin=body)
+    elif args.outcome == "success" and existing:
+        # Only a run that got as far as the advisory checks and found nothing
+        # may clear the issue; a failed run may have stopped before them.
+        run("gh", "issue", "close", str(existing["number"]), "--repo", args.repo,
+            "--comment", f"`{args.tag}` published with no advisory problem: {args.run_url}")
+        print(f"closed advisory #{existing['number']}")
 
 
 def cmd_stale(args) -> int:
