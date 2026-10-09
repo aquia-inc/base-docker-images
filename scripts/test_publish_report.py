@@ -189,15 +189,16 @@ def test_gate_reports_are_read_per_platform():
 # ---------------------------------------------------------------------------
 
 class FakeGitHub:
-    def __init__(self, tags=(), issue=None, jobs=()):
-        self.tags, self.issue, self.jobs, self.calls = list(tags), issue, list(jobs), []
+    def __init__(self, tags=(), issue=None, jobs=(), issues=()):
+        self.tags, self.jobs, self.calls = list(tags), list(jobs), []
+        self.issues = ([issue] if issue else []) + list(issues)
 
     def install(self):
         self.saved = {n: getattr(pr, n) for n in
                       ("release_tags", "open_issue", "run_jobs", "run", "ensure_label")}
         pr.release_tags = lambda repo, image: self.tags
-        pr.open_issue = lambda repo, label, match: (
-            self.issue if self.issue and match(self.issue["title"]) else None)
+        pr.open_issue = lambda repo, label, match: next(
+            (i for i in self.issues if match(i["title"])), None)
         pr.run_jobs = lambda repo, run_id: self.jobs
         pr.run = lambda *cmd, stdin=None: self.calls.append((cmd, stdin)) or ""
         pr.ensure_label = lambda *a: self.calls.append((("label",) + a, None))
@@ -266,6 +267,66 @@ def test_the_next_successful_publish_closes_the_issue():
 def test_a_cancelled_run_leaves_the_issue_alone():
     fake = FakeGitHub(TAGS, issue={"number": 7, "title": "Publish failed: python-base v1.1.505 - x"})
     publish(fake, "release/python-base/v1.1.506", "cancelled")
+    assert fake.calls == []
+
+
+def gate_dir(files):
+    """A gate-report directory: {platform: {stem: text}}."""
+    root = pathlib.Path(tempfile.mkdtemp())
+    for platform, reports in files.items():
+        (root / platform).mkdir()
+        for stem, text in reports.items():
+            (root / platform / f"{stem}.txt").write_text(text)
+    return str(root)
+
+
+SBOM_FINDING = "MISMATCH npm-12.spdx.json: semver declares 7.8.5 but .../package.json is 7.8.4"
+ADVISORY_GATE = {"linux-arm64": {"check-apk-sbom-disk": SBOM_FINDING,
+                                 "advisory-check-apk-sbom-disk": SBOM_FINDING}}
+NODE_TAGS = ["release/nodejs-base/v1.1.505", "release/nodejs-base/v1.1.506"]
+
+
+def test_an_advisory_opens_its_own_issue_and_leaves_a_successful_publish_alone():
+    fake = FakeGitHub(NODE_TAGS)
+    publish(fake, "release/nodejs-base/v1.1.506", "success", gate_dir(ADVISORY_GATE))
+    creates = [c for c in fake.calls if c[0][:3] == ("gh", "issue", "create")]
+    assert len(creates) == 1
+    cmd, body = creates[0]
+    assert "Advisory: nodejs-base v1.1.506 - check-apk-sbom-disk found a problem" in cmd
+    assert pr.ADVISORY_LABEL in cmd and pr.FAILURE_LABEL not in cmd
+    assert "semver declares 7.8.5" in body
+
+
+def test_a_repeat_advisory_updates_the_open_advisory_issue():
+    fake = FakeGitHub(NODE_TAGS, issues=[{"number": 9, "title": "Advisory: nodejs-base v1.1.505 - x found a problem"}])
+    publish(fake, "release/nodejs-base/v1.1.506", "success", gate_dir(ADVISORY_GATE))
+    assert [c[0][2] for c in fake.calls] == ["edit", "comment"]
+
+
+def test_a_clean_successful_publish_closes_the_advisory_issue():
+    fake = FakeGitHub(NODE_TAGS, issues=[{"number": 9, "title": "Advisory: nodejs-base v1.1.505 - x found a problem"}])
+    publish(fake, "release/nodejs-base/v1.1.506", "success",
+            gate_dir({"linux-arm64": {"check-apk-sbom-disk": "ok"}}))
+    assert [c[0][2] for c in fake.calls] == ["close"]
+
+
+def test_a_failed_publish_without_advisory_output_does_not_clear_the_advisory():
+    fake = FakeGitHub(NODE_TAGS, issues=[{"number": 9, "title": "Advisory: nodejs-base v1.1.505 - x found a problem"}],
+                      jobs=FAILED_JOBS)
+    publish(fake, "release/nodejs-base/v1.1.506", "failure")
+    assert not any(c[0][:3] == ("gh", "issue", "close") for c in fake.calls)
+
+
+def test_the_failure_issue_does_not_repeat_the_advisory_output():
+    gate = {"linux-arm64": {"check-apk-sbom-disk": SBOM_FINDING,
+                            "advisory-check-apk-sbom-disk": SBOM_FINDING}}
+    body = pr.failure_body("release/nodejs-base/v1.1.506", "u", [], gate)
+    assert body.count("semver declares 7.8.5") == 1
+
+
+def test_an_older_tag_changes_no_advisory_issue():
+    fake = FakeGitHub(NODE_TAGS)
+    publish(fake, "release/nodejs-base/v1.1.505", "success", gate_dir(ADVISORY_GATE))
     assert fake.calls == []
 
 

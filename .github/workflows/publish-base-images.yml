@@ -328,6 +328,49 @@ jobs:
           set -o pipefail
           scripts/check-virtualenv-seeds.sh "$IMAGE_REF" "$PLATFORM" 2>&1 | tee "$GATE_DIR/check-virtualenv-seeds.txt"
 
+      # pip's vendored tree and its declarations. Scanners read vendor.txt and
+      # bom.cdx.json as the inventory, so a stale entry reports a vulnerability
+      # that is not there or hides one that is, with no file path to inspect.
+      # Checked with harden-pip-vendor.py's own functions, not a second list.
+      - name: Guard pip's vendored tree for ${{ matrix.platform }}
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
+        env:
+          IMAGE_REF: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          PLATFORM: ${{ matrix.platform }}
+          GATE_DIR: gate-report/${{ steps.context.outputs.platform-suffix }}
+        run: |
+          set -o pipefail
+          scripts/check-pip-vendor-bom.sh "$IMAGE_REF" "$PLATFORM" 2>&1 | tee "$GATE_DIR/check-pip-vendor-bom.txt"
+
+      # The distro's own SPDX documents under /var/lib/db/sbom, which list the
+      # dependencies vendored inside each apk. Scanners read them as installed
+      # inventory, so an entry that disagrees with the file it names - or names
+      # one that is not there - is reported to consumers as fact.
+      #
+      # ADVISORY, not a gate. Nothing in this repository writes those files:
+      # a mismatch comes from the distro's own packaging, and blocking on it
+      # would halt every publish of that image - its daily CVE rebuilds
+      # included - with nothing here to fix. So a finding is saved as an
+      # advisory report, which report_publish_result turns into a tracking
+      # issue, and the publish continues. Once a fix script here edits
+      # apk-owned files (the npm tree, brief item 8), this becomes a gate.
+      - name: Check distro SBOMs against disk (advisory) for ${{ matrix.platform }}
+        if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
+        env:
+          IMAGE_REF: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          PLATFORM: ${{ matrix.platform }}
+          GATE_DIR: gate-report/${{ steps.context.outputs.platform-suffix }}
+        run: |
+          set -o pipefail
+          report="$GATE_DIR/check-apk-sbom-disk.txt"
+          if scripts/check-apk-sbom-disk.sh "$IMAGE_REF" "$PLATFORM" > "$report" 2>&1; then
+            cat "$report"
+          else
+            cat "$report"
+            cp "$report" "$GATE_DIR/advisory-check-apk-sbom-disk.txt"
+            echo "::warning::check-apk-sbom-disk found a problem (advisory; the publish continues and a tracking issue is opened)."
+          fi
+
       # Independent of any CVE database: is anything installed older than the
       # repository offers right now? The scanner has been blind to real content
       # before, so "Trivy found nothing" is not evidence an image is current.
