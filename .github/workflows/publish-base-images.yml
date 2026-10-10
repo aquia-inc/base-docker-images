@@ -13,6 +13,17 @@ on:
   
   # workflow_dispatch for manual runs.
   workflow_dispatch:
+
+# GitHub occasionally delivers one tag push twice. Two runs of the same tag
+# would build, sign and tag the same version at once, and could leave the
+# multi-arch :latest built from one run's images while the per-architecture
+# :latest points at the other's. Runs of the same ref therefore queue, and a
+# release run is never cancelled part-way through tagging. A pull request's
+# older run is cancelled by its newer one: it only verifies.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   REGISTRY: ghcr.io
   # For tag pushes, use the actual ref. For PRs, detect from modified Dockerfiles
