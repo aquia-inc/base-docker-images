@@ -69,12 +69,6 @@
       "matchFileNames": ["examples/go-app/go.mod"],
       "rangeStrategy": "bump",
       "allowedVersions": "<1.27.0"
-    },
-    {
-      "description": "Scanner versions are pinned in two places each (the action or installer, and a NAME_VERSION env var). Move them in one PR so the two never disagree, and apart from unrelated bumps because a scanner bump can turn the whole fleet red.",
-      "matchDepNames": ["aquasecurity/trivy", "trufflesecurity/trufflehog"],
-      "groupName": "{{depName}} scanner",
-      "groupSlug": "scanner-{{{replace '/' '-' depName}}}"
     }
   ]
 }
