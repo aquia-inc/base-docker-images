@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plan GHCR retention for this repository's images. Reports only.
+"""Plan GHCR retention for this repository's images, and apply it on request.
 
 Policy (README "Image Retention", announced in #758):
 
@@ -15,9 +15,31 @@ Policy (README "Image Retention", announced in #758):
   * A deleted release takes its child manifests (per-platform images,
     attestation manifests) and its cosign signatures/attestations with it.
 
-This script only plans. It reads the GitHub Packages API and the registry,
-prints a summary, and writes a JSON report of every decision and its reason.
-It never deletes or retags anything.
+By default this script only plans. It reads the GitHub Packages API and the
+registry, prints a summary, and writes a JSON report of every decision and its
+reason. It never retags anything.
+
+With --apply it also deletes what the plan deletes, and refuses to start
+unless every guard holds:
+
+  * the date is on or after EFFECTIVE_DATE, the date the README announces;
+  * the safety invariants hold for every package, including that each keeps
+    at least min(RELEASES, its release count) releases;
+  * the plan deletes no more than --expect-at-most versions, a number the
+    operator takes from a report run, so a planner fault that suddenly
+    selects far more is refused rather than carried out.
+
+Deletion works in groups: a release with its child manifests and the
+signatures and attestations that reference them. Within a group children go
+first and the tagged release last, so a run that stops partway leaves the
+release tagged and the next run finishes it; deleting the parent first would
+strand its children as untagged orphans that no later plan reaches. A group
+that still carries a tracking tag waits until that tag is retired. Each
+version's tags are re-read just before its package is processed, and a group
+whose tags changed since the plan is skipped. Deletions are serial, paced,
+capped per run (--max-delete) and stop at the API rate-limit floor or after
+consecutive failures. Every deletion is logged with its version id: GitHub
+can restore a deleted version for 30 days.
 
 Two traps shape the implementation:
 
@@ -32,6 +54,8 @@ Two traps shape the implementation:
 Usage:
     GH_TOKEN=<token with read:packages> scripts/ghcr-retention.py \
         [--releases 30] [--days 90] [--report retention-report.json]
+    GH_TOKEN=<token with admin on the packages> scripts/ghcr-retention.py \
+        --apply --expect-at-most N [--max-delete 400] [--deletion-log F]
 """
 
 from __future__ import annotations
@@ -59,6 +83,19 @@ REGISTRY = "ghcr.io"
 # markers, and the retired FIPS 140-2 tags. Those now hold end-of-life marker
 # images; deleting one would turn an explained failure into MANIFEST_UNKNOWN.
 ALWAYS_KEEP = {"latest", "openssl3", "openssl3.0", "2", "2.0", "2.0.0"}
+
+# The README announces deletion from this date; --apply refuses before it.
+EFFECTIVE_DATE = dt.date(2026, 10, 26)
+
+# Deletion pacing. The repository's GITHUB_TOKEN has about 1000 REST requests
+# an hour, shared with every other workflow, and GitHub asks for mutating
+# requests to be serial and at least a second apart. A run stops on its own
+# when the remaining budget falls to RATE_FLOOR, and after MAX_CONSECUTIVE
+# failures in a row, which is what a missing admin role looks like.
+DELETE_SPACING_SECONDS = 1.0
+RATE_FLOOR = 100
+MAX_CONSECUTIVE = 5
+MAX_RATE_WAIT_SECONDS = 900
 
 RELEASE_SHAPE = re.compile(r"^v?\d+\.\d+\.\d+$")
 SIGNATURE = re.compile(r"^sha256-([0-9a-f]{64})(\.sig|\.att|\.sbom)?$")
@@ -218,8 +255,15 @@ def classify_orphans(plan: Plan, orphan_children: dict[str, list[str]]) -> dict[
     return groups
 
 
-def check_invariants(plan: Plan, versions: list[Version]) -> list[str]:
-    """Return every violation of the safety rules (empty when safe)."""
+def check_invariants(plan: Plan, versions: list[Version],
+                     releases: dict[str, set[str]] | None = None,
+                     keep_releases: int | None = None) -> list[str]:
+    """Return every violation of the safety rules (empty when safe).
+
+    With `releases` and `keep_releases`, also require that the package keeps
+    at least min(keep_releases, its release count) releases - the floor the
+    README promises, checked independently of how the plan arrived at it.
+    """
     problems = []
     overlap = set(plan.keep) & set(plan.delete)
     if overlap:
@@ -228,7 +272,213 @@ def check_invariants(plan: Plan, versions: list[Version]) -> list[str]:
         for t in v.tags:
             if t in ALWAYS_KEEP and v.digest not in plan.keep:
                 problems.append(f"{plan.package}:{t} would not be kept")
+    if releases is not None and keep_releases is not None:
+        tagged = [v for v in versions if any(is_release(t, plan.image, releases) for t in v.tags)]
+        kept = sum(1 for v in tagged if v.digest in plan.keep)
+        floor = min(keep_releases, len(tagged))
+        if kept < floor:
+            problems.append(f"{plan.package}: keeps {kept} releases, fewer than {floor}")
     return problems
+
+
+# ---------------------------------------------------------------------------
+# Deletion (pure decisions; the one DELETE request is delete_version below)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Group:
+    """Versions deleted together, in order: children first, anchor last."""
+    anchor: str
+    order: list[str]
+    held: list[str] = field(default_factory=list)   # tags that make it wait
+
+
+def blocking_tags(v: Version, image: str, releases: dict[str, set[str]]) -> list[str]:
+    """Tags that keep a version from being deleted yet: anything that is not a
+    release or signature tag, i.e. a tracking tag that has not been retired."""
+    return [t for t in v.tags if not is_release(t, image, releases) and not SIGNATURE.match(t)]
+
+
+def deletion_groups(plan: Plan, versions: list[Version], children: dict[str, list[str]],
+                    releases: dict[str, set[str]]) -> list[Group]:
+    """Partition plan.delete into ordered groups, oldest release first.
+
+    A release's group holds its child closure and every signature (with its
+    own children) whose subject is in that closure. Signatures of subjects
+    that no longer exist form groups of their own.
+    """
+    by_digest = {v.digest: v for v in versions}
+    claimed: set[str] = set()
+
+    def post_order(start: str) -> list[str]:
+        out: list[str] = []
+        stack = [(start, False)]
+        while stack:
+            digest, expanded = stack.pop()
+            if expanded:
+                out.append(digest)
+                continue
+            if digest in claimed or digest not in plan.delete:
+                continue
+            claimed.add(digest)
+            stack.append((digest, True))
+            stack.extend((child, False) for child in children.get(digest, []))
+        return out
+
+    subject_of: dict[str, str] = {}
+    for v in versions:
+        if v.digest in plan.delete:
+            subjects = [m.group(1) for t in v.tags if (m := SIGNATURE.match(t))]
+            if subjects:
+                subject_of[v.digest] = "sha256:" + subjects[0]
+
+    def held(order: list[str]) -> list[str]:
+        return sorted({t for d in order if d in by_digest
+                       for t in blocking_tags(by_digest[d], plan.image, releases)})
+
+    groups: list[Group] = []
+    roots = sorted((by_digest[d] for d in plan.delete if d in by_digest
+                    and any(is_release(t, plan.image, releases) for t in by_digest[d].tags)),
+                   key=lambda v: (v.created, v.id))
+    for root in roots:
+        main = post_order(root.digest)
+        closure = set(main)
+        signatures: list[str] = []
+        for sig in sorted(subject_of):
+            if subject_of[sig] in closure:
+                signatures += post_order(sig)
+        order = signatures + main
+        groups.append(Group(root.digest, order, held(order)))
+    for sig in sorted(subject_of):
+        order = post_order(sig)
+        if order:
+            groups.append(Group(sig, order, held(order)))
+    for digest in sorted(plan.delete):
+        order = post_order(digest)
+        if order:
+            groups.append(Group(digest, order, held(order)))
+    return groups
+
+
+def apply_refusals(today: dt.date, problems: list[str], planned: int,
+                   expect_at_most: int) -> list[str]:
+    """Every reason not to start deleting (empty means go)."""
+    refusals = []
+    if today < EFFECTIVE_DATE:
+        refusals.append(f"today {today} is before the announced date {EFFECTIVE_DATE}")
+    if problems:
+        refusals.append(f"{len(problems)} safety invariant(s) fail")
+    if expect_at_most <= 0:
+        refusals.append("--expect-at-most must be a positive number taken from a report run")
+    elif planned > expect_at_most:
+        refusals.append(f"the plan deletes {planned} versions, more than --expect-at-most "
+                        f"{expect_at_most}")
+    return refusals
+
+
+@dataclass
+class Outcome:
+    attempted: int = 0
+    stopped: str = ""      # why the run stopped early, empty when it did not
+    failed: bool = False   # stopped by consecutive failures rather than by budget
+    log: list[dict] = field(default_factory=list)
+
+
+def run_deletions(package: str, groups: list[Group], planned_tags: dict[str, list[str]],
+                  current: dict[str, tuple[int, list[str]]], deleter, budget: int,
+                  outcome: Outcome, sleep=time.sleep, now=time.time) -> None:
+    """Delete eligible groups of one package until the budget is spent.
+
+    `planned_tags` is digest -> tags at planning time; `current` is digest ->
+    (version id, tags) re-read just before this call. `deleter(version_id)`
+    returns (status, headers, detail). Whole groups only: a group is never
+    started once `outcome.attempted` reaches `budget`.
+    """
+    consecutive = 0
+    for group in groups:
+        if outcome.stopped or outcome.attempted >= budget:
+            return
+        if group.held:
+            continue
+        if any(d in current and sorted(current[d][1]) != sorted(planned_tags.get(d, []))
+               for d in group.order):
+            outcome.log.append({"package": package, "digest": group.anchor,
+                                "result": "skipped", "detail": "tags changed since the plan"})
+            continue
+        for digest in group.order:
+            if digest not in current:
+                continue  # already gone, or never a version of this package
+            version_id = current[digest][0]
+            waits = 0
+            while True:
+                if outcome.attempted:
+                    sleep(DELETE_SPACING_SECONDS)
+                outcome.attempted += 1
+                status, headers, detail = deleter(version_id)
+                wait = rate_limit_wait(status, headers, now())
+                if wait is None and (status == 0 or status >= 500):
+                    wait = float(2 ** (waits + 1))  # dropped connection or server error
+                if wait is None or waits >= 3:
+                    break
+                waits += 1
+                sleep(wait)
+            entry = {"package": package, "id": version_id, "digest": digest,
+                     "group": group.anchor, "status": status}
+            done = status in (200, 202, 204, 404)
+            if done:
+                entry["result"] = "deleted" if status != 404 else "already gone"
+                consecutive = 0
+            else:
+                entry["result"], entry["detail"] = "refused", detail
+                consecutive += 1
+            outcome.log.append(entry)
+            if consecutive >= MAX_CONSECUTIVE:
+                outcome.stopped = f"{consecutive} consecutive failures, last HTTP {status}: {detail}"
+                outcome.failed = True
+                return
+            remaining = {k.lower(): v for k, v in headers.items()}.get("x-ratelimit-remaining", "")
+            if remaining.isdigit() and int(remaining) <= RATE_FLOOR:
+                outcome.stopped = f"API rate budget at {remaining}; the next run continues"
+                return
+            if not done:
+                # Leave the rest of the group, its tagged release included, for
+                # a later run: deleting the parent of a child that could not be
+                # deleted would strand that child as an orphan no plan reaches.
+                break
+
+
+def rate_limit_wait(status: int, headers: dict[str, str], now: float) -> float | None:
+    """Seconds to wait before retrying a rate-limited request, else None."""
+    if status not in (403, 429):
+        return None
+    lower = {k.lower(): v for k, v in headers.items()}
+    if lower.get("retry-after", "").isdigit():
+        return min(float(lower["retry-after"]), MAX_RATE_WAIT_SECONDS)
+    if lower.get("x-ratelimit-remaining") == "0" and lower.get("x-ratelimit-reset", "").isdigit():
+        return min(max(float(lower["x-ratelimit-reset"]) - now, 1.0), MAX_RATE_WAIT_SECONDS)
+    return None
+
+
+def retirements(plans: list[Plan]) -> list[dict[str, str]]:
+    """Stale tracking tags to retire, one entry per image and tag.
+
+    Each entry carries the digest the tag was seen on in the multi-arch and
+    both per-arch packages ("-" where the tag was not seen), which
+    eol/retire-tag.sh requires to be unchanged before it pushes a marker.
+    """
+    seen: dict[tuple[str, str], dict[str, str]] = {}
+    for plan in plans:
+        suffix = plan.package[len(plan.image):]
+        key = {"": "digest", "-linux-amd64": "amd64", "-linux-arm64": "arm64"}.get(suffix)
+        if key is None:
+            continue
+        for tag, digest in plan.retire.items():
+            if tag in ALWAYS_KEEP:
+                continue
+            entry = seen.setdefault((plan.image, tag), {
+                "image": plan.image, "tag": tag, "digest": "-", "amd64": "-", "arm64": "-"})
+            entry[key] = digest
+    return [seen[k] for k in sorted(seen)]
 
 
 # ---------------------------------------------------------------------------
@@ -406,15 +656,56 @@ def index_children(org: str, repo: str, package: str, digests: list[str],
         return dict(pool.map(fetch, digests))
 
 
+def delete_version(org: str, repo: str, package: str, version_id: int,
+                   token: str) -> tuple[int, dict[str, str], str]:
+    """Delete one package version. The only request in this file that deletes.
+
+    Returns (HTTP status, response headers, redacted detail) rather than
+    raising, so the caller decides what a refusal means. A version id is
+    always an integer from the API; it is formatted as one so nothing else
+    can reach the path.
+    """
+    name = urllib.parse.quote(f"{repo}/{package}", safe="")
+    url = f"{API}/orgs/{org}/packages/container/{name}/versions/{int(version_id)}"
+    request = urllib.request.Request(url, method="DELETE", headers={
+        "Authorization": "Bearer " + token,
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"})
+    try:
+        with _OPENER.open(request, timeout=60) as response:
+            return response.status, dict(response.headers), ""
+    except urllib.error.HTTPError as error:
+        detail = redact(error.read(300).decode("utf-8", "replace"))
+        return error.code, dict(error.headers or {}), detail
+    except (urllib.error.URLError, http.client.HTTPException,
+            ConnectionError, TimeoutError) as error:
+        return 0, {}, redact(f"{type(error).__name__}: {error}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--org", default="aquia-inc")
     parser.add_argument("--repo", default="base-docker-images")
     parser.add_argument("--releases", type=int, default=30)
     parser.add_argument("--days", type=int, default=90)
-    parser.add_argument("--today", type=dt.date.fromisoformat, default=dt.date.today())
+    parser.add_argument("--today", type=dt.date.fromisoformat, default=None)
     parser.add_argument("--report", default="retention-report.json")
+    parser.add_argument("--apply", action="store_true",
+                        help="delete what the plan deletes, under the guards above")
+    parser.add_argument("--expect-at-most", type=int, default=0,
+                        help="refuse to delete when the plan deletes more than this")
+    parser.add_argument("--max-delete", type=int, default=400,
+                        help="delete requests per run; whole groups only")
+    parser.add_argument("--deletion-log", default="deletion-log.json")
+    parser.add_argument("--retire-list",
+                        help="with --apply, write the stale tags to retire (eol/retire-tag.sh)")
     args = parser.parse_args()
+    if args.apply and args.today is not None:
+        parser.error("--today cannot be combined with --apply: deletion uses the real date")
+    if args.max_delete < 1:
+        parser.error("--max-delete must be at least 1")
+    utc_today = dt.datetime.now(dt.timezone.utc).date()
+    today = args.today or utc_today
 
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if not token:
@@ -423,10 +714,11 @@ def main() -> int:
 
     releases = release_tags(args.org, args.repo, token)
 
-    report, problems = [], []
+    report, problems, planned = [], [], []
     header = f"{'package':28} {'versions':>8} {'keep':>6} {'delete':>6} {'retire':>6} {'orphans':>7} {'unknown':>7}"
-    print(f"Retention plan: newest {args.releases} releases or under {args.days} days, as of {args.today}")
-    print("REPORT ONLY - nothing is deleted or retagged.\n")
+    print(f"Retention plan: newest {args.releases} releases or under {args.days} days, as of {today}")
+    print("APPLY - the plan below is carried out if every guard holds.\n" if args.apply
+          else "REPORT ONLY - nothing is deleted or retagged.\n")
     print(header)
     totals = [0] * 6
     for package in candidate_packages(releases):
@@ -440,9 +732,11 @@ def main() -> int:
         # be indexes whose children are live attestation bundles.
         tagged = [v.digest for v in versions if v.tags]
         children = index_children(args.org, args.repo, package, tagged, token)
-        plan = plan_package(package, versions, children, releases, args.today,
+        plan = plan_package(package, versions, children, releases, today,
                             args.releases, args.days)
-        problems += check_invariants(plan, versions)
+        problems += check_invariants(plan, versions, releases, args.releases)
+        planned.append((package, versions, plan,
+                        deletion_groups(plan, versions, children, releases)))
         orphan_groups = classify_orphans(
             plan, index_children(args.org, args.repo, package, plan.orphans, token))
         row = [len(versions), len(plan.keep), len(plan.delete), len(plan.retire),
@@ -467,9 +761,14 @@ def main() -> int:
         for image, tag in retire:
             print(f"  {image}:{tag}")
 
+    ready = sum(len(g.order) for _, _, _, groups in planned for g in groups if not g.held)
+    waiting = [g for _, _, _, groups in planned for g in groups if g.held]
+    print(f"\nDeletable now: {ready} versions. Waiting for a tracking tag to be retired: "
+          f"{sum(len(g.order) for g in waiting)} versions in {len(waiting)} groups.")
+
     with open(args.report, "w", encoding="utf-8") as handle:
         json.dump({"policy": {"releases": args.releases, "days": args.days,
-                              "today": args.today.isoformat()},
+                              "today": today.isoformat()},
                    "packages": report, "problems": problems}, handle, indent=1)
     print(f"\nFull report: {args.report}")
 
@@ -478,7 +777,51 @@ def main() -> int:
         for problem in problems:
             print("  " + problem)
         return 1
-    return 0
+    if not args.apply:
+        return 0
+
+    total_delete = sum(len(plan.delete) for _, _, plan, _ in planned)
+    refusals = apply_refusals(utc_today, problems, total_delete, args.expect_at_most)
+    if refusals:
+        print("\nNOT DELETING:")
+        for refusal in refusals:
+            print("  " + refusal)
+        return 2
+
+    if args.retire_list:
+        retire_entries = retirements([plan for _, _, plan, _ in planned])
+        with open(args.retire_list, "w", encoding="utf-8") as handle:
+            json.dump(retire_entries, handle, indent=1)
+        print(f"\nRetire list: {len(retire_entries)} tags in {args.retire_list}")
+
+    outcome = Outcome()
+    try:
+        for package, versions, _, groups in planned:
+            if outcome.stopped or outcome.attempted >= args.max_delete:
+                break
+            if not any(not g.held for g in groups):
+                continue
+            # Re-read just before deleting, so a version whose tags changed
+            # since the plan (or that is already gone) is never acted on.
+            current = {v.digest: (v.id, v.tags)
+                       for v in package_versions(args.org, args.repo, package, token)}
+            run_deletions(package, groups, {v.digest: v.tags for v in versions}, current,
+                          lambda vid, p=package: delete_version(args.org, args.repo, p, vid, token),
+                          args.max_delete, outcome)
+    finally:
+        with open(args.deletion_log, "w", encoding="utf-8") as handle:
+            json.dump({"date": utc_today.isoformat(), "attempted": outcome.attempted,
+                       "stopped": outcome.stopped, "entries": outcome.log}, handle, indent=1)
+
+    results: dict[str, int] = {}
+    for entry in outcome.log:
+        results[entry["result"]] = results.get(entry["result"], 0) + 1
+    print(f"\nDeletion: {outcome.attempted} requests; "
+          + ", ".join(f"{n} {r}" for r, n in sorted(results.items()))
+          + f". Log (version ids, restorable for 30 days): {args.deletion_log}")
+    if outcome.stopped:
+        print(f"Stopped early: {outcome.stopped}")
+    return 1 if outcome.failed else 0
 
 
 if __name__ == "__main__":
