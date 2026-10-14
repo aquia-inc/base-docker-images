@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read  # publish run outcomes, so a failed release is not a baseline
     outputs:
       images_matrix: ${{ steps.build_matrix.outputs.images_to_build }}
       has_changes: ${{ steps.build_matrix.outputs.has_changes }}
@@ -43,13 +44,19 @@ jobs:
       #
       # Comparing against the release tag rather than this push's previous
       # commit also means a change merged while tagging failed is picked up by
-      # the next run instead of never shipping. The script fails rather than
+      # the next run instead of never shipping. A tag whose publish run failed
+      # is passed over the same way, so the change it carried is released
+      # again rather than stranded until the image's next input change; a
+      # publish still running is not a failure. The script fails rather than
       # report "nothing changed" when it cannot tell.
       - name: Detect images whose build inputs changed
         id: build_matrix
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          images="$(python3 scripts/release-inputs.py changed)"
+          images="$(python3 scripts/release-inputs.py changed --repo "$REPO")"
           echo "images_to_build=${images}" >> "$GITHUB_OUTPUT"
           if [ "$images" = "[]" ]; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
