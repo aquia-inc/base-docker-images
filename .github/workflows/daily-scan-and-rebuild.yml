@@ -17,7 +17,7 @@ env:
   # inside a run block, so a second hardcoded copy silently goes stale and
   # fails the job on the next bump.
   # renovate: datasource=github-releases depName=aquasecurity/trivy
-  TRIVY_VERSION: "0.75.0"
+  TRIVY_VERSION: "0.76.0"
 
 jobs:
   scan_and_rebuild:
