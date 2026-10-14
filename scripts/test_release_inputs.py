@@ -224,6 +224,153 @@ def test_a_git_failure_is_an_error_not_an_empty_result():
         raise AssertionError("a git failure must raise")
 
 
+# ---------------------------------------------------------------------------
+# A release whose publish failed is not a baseline
+# ---------------------------------------------------------------------------
+
+def test_a_tag_whose_publish_failed_is_not_the_baseline():
+    repo = fixture_repo()
+    change(repo, "nginx.conf", "events { worker_connections 2; }\n")
+    git(repo, "tag", "release/nginx-base/v1.0.1")
+    # Published: the change shipped, nothing to do.
+    assert changed(repo) == []
+    # Failed: the change never reached consumers, so the next run releases it
+    # again instead of waiting for nginx-base's next input change.
+    failed = {"release/nginx-base/v1.0.1"}
+    assert ri.latest_release(repo, "nginx-base", failed) == "release/nginx-base/v1.0.0"
+    assert ri.changed_images(repo, log=io.StringIO(), failed=failed) == ["nginx-base"]
+
+
+def test_consecutive_failures_fall_back_to_the_last_good_release():
+    repo = fixture_repo()
+    change(repo, "nginx.conf", "events { worker_connections 3; }\n")
+    git(repo, "tag", "release/nginx-base/v1.0.1")
+    change(repo, "README.md", "# later\n")
+    git(repo, "tag", "release/nginx-base/v1.0.2")
+    failed = {"release/nginx-base/v1.0.1", "release/nginx-base/v1.0.2"}
+    baseline, inputs = ri.changed_inputs(repo, "nginx-base", failed=failed)
+    assert baseline == "release/nginx-base/v1.0.0" and inputs == ["nginx.conf"]
+
+
+def test_a_failed_tag_of_another_image_changes_nothing_here():
+    repo = fixture_repo()
+    change(repo, "nginx.conf", "events { worker_connections 4; }\n")
+    git(repo, "tag", "release/nginx-base/v1.0.1")
+    assert ri.changed_images(repo, log=io.StringIO(),
+                             failed={"release/nodejs-base/v1.0.0"}) == ["nodejs-base"]
+
+
+def test_an_image_whose_every_release_failed_is_released():
+    repo = fixture_repo()
+    failed = {"release/python-base/v1.0.0"}
+    assert ri.changed_inputs(repo, "python-base", failed=failed) == (None, ["Dockerfile.python-base"])
+
+
+def test_the_log_names_the_tags_passed_over():
+    repo = fixture_repo()
+    change(repo, "nginx.conf", "events { worker_connections 5; }\n")
+    git(repo, "tag", "release/nginx-base/v1.0.1")
+    log = io.StringIO()
+    ri.changed_images(repo, log=log, failed={"release/nginx-base/v1.0.1"})
+    assert ("nginx-base: release, changed since release/nginx-base/v1.0.0 "
+            "(passed over release/nginx-base/v1.0.1: publish failed): nginx.conf") in log.getvalue()
+
+
+def run_record(tag, status="completed", conclusion="success", created="2026-10-14T17:00:00Z"):
+    return {"head_branch": tag, "status": status, "conclusion": conclusion, "created_at": created}
+
+
+def test_only_a_finished_unsuccessful_run_is_a_failed_publish():
+    runs = [
+        run_record("release/a/v1.0.1", conclusion="failure"),
+        run_record("release/b/v1.0.1", conclusion="cancelled"),
+        run_record("release/c/v1.0.1", conclusion="timed_out"),
+        run_record("release/d/v1.0.1", conclusion="startup_failure"),
+        run_record("release/e/v1.0.1"),
+        # Still running or waiting: a merge a minute later must not release
+        # the same change a second time.
+        run_record("release/f/v1.0.1", status="in_progress", conclusion=None),
+        run_record("release/g/v1.0.1", status="queued", conclusion=None),
+    ]
+    assert ri.failed_publishes(runs) == {"release/a/v1.0.1", "release/b/v1.0.1",
+                                         "release/c/v1.0.1", "release/d/v1.0.1"}
+
+
+def test_a_tag_is_judged_on_its_newest_run_whatever_the_api_order():
+    runs = [
+        run_record("release/a/v1.0.1", conclusion="failure", created="2026-10-14T17:00:00Z"),
+        run_record("release/a/v1.0.1", conclusion="success", created="2026-10-14T18:00:00Z"),
+        run_record("release/b/v1.0.1", conclusion="success", created="2026-10-14T17:00:00Z"),
+        run_record("release/b/v1.0.1", conclusion="failure", created="2026-10-14T18:00:00Z"),
+    ]
+    assert ri.failed_publishes(runs) == {"release/b/v1.0.1"}
+
+
+def test_runs_that_are_not_release_tags_are_ignored():
+    runs = [run_record("main", conclusion="failure"), run_record(None, conclusion="failure")]
+    assert ri.failed_publishes(runs) == set()
+
+
+class FakeGh:
+    """Stands in for subprocess.run while publish_runs pages through the API."""
+
+    def __init__(self, pages, returncode=0, stderr=""):
+        self.pages, self.returncode, self.stderr, self.urls = pages, returncode, stderr, []
+
+    def __call__(self, cmd, **_):
+        assert cmd[:2] == ["gh", "api"], cmd
+        self.urls.append(cmd[2])
+        page = self.pages[len(self.urls) - 1]
+        return subprocess.CompletedProcess(cmd, self.returncode, page, self.stderr)
+
+
+def with_fake_gh(fake, call):
+    real = ri.subprocess.run
+    ri.subprocess.run = fake
+    try:
+        return call()
+    finally:
+        ri.subprocess.run = real
+
+
+def test_publish_runs_pages_until_a_short_page():
+    full = '{"workflow_runs": [' + ",".join(['{"head_branch": "x"}'] * 100) + "]}"
+    fake = FakeGh([full, '{"workflow_runs": [{"head_branch": "y"}]}'])
+    runs = with_fake_gh(fake, lambda: ri.publish_runs("o/r", pages=3))
+    assert len(runs) == 101 and len(fake.urls) == 2
+    assert fake.urls[0] == ("repos/o/r/actions/workflows/publish-base-images.yml/runs"
+                            "?event=push&per_page=100&page=1")
+
+
+def test_publish_runs_reads_no_more_than_its_window():
+    full = '{"workflow_runs": [' + ",".join(['{"head_branch": "x"}'] * 100) + "]}"
+    fake = FakeGh([full] * 5)
+    assert len(with_fake_gh(fake, lambda: ri.publish_runs("o/r", pages=2))) == 200
+    assert len(fake.urls) == 2
+
+
+def test_an_api_failure_is_an_error_not_an_empty_result():
+    for fake in (FakeGh([""], returncode=1, stderr="HTTP 502"), FakeGh(["<html>"]), FakeGh(["[]"])):
+        try:
+            with_fake_gh(fake, lambda: ri.publish_runs("o/r"))
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("an unreadable runs listing must raise")
+
+
+def test_a_malformed_repository_is_refused_before_any_call():
+    fake = FakeGh([])
+    for bad in ("o", "o/r/x", "o/r?x=1", "../o/r", ""):
+        try:
+            with_fake_gh(fake, lambda: ri.publish_runs(bad))
+        except ri.InputError:
+            pass
+        else:
+            raise AssertionError(f"{bad!r} must be refused")
+    assert fake.urls == []
+
+
 def test_cli_prints_json_and_fails_closed():
     repo = fixture_repo()
     change(repo, "scripts/harden-pip-vendor.py", "print('v3')\n")
@@ -235,6 +382,17 @@ def test_cli_prints_json_and_fails_closed():
     bad = subprocess.run([sys.executable, str(script), "changed"], cwd=repo,
                          capture_output=True, text=True, check=False)
     assert bad.returncode == 1 and bad.stdout == "", bad
+
+
+def test_cli_refuses_a_bad_repo_and_an_unknown_flag():
+    repo = fixture_repo()
+    script = pathlib.Path(__file__).with_name("release-inputs.py")
+    bad = subprocess.run([sys.executable, str(script), "changed", "--repo", "not a repo"],
+                         cwd=repo, capture_output=True, text=True, check=False)
+    assert bad.returncode == 1 and bad.stdout == "" and "OWNER/NAME" in bad.stderr, bad
+    usage = subprocess.run([sys.executable, str(script), "changed", "--bogus", "o/r"],
+                           cwd=repo, capture_output=True, text=True, check=False)
+    assert usage.returncode == 2 and usage.stdout == "", usage
 
 
 if __name__ == "__main__":

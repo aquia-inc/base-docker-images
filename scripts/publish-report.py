@@ -16,9 +16,11 @@ Two jobs use this:
   tracking-issue
            Open, update or close a single tracking issue from a report file.
 
-Only the newest release of an image can open or close its issue. A re-run of
-an older tag runs that tag's old tree and can never be what consumers pull,
-so it is reported in the log and nothing else.
+Only the newest release of an image can open or close its issue. An older
+tag runs a tree that is no longer what consumers pull, so it is reported in
+the log and nothing else - whether it is a re-run, or a first run that a newer
+tag overtook while it was in flight (two merges minutes apart). The newer
+tag's own run reports the image either way.
 
 Everything that touches GitHub or the registry goes through `gh` and
 `docker`; the decisions are plain functions, unit-tested in
@@ -292,8 +294,9 @@ def cmd_publish(args) -> int:
     image, version = parse_tag(args.tag)
     newest = newest_release(release_tags(args.repo, image), image)
     if newest != args.tag:
-        print(f"{args.tag} is not the newest release of {image} ({newest}); a re-run of an "
-              f"older tag cannot describe what consumers pull, so no issue is changed.")
+        print(f"{args.tag} is not the newest release of {image} ({newest}); an older tag, "
+              f"re-run or overtaken while in flight, cannot describe what consumers pull, so "
+              f"no issue is changed. {newest}'s own run reports the image.")
         return 0
     if args.outcome == "cancelled":
         print("Run was cancelled; leaving the issue state as it is.")
