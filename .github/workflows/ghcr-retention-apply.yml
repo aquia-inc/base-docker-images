@@ -60,11 +60,16 @@ jobs:
       - name: Apply retention
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Upper bound on the plan's deletions, from report run RUN_ID_TBD.
-          EXPECT_AT_MOST: "EXPECT_TBD"
+          # Upper bound on the plan's deletions: a fault detector, not a target.
+          # Report run 38626113118 (2026-10-14) planned 10084; about 227 new
+          # versions a day reach the registry, so by 2026-10-26 the backlog
+          # can be up to about 12800. A plan above this bound is refused, and
+          # the bound is raised by a pull request. Lower it once the backlog
+          # has drained.
+          EXPECT_AT_MOST: "13000"
           # Delete requests per run. About 1000 API requests an hour are shared
           # with every workflow in the repository; listing the packages costs
-          # about 200 of them.
+          # about 250 of them (versions and release tags, 100 a page).
           MAX_DELETE: "400"
         run: |
           set -o pipefail
