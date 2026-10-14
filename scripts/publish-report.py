@@ -177,7 +177,7 @@ def is_advisory_for(title: str, image: str) -> bool:
 
 def advisory_body(tag: str, run_url: str, found: dict[str, dict[str, str]]) -> str:
     lines = [f"Publishing `{tag}` found an advisory problem: {run_url}", "",
-             "The publish was not blocked: these checks cover content this repository "
+             "The publish was not blocked: these checks cover content this repository " +
              "does not produce, such as the distro's own packaging.", ""]
     for guard in sorted(found):
         for platform in sorted(found[guard]):

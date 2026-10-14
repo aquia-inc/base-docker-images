@@ -778,7 +778,26 @@ jobs:
         run: |
           # Sign the image with keyless signing (uses OIDC)
           echo "Signing image: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}@${{ steps.docker_build.outputs.digest }}"
-          cosign sign --yes \
+          # Retried with exponential backoff and jitter. A fleet-wide release
+          # wave sends every image's signing and attestation writes to Sigstore
+          # and GitHub in the same minute, and a burst like that fails a random
+          # subset outright. Backing off spreads the retries so they do not
+          # collide again.
+          with_backoff() {
+            local attempt=1 max=4 delay
+            until "$@"; do
+              if [ "$attempt" -ge "$max" ]; then
+                echo "::error::failed after ${max} attempts: $1 $2"
+                return 1
+              fi
+              delay=$(( (1 << attempt) * 10 + RANDOM % 10 ))
+              echo "::warning::attempt ${attempt} of ${max} failed; retrying in ${delay}s"
+              sleep "$delay"
+              attempt=$((attempt + 1))
+            done
+          }
+
+          with_backoff cosign sign --yes \
             ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}@${{ steps.docker_build.outputs.digest }}
           
           # Get the Rekor log entry
@@ -808,12 +827,36 @@ jobs:
           echo "Creating SBOM attestation for: $image_ref"
           
           # Create SBOM attestation (modern approach)
-          cosign attest --yes --predicate "$spdx_sbom" --type spdxjson "$image_ref"
+          # Retried with exponential backoff and jitter. A fleet-wide release
+          # wave sends every image's signing and attestation writes to Sigstore
+          # and GitHub in the same minute, and a burst like that fails a random
+          # subset outright. Backing off spreads the retries so they do not
+          # collide again.
+          with_backoff() {
+            local attempt=1 max=4 delay
+            until "$@"; do
+              if [ "$attempt" -ge "$max" ]; then
+                echo "::error::failed after ${max} attempts: $1 $2"
+                return 1
+              fi
+              delay=$(( (1 << attempt) * 10 + RANDOM % 10 ))
+              echo "::warning::attempt ${attempt} of ${max} failed; retrying in ${delay}s"
+              sleep "$delay"
+              attempt=$((attempt + 1))
+            done
+          }
+          with_backoff cosign attest --yes --predicate "$spdx_sbom" --type spdxjson "$image_ref"
           
           echo "[ok] SBOM attestation created and signed"
           
+      # Provenance is persisted through GitHub's attestations API. During the
+      # fleet-wide wave on 2026-10-07 seven of eight images failed here at
+      # once with "Failed to persist attestation", after the action's own
+      # retries. One delayed attempt, after the burst has passed, turns that
+      # into a slower publish instead of a failed one.
       - name: Attest build provenance for ${{ matrix.platform }}
-        id: attest_provenance
+        id: attest_provenance_try1
+        continue-on-error: true
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
         with:
@@ -821,6 +864,47 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
           subject-digest: ${{ steps.docker_build.outputs.digest }}
           push-to-registry: true
+
+      - name: Wait before retrying provenance attestation
+        if: steps.attest_provenance_try1.outcome == 'failure'
+        run: |
+          delay=$(( 60 + RANDOM % 60 ))
+          echo "::warning::provenance attestation failed; retrying once in ${delay}s"
+          sleep "$delay"
+
+      # Not continue-on-error: if this fails too, the job fails here, and the
+      # release tags below are never applied to an unattested digest.
+      - name: Attest build provenance for ${{ matrix.platform }} (retry)
+        id: attest_provenance_try2
+        if: steps.attest_provenance_try1.outcome == 'failure'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
+          subject-digest: ${{ steps.docker_build.outputs.digest }}
+          push-to-registry: true
+
+      # Later steps read steps.attest_provenance.outputs.* in seventeen places.
+      # This keeps that id stable and points it at whichever attempt succeeded,
+      # so none of them has to know a retry happened.
+      - name: Resolve provenance attestation outputs
+        id: attest_provenance
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
+        env:
+          TRY1_OUTCOME: ${{ steps.attest_provenance_try1.outcome }}
+          URL1: ${{ steps.attest_provenance_try1.outputs.attestation-url }}
+          BUNDLE1: ${{ steps.attest_provenance_try1.outputs.bundle-path }}
+          URL2: ${{ steps.attest_provenance_try2.outputs.attestation-url }}
+          BUNDLE2: ${{ steps.attest_provenance_try2.outputs.bundle-path }}
+        run: |
+          if [ "$TRY1_OUTCOME" = "success" ]; then
+            url="$URL1"; bundle="$BUNDLE1"
+          else
+            url="$URL2"; bundle="$BUNDLE2"
+          fi
+          {
+            echo "attestation-url=${url}"
+            echo "bundle-path=${bundle}"
+          } >> "$GITHUB_OUTPUT"
 
       # The tags are applied last: only once the digest is signed and both its
       # SBOM and provenance attestations exist. Each tag is pointed at exactly
@@ -984,6 +1068,19 @@ jobs:
     runs-on: ubuntu-latest
     needs: publish_image
     if: github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success'
+    # One release at a time across the whole fleet. A shared-input change tags
+    # every image, so a wave creates eight releases at once; on 2026-10-14 two
+    # of them failed with a 404 from GitHub's list-releases API while the other
+    # six, identical, succeeded.
+    #
+    # queue: max is load-bearing. With the default queue (single) a group holds
+    # one running and ONE pending job and CANCELS any older pending one, so a
+    # wave of eight would silently drop six releases - worse than the race it
+    # replaces. max keeps up to 100 pending.
+    concurrency:
+      group: github-release-api
+      cancel-in-progress: false
+      queue: max
     permissions:
       contents: write
       actions: read
@@ -1334,6 +1431,29 @@ jobs:
           echo "EOF" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
+        id: release_try1
+        continue-on-error: true
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ steps.parse_tag_release.outputs.image-base-name }} ${{ steps.parse_tag_release.outputs.version }}"
+          body: ${{ env.BODY_TEXT }}
+          draft: false
+          prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait before retrying the release
+        if: steps.release_try1.outcome == 'failure'
+        run: |
+          delay=$(( 30 + RANDOM % 30 ))
+          echo "::warning::release creation failed; retrying once in ${delay}s"
+          sleep "$delay"
+
+      # Safe to repeat: the action finds a release that already exists for the
+      # tag and updates it rather than creating a second one.
+      - name: Create GitHub Release (retry)
+        if: steps.release_try1.outcome == 'failure'
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           tag_name: ${{ github.ref_name }}
