@@ -28,8 +28,15 @@ trivy-python:
 # the same files in CI and accepts $/.
 # SHELLCHECK_OPTS=--severity=warning drops the pre-existing SC2086/SC2129/etc
 # info/style noise (tracked as tech debt) while still catching warning+ issues.
+# The second -ignore covers concurrency "queue", which GitHub supports (it
+# lets more than one job wait in a concurrency group instead of cancelling all
+# but the newest) but actionlint 1.7.12's schema predates. It is load-bearing in
+# publish-base-images.yml, so it cannot simply be removed to satisfy the linter.
 lint:
-	SHELLCHECK_OPTS='--severity=warning' actionlint -ignore 'specifying action "\$$/.+" in invalid format' .github/workflows/*.yml
+	SHELLCHECK_OPTS='--severity=warning' actionlint \
+		-ignore 'specifying action "\$$/.+" in invalid format' \
+		-ignore 'unexpected key "queue" for "concurrency" section' \
+		.github/workflows/*.yml
 # Run the workflow security analysis that the required `zizmor` check runs
 # (zizmorcore/zizmor-action: regular persona, low severity and above). A
 # finding fails that check. Inputs are named explicitly rather than `.` so a
