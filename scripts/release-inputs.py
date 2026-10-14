@@ -2,9 +2,9 @@
 """Decide which images need a new release, from what actually goes into them.
 
 An image is released when any of its build inputs changed since its newest
-release tag (release/<image>/vX.Y.Z). The inputs are derived from the
-Dockerfile itself rather than listed by hand, so a new COPY is covered the day
-it is added:
+release tag (release/<image>/vX.Y.Z) whose publish did not fail. The inputs are
+derived from the Dockerfile itself rather than listed by hand, so a new COPY is
+covered the day it is added:
 
   - Dockerfile.<image>
   - tests/container-structure/<image>.yaml
@@ -17,16 +17,29 @@ Comparing against the previous release tag, not the previous commit, means a
 change that was merged while tagging failed or was skipped is still picked up
 by the next run.
 
+A tag whose publish run ended in anything but success is passed over, so a
+change it carried is released again by the next run instead of waiting for
+the image's next input change. Only a finished run counts as failed: a tag
+whose publish is queued or still running is the baseline, otherwise two
+merges a minute apart would release the same change twice. A run that was
+re-run to success counts as success. The lookup reads the PUBLISH_RUN_PAGES
+most recent tag-push runs of the publish workflow; a tag older than that
+window is the baseline whatever its outcome.
+
 Usage:
-  release-inputs.py changed           JSON list of images to release
+  release-inputs.py changed [--repo OWNER/NAME]
+                                      JSON list of images to release; with
+                                      --repo, tags whose publish failed in
+                                      that repository are passed over
   release-inputs.py inputs <image>    the derived input paths, one per line
 
 Fails (exit 1) rather than guess: a COPY source it cannot resolve, or any git
-error, stops the run instead of reporting "nothing changed".
+or GitHub API error, stops the run instead of reporting "nothing changed".
 """
 
 from __future__ import annotations
 
+import itertools
 import json
 import re
 import shlex
@@ -45,7 +58,10 @@ SHARED_INPUTS = (
 )
 
 DOCKERFILE_PREFIX = "Dockerfile."
+PUBLISH_WORKFLOW = "publish-base-images.yml"
+PUBLISH_RUN_PAGES = 3  # of 100 runs each; a full eight-image wave is 8 runs
 RELEASE_VERSION = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 INSTRUCTION = re.compile(r"^\s*(COPY|ADD)\s+(.*)$", re.IGNORECASE)
 REMOTE = re.compile(r"^(https?://|git@|ssh://)", re.IGNORECASE)
 GLOB = re.compile(r"[*?\[]")
@@ -134,28 +150,74 @@ def images(repo: Path) -> list[str]:
     return sorted(names)
 
 
-def latest_release(repo: Path, image: str) -> str | None:
+def release_tags(repo: Path, image: str) -> list[str]:
+    """The image's release tags, newest version first."""
     result = git(repo, "tag", "--list", f"release/{image}/v*")
     if result.returncode != 0:
         raise RuntimeError(f"git tag failed: {result.stderr.strip()}")
-    best, best_key = None, None
+    keyed = []
     for tag in result.stdout.split():
         match = RELEASE_VERSION.match(tag.rsplit("/", 1)[-1])
-        if not match:
+        if match:
+            keyed.append((tuple(int(n) for n in match.groups()), tag))
+    return [tag for _, tag in sorted(keyed, reverse=True)]
+
+
+def latest_release(repo: Path, image: str,
+                   failed: frozenset[str] | set[str] = frozenset()) -> str | None:
+    """The newest release tag, passing over any whose publish failed."""
+    return next((tag for tag in release_tags(repo, image) if tag not in failed), None)
+
+
+def failed_publishes(runs: list[dict]) -> set[str]:
+    """Release tags whose newest publish run finished in anything but success.
+
+    A queued or running publish is not a failure. A re-run is the same run
+    with a later attempt, so it carries the final conclusion; a tag pushed
+    again is judged on its newest run only.
+    """
+    seen, failed = set(), set()
+    for run in sorted(runs, key=lambda r: r.get("created_at") or "", reverse=True):
+        tag = run.get("head_branch") or ""
+        if not tag.startswith("release/") or tag in seen:
             continue
-        key = tuple(int(n) for n in match.groups())
-        if best_key is None or key > best_key:
-            best, best_key = tag, key
-    return best
+        seen.add(tag)
+        if run.get("status") == "completed" and run.get("conclusion") != "success":
+            failed.add(tag)
+    return failed
 
 
-def changed_inputs(repo: Path, image: str, head: str = "HEAD") -> tuple[str | None, list[str]]:
+def publish_runs(repository: str, pages: int = PUBLISH_RUN_PAGES) -> list[dict]:
+    """The most recent tag-push runs of the publish workflow, read with gh."""
+    if not REPOSITORY.match(repository):
+        raise InputError(f"not an OWNER/NAME repository: {repository}")
+    runs: list[dict] = []
+    for page in range(1, pages + 1):
+        result = subprocess.run(
+            ["gh", "api", f"repos/{repository}/actions/workflows/{PUBLISH_WORKFLOW}/runs"
+                          f"?event=push&per_page=100&page={page}"],
+            capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise RuntimeError(f"listing {PUBLISH_WORKFLOW} runs failed: {result.stderr.strip()}")
+        try:
+            batch = json.loads(result.stdout).get("workflow_runs", [])
+        except (ValueError, AttributeError) as error:
+            raise RuntimeError(f"unreadable {PUBLISH_WORKFLOW} runs response: {error}") from error
+        runs += batch
+        if len(batch) < 100:
+            break
+    return runs
+
+
+def changed_inputs(repo: Path, image: str, head: str = "HEAD",
+                   failed: frozenset[str] | set[str] = frozenset()) -> tuple[str | None, list[str]]:
     """The baseline tag, and which inputs differ between it and head.
 
     No release tag at all means the image has never been released, which is
-    reported as a change to its Dockerfile.
+    reported as a change to its Dockerfile. So does an image whose every
+    release failed to publish.
     """
-    baseline = latest_release(repo, image)
+    baseline = latest_release(repo, image, failed)
     inputs = image_inputs(repo, image)
     if baseline is None:
         return None, [f"{DOCKERFILE_PREFIX}{image}"]
@@ -166,25 +228,35 @@ def changed_inputs(repo: Path, image: str, head: str = "HEAD") -> tuple[str | No
     return baseline, result.stdout.split()
 
 
-def changed_images(repo: Path, head: str = "HEAD", log=sys.stderr) -> list[str]:
+def changed_images(repo: Path, head: str = "HEAD", log=sys.stderr,
+                   failed: frozenset[str] | set[str] = frozenset()) -> list[str]:
     selected = []
     for image in images(repo):
-        baseline, changed = changed_inputs(repo, image, head)
+        baseline, changed = changed_inputs(repo, image, head, failed)
+        # Every tag newer than the baseline was passed over for a failed publish.
+        passed = list(itertools.takewhile(lambda t: t != baseline, release_tags(repo, image)))
+        note = f" (passed over {', '.join(passed)}: publish failed)" if passed else ""
         if changed:
             selected.append(image)
             shown = ", ".join(changed[:5]) + (f" (+{len(changed) - 5} more)" if len(changed) > 5 else "")
-            print(f"{image}: release, changed since {baseline or 'never released'}: {shown}",
+            print(f"{image}: release, changed since {baseline or 'never released'}{note}: {shown}",
                   file=log)
         else:
-            print(f"{image}: no input changed since {baseline}", file=log)
+            print(f"{image}: no input changed since {baseline}{note}", file=log)
     return selected
 
 
 def main(argv: list[str]) -> int:
     repo = Path.cwd()
     try:
-        if argv[:1] == ["changed"] and len(argv) == 1:
-            print(json.dumps(changed_images(repo)))
+        if argv[:1] == ["changed"] and (len(argv) == 1 or (len(argv) == 3 and argv[1] == "--repo")):
+            failed: set[str] = set()
+            if len(argv) == 3:
+                runs = publish_runs(argv[2])
+                failed = failed_publishes(runs)
+                print(f"read {len(runs)} recent publish runs; failed: "
+                      f"{', '.join(sorted(failed)) or 'none'}", file=sys.stderr)
+            print(json.dumps(changed_images(repo, failed=failed)))
             return 0
         if argv[:1] == ["inputs"] and len(argv) == 2:
             print("\n".join(image_inputs(repo, argv[1])))
