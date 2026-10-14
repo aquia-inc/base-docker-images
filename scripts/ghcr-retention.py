@@ -459,6 +459,28 @@ def rate_limit_wait(status: int, headers: dict[str, str], now: float) -> float |
     return None
 
 
+def retirements(plans: list[Plan]) -> list[dict[str, str]]:
+    """Stale tracking tags to retire, one entry per image and tag.
+
+    Each entry carries the digest the tag was seen on in the multi-arch and
+    both per-arch packages ("-" where the tag was not seen), which
+    eol/retire-tag.sh requires to be unchanged before it pushes a marker.
+    """
+    seen: dict[tuple[str, str], dict[str, str]] = {}
+    for plan in plans:
+        suffix = plan.package[len(plan.image):]
+        key = {"": "digest", "-linux-amd64": "amd64", "-linux-arm64": "arm64"}.get(suffix)
+        if key is None:
+            continue
+        for tag, digest in plan.retire.items():
+            if tag in ALWAYS_KEEP:
+                continue
+            entry = seen.setdefault((plan.image, tag), {
+                "image": plan.image, "tag": tag, "digest": "-", "amd64": "-", "arm64": "-"})
+            entry[key] = digest
+    return [seen[k] for k in sorted(seen)]
+
+
 # ---------------------------------------------------------------------------
 # I/O
 # ---------------------------------------------------------------------------
@@ -675,6 +697,8 @@ def main() -> int:
     parser.add_argument("--max-delete", type=int, default=400,
                         help="delete requests per run; whole groups only")
     parser.add_argument("--deletion-log", default="deletion-log.json")
+    parser.add_argument("--retire-list",
+                        help="with --apply, write the stale tags to retire (eol/retire-tag.sh)")
     args = parser.parse_args()
     if args.apply and args.today is not None:
         parser.error("--today cannot be combined with --apply: deletion uses the real date")
@@ -763,6 +787,12 @@ def main() -> int:
         for refusal in refusals:
             print("  " + refusal)
         return 2
+
+    if args.retire_list:
+        retire_entries = retirements([plan for _, _, plan, _ in planned])
+        with open(args.retire_list, "w", encoding="utf-8") as handle:
+            json.dump(retire_entries, handle, indent=1)
+        print(f"\nRetire list: {len(retire_entries)} tags in {args.retire_list}")
 
     outcome = Outcome()
     try:

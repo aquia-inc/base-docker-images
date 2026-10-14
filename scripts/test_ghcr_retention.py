@@ -462,6 +462,29 @@ def test_the_run_stops_at_the_rate_budget_floor():
     assert outcome.attempted == 1 and "rate budget" in outcome.stopped and not outcome.failed
 
 
+def test_retirements_merge_the_three_packages_of_an_image():
+    plans = [gr.Plan(package="nodejs-base", image="nodejs-base", retire={"24.10": d(1)}),
+             gr.Plan(package="nodejs-base-linux-amd64", image="nodejs-base", retire={"24.10": d(2)}),
+             gr.Plan(package="nodejs-base-linux-arm64", image="nodejs-base", retire={"24.10": d(3)}),
+             gr.Plan(package="go-base-linux-arm64", image="go-base", retire={"1.25": d(4)})]
+    assert gr.retirements(plans) == [
+        {"image": "go-base", "tag": "1.25", "digest": "-", "amd64": "-", "arm64": d(4)},
+        {"image": "nodejs-base", "tag": "24.10", "digest": d(1), "amd64": d(2), "arm64": d(3)}]
+
+
+def test_retirements_never_name_an_always_kept_tag():
+    plans = [gr.Plan(package="fips-base", image="fips-base", retire={"openssl3": d(1), "latest": d(2)})]
+    assert gr.retirements(plans) == []
+
+
+def test_the_retire_list_is_written_only_after_the_guards():
+    import ast
+
+    main = next(fn for fn in _tree().body if isinstance(fn, ast.FunctionDef) and fn.name == "main")
+    lines = {getattr(n.func, "id", ""): n.lineno for n in ast.walk(main) if isinstance(n, ast.Call)}
+    assert lines["apply_refusals"] < lines["retirements"]
+
+
 def test_delete_version_reports_errors_without_raising_or_leaking():
     secret = "ghp_" + "c" * 36
     gr.remember_secret(secret)
