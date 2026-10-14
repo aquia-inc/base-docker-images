@@ -1,0 +1,89 @@
+# GHCR retention: delete what the retention plan deletes.
+#
+# Policy (README "Image Retention", announced in #758): each image keeps its
+# newest 30 releases and every release younger than 90 days; latest,
+# still-moving tracking tags and the frozen or retired FIPS tags are never
+# removed; older releases are deleted with their signatures and attestations.
+#
+# Dispatched by hand, from main only, and never scheduled. It takes no inputs:
+# the limits below are part of the reviewed code, so changing what a run may
+# delete is a pull request, not a value typed into a form.
+#
+# scripts/ghcr-retention.py refuses to start unless the date is on or after the
+# one the README announces, every safety invariant holds (including that each
+# package keeps at least min(30, its release count) releases), and the plan
+# deletes no more than EXPECT_AT_MOST versions. A run deletes at most
+# MAX_DELETE versions, in whole groups (a release, its child manifests and its
+# signatures), children first, and stops early at the API rate floor;
+# dispatch it again to continue. A release that still carries a tracking tag
+# waits until that tag is retired.
+#
+# The deletion log lists every version id deleted: GitHub can restore a
+# deleted package version for 30 days.
+name: GHCR Retention Apply
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+# Shared with ghcr-retention.yml: a report never overlaps a deletion.
+concurrency:
+  group: ghcr-retention
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    # Deletion runs the code on main, never a branch's.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read  # checkout, and the release tags that define a release
+      # The repository holds the admin role on packages its workflow published,
+      # which is what lets this token delete their versions.
+      packages: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Unit tests
+        run: python3 scripts/test_ghcr_retention.py
+
+      - name: Apply retention
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Upper bound on the plan's deletions, from report run RUN_ID_TBD.
+          EXPECT_AT_MOST: "EXPECT_TBD"
+          # Delete requests per run. About 1000 API requests an hour are shared
+          # with every workflow in the repository; listing the packages costs
+          # about 200 of them.
+          MAX_DELETE: "400"
+        run: |
+          set -o pipefail
+          python3 scripts/ghcr-retention.py --apply \
+            --expect-at-most "$EXPECT_AT_MOST" --max-delete "$MAX_DELETE" \
+            --report retention-report.json --deletion-log deletion-log.json | tee report.txt
+          {
+            echo '```'
+            cat report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload retention report and deletion log
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: retention-apply-${{ github.run_id }}
+          path: |
+            retention-report.json
+            deletion-log.json
+          retention-days: 90
+          if-no-files-found: warn
