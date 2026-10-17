@@ -50,7 +50,11 @@ jobs:
           # defaults, which meant this required check ran whatever zizmor had
           # released most recently: a new release could turn every pull request
           # red without a commit touching this repository.
-          # renovate: datasource=github-releases depName=zizmorcore/zizmor
+          #
+          # Renovate updates this through its built-in zizmor-action mapping
+          # (the ghcr.io/zizmorcore/zizmor tags). It must stay a bare version:
+          # the action installs that exact zizmor wheel from PyPI against its
+          # own hash lock, so renovate.json turns off digest pinning for it.
           version: 1.31.1
           persona: regular
           # Informational findings are excluded deliberately. There are 61 of

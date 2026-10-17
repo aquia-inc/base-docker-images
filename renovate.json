@@ -69,6 +69,18 @@
       "matchFileNames": ["examples/go-app/go.mod"],
       "rangeStrategy": "bump",
       "allowedVersions": "<1.27.0"
+    },
+    {
+      "description": "zizmor-action's version input is a zizmor version, not an image: since action v0.7.0 it installs that exact version's wheel from PyPI against the action's own hash lock. Renovate's built-in mapping reads the input as the ghcr.io/zizmorcore/zizmor container, so docker:pinDigests would write an image digest the action cannot install. Version updates still arrive through that mapping.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["ghcr.io/zizmorcore/zizmor"],
+      "pinDigests": false
+    },
+    {
+      "description": "zizmor-action only runs zizmor versions it ships a hash lock for and rejects any other with 'Unknown version'. Grouping the action with its version input means a zizmor release that arrives before the action supports it turns only this pull request red, not the shared patch or minor group, and the pull request goes green once the action release carrying that lock joins it.",
+      "matchPackageNames": ["zizmorcore/zizmor-action", "ghcr.io/zizmorcore/zizmor"],
+      "groupName": "zizmor",
+      "groupSlug": "zizmor"
     }
   ]
 }
