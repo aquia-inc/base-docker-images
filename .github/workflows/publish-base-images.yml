@@ -68,7 +68,7 @@ jobs:
       # The SBOM generator. A release tag, so the installer is fetched from that
       # tag rather than from a branch, and the SBOMs name a reproducible version.
       # renovate: datasource=github-releases depName=anchore/syft
-      SYFT_VERSION: "v1.54.1"
+      SYFT_VERSION: "v1.55.0"
     strategy:
       # Independent legs. One architecture failing must not cancel the other and
       # hide its logs; nothing publishes until both pass anyway, because the
