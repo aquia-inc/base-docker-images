@@ -34,7 +34,7 @@ jobs:
       contents: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
 
@@ -77,10 +77,10 @@ jobs:
       # recognise the trufflehog action's input, and a comment above that input
       # was being silently ignored while the action pin moved on without it.
       # renovate: datasource=github-releases depName=trufflesecurity/trufflehog extractVersion=^v(?<version>.+)$
-      TRUFFLEHOG_VERSION: "3.99.2"
+      TRUFFLEHOG_VERSION: "3.99.3"
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
 
@@ -95,7 +95,7 @@ jobs:
           persist-credentials: false
 
       - name: TruffleHog scan
-        uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
+        uses: trufflesecurity/trufflehog@e63326d6545de8f425d93ce24078c6e68d83f70e # v3.99.3
         with:
           # The action is pinned by SHA but pulls its scanner image at runtime
           # and defaults that to latest, so without this the binary doing the

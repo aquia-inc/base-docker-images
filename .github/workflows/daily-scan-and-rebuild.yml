@@ -17,7 +17,7 @@ env:
   # inside a run block, so a second hardcoded copy silently goes stale and
   # fails the job on the next bump.
   # renovate: datasource=github-releases depName=aquasecurity/trivy
-  TRIVY_VERSION: "0.76.0"
+  TRIVY_VERSION: "0.76.1"
 
 jobs:
   scan_and_rebuild:
@@ -33,7 +33,7 @@ jobs:
       actions: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
 
@@ -351,7 +351,7 @@ jobs:
       issues: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
 
