@@ -159,7 +159,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1: build the validated Module from unmodified OpenSSL 3.1.2 source
 # ---------------------------------------------------------------------------
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:c2a4815b6ca49b9bbafd451b4bde690d567a86b2b6b54877faac8082a7bc4296 AS fips-builder
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:bc76fa39ddd1482dd56a761b3331e03ba8f0e093ebb525618a56d014b480da88 AS fips-builder
 
 USER root
 
@@ -194,7 +194,7 @@ RUN /usr/local/bin/build-fips-module.sh "${OPENSSL_FIPS_VERSION}" "${OPENSSL_FIP
 # ---------------------------------------------------------------------------
 # Stage 2: runtime - validated Module on current, patched libcrypto/libssl
 # ---------------------------------------------------------------------------
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:c2a4815b6ca49b9bbafd451b4bde690d567a86b2b6b54877faac8082a7bc4296
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:bc76fa39ddd1482dd56a761b3331e03ba8f0e093ebb525618a56d014b480da88
 
 USER root
 
