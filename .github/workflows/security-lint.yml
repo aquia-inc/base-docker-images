@@ -44,7 +44,7 @@ jobs:
           persist-credentials: false
 
       - name: Run zizmor
-        uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
         with:
           # Every input is stated. Passing none inherited the action's own
           # defaults, which meant this required check ran whatever zizmor had
@@ -55,7 +55,7 @@ jobs:
           # (the ghcr.io/zizmorcore/zizmor tags). It must stay a bare version:
           # the action installs that exact zizmor wheel from PyPI against its
           # own hash lock, so renovate.json turns off digest pinning for it.
-          version: 1.31.1
+          version: 1.32.0
           persona: regular
           # Informational findings are excluded deliberately. There are 61 of
           # them across these workflows, none actionable as a merge gate, and a
