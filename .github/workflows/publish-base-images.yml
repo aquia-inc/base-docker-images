@@ -1433,7 +1433,7 @@ jobs:
       - name: Create GitHub Release
         id: release_try1
         continue-on-error: true
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
         with:
           tag_name: ${{ github.ref_name }}
           name: "Release ${{ steps.parse_tag_release.outputs.image-base-name }} ${{ steps.parse_tag_release.outputs.version }}"
@@ -1454,7 +1454,7 @@ jobs:
       # tag and updates it rather than creating a second one.
       - name: Create GitHub Release (retry)
         if: steps.release_try1.outcome == 'failure'
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
         with:
           tag_name: ${{ github.ref_name }}
           name: "Release ${{ steps.parse_tag_release.outputs.image-base-name }} ${{ steps.parse_tag_release.outputs.version }}"
