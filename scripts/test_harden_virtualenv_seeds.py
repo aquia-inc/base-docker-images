@@ -856,7 +856,7 @@ if __name__ == "__main__":
     for name, fn in tests:
         try:
             fn()
-        except BaseException:  # SystemExit included: the script exits on refusal
+        except (Exception, SystemExit):  # the script exits on refusal; Ctrl-C still stops
             failed.append(name)
             print(f"FAIL {name}")
             traceback.print_exc()

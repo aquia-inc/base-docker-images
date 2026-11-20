@@ -303,7 +303,9 @@ if __name__ == "__main__":
     for name, fn in tests:
         try:
             fn()
-        except BaseException:
+        # SystemExit counts as a failure (an exit inside a test must not end
+        # the run as if it passed); Ctrl-C still stops the run.
+        except (Exception, SystemExit):
             failed.append(name)
             print(f"FAIL {name}")
             traceback.print_exc()
