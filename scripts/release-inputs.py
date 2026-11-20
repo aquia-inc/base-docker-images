@@ -31,6 +31,13 @@ Usage:
                                       JSON list of images to release; with
                                       --repo, tags whose publish failed in
                                       that repository are passed over
+  release-inputs.py since <commit>    JSON list of images whose inputs differ
+                                      between <commit> (a full commit id) and
+                                      HEAD, release tags aside: what a pull
+                                      request must build before it merges
+  release-inputs.py red --repo OWNER/NAME
+                                      JSON list of images whose newest release
+                                      tag's publish failed in that repository
   release-inputs.py inputs <image>    the derived input paths, one per line
 
 Fails (exit 1) rather than guess: a COPY source it cannot resolve, or any git
@@ -65,6 +72,12 @@ REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 INSTRUCTION = re.compile(r"^\s*(COPY|ADD)\s+(.*)$", re.IGNORECASE)
 REMOTE = re.compile(r"^(https?://|git@|ssh://)", re.IGNORECASE)
 GLOB = re.compile(r"[*?\[]")
+# A full commit id (SHA-1 or SHA-256 object format), never a ref name or an
+# option: the value comes from the workflow and is handed to git.
+COMMIT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+# An image name: it comes from a file name and ends up in job names, tags,
+# GITHUB_ENV and log lines, so nothing but a plain name is accepted.
+PLAIN_IMAGE = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 
 
 class InputError(Exception):
@@ -133,8 +146,15 @@ def image_inputs(repo: Path, image: str) -> list[str]:
     return list(dict.fromkeys(inputs))
 
 
-def pathspec(path: str) -> str:
-    return f":(glob){path}" if GLOB.search(path) else path
+def pathspecs(path: str) -> list[str]:
+    # Always with explicit magic, so a COPY source such as ":!x" or
+    # ":(exclude)x" is a path to git and can never exclude another input. Not
+    # "top": it stops git normalising "./", "a//b" and "a/../b", which docker
+    # reads as paths in the context, and those inputs would select nothing.
+    if GLOB.search(path):
+        # COPY of a glob copies each directory it matches whole.
+        return [f":(glob){path}", f":(glob){path}/**"]
+    return [f":(literal){path}"]
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -143,10 +163,18 @@ def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
 
 
 def images(repo: Path) -> list[str]:
-    result = git(repo, "ls-files", "--", f"{DOCKERFILE_PREFIX}*")
+    result = git(repo, "ls-files", "-z", "--", f"{DOCKERFILE_PREFIX}*")
     if result.returncode != 0:
         raise RuntimeError(f"git ls-files failed: {result.stderr.strip()}")
-    names = [p[len(DOCKERFILE_PREFIX):] for p in result.stdout.split() if "/" not in p]
+    names = []
+    for path in result.stdout.split("\0"):
+        if not path.startswith(DOCKERFILE_PREFIX) or "/" in path:
+            continue
+        name = path[len(DOCKERFILE_PREFIX):]
+        if not PLAIN_IMAGE.fullmatch(name) or ".." in name:
+            raise InputError(f"{path!r}: not a plain image name (lowercase letters, digits, "
+                             "'.', '_' and '-', starting with a letter or digit)")
+        names.append(name)
     return sorted(names)
 
 
@@ -167,6 +195,17 @@ def latest_release(repo: Path, image: str,
                    failed: frozenset[str] | set[str] = frozenset()) -> str | None:
     """The newest release tag, passing over any whose publish failed."""
     return next((tag for tag in release_tags(repo, image) if tag not in failed), None)
+
+
+def red_images(repo: Path, failed: frozenset[str] | set[str]) -> list[str]:
+    """Images whose newest release tag's publish failed: main already cannot
+    publish them, so a pull request leg of one does not gate the merge."""
+    red = []
+    for image in images(repo):
+        tags = release_tags(repo, image)
+        if tags and tags[0] in failed:
+            red.append(image)
+    return red
 
 
 def failed_publishes(runs: list[dict]) -> set[str]:
@@ -218,14 +257,41 @@ def changed_inputs(repo: Path, image: str, head: str = "HEAD",
     release failed to publish.
     """
     baseline = latest_release(repo, image, failed)
-    inputs = image_inputs(repo, image)
     if baseline is None:
+        image_inputs(repo, image)  # still fail on a COPY source it cannot resolve
         return None, [f"{DOCKERFILE_PREFIX}{image}"]
-    result = git(repo, "diff", "--name-only", baseline, head, "--",
-                 *(pathspec(p) for p in inputs))
+    return baseline, diff_inputs(repo, image, baseline, head)
+
+
+def diff_inputs(repo: Path, image: str, base: str, head: str) -> list[str]:
+    """Which of the image's inputs differ between two commits."""
+    result = git(repo, "diff", "--name-only", base, head, "--",
+                 *(spec for p in image_inputs(repo, image) for spec in pathspecs(p)))
     if result.returncode != 0:
-        raise RuntimeError(f"git diff {baseline}..{head} failed: {result.stderr.strip()}")
-    return baseline, result.stdout.split()
+        raise RuntimeError(f"git diff {base}..{head} failed: {result.stderr.strip()}")
+    return result.stdout.split()
+
+
+def changed_since(repo: Path, base: str, head: str = "HEAD", log=sys.stderr) -> list[str]:
+    """Images whose inputs differ between base and head, whatever was released.
+
+    This is the pull request question: which images does this change touch?
+    GitHub checks out the merge of the pull request into its base, and base is
+    the base branch commit that merge was made on, so the diff is exactly what
+    merging would change - the same inputs `changed` releases after the merge.
+    """
+    if not COMMIT_ID.fullmatch(base):
+        raise InputError(f"not a full lowercase commit id: {base!r}")
+    selected = []
+    for image in images(repo):
+        changed = diff_inputs(repo, image, base, head)
+        if changed:
+            selected.append(image)
+            shown = ", ".join(changed[:5]) + (f" (+{len(changed) - 5} more)" if len(changed) > 5 else "")
+            print(f"{image}: build, changed since {base[:12]}: {shown}", file=log)
+        else:
+            print(f"{image}: no input changed since {base[:12]}", file=log)
+    return selected
 
 
 def changed_images(repo: Path, head: str = "HEAD", log=sys.stderr,
@@ -257,6 +323,16 @@ def main(argv: list[str]) -> int:
                 print(f"read {len(runs)} recent publish runs; failed: "
                       f"{', '.join(sorted(failed)) or 'none'}", file=sys.stderr)
             print(json.dumps(changed_images(repo, failed=failed)))
+            return 0
+        if argv[:1] == ["since"] and len(argv) == 2:
+            print(json.dumps(changed_since(repo, argv[1])))
+            return 0
+        if argv[:1] == ["red"] and len(argv) == 3 and argv[1] == "--repo":
+            runs = publish_runs(argv[2])
+            red = red_images(repo, failed_publishes(runs))
+            print(f"read {len(runs)} recent publish runs; newest release failed: "
+                  f"{', '.join(red) or 'none'}", file=sys.stderr)
+            print(json.dumps(red))
             return 0
         if argv[:1] == ["inputs"] and len(argv) == 2:
             print("\n".join(image_inputs(repo, argv[1])))

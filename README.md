@@ -153,10 +153,12 @@ Every tag a release publishes is signed before it is applied: the per-architectu
 
 ```shell
 cosign verify \
-  --certificate-identity-regexp "^https://github.com/aquia-inc/base-docker-images/.github/workflows/" \
+  --certificate-identity-regexp "^https://github.com/aquia-inc/base-docker-images/.github/workflows/publish-base-images.yml@refs/tags/release/" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   ghcr.io/aquia-inc/base-docker-images/python-base:latest
 ```
+
+The identity names the publish workflow running for a release tag, which is the only place this repository signs. A signature made by any other workflow, or by this one on a branch or a pull request, does not match it.
 
 The `:unsigned-staging` tag is internal: it is where a multi-arch index is assembled before it is signed. Never pull it.
 
@@ -284,7 +286,7 @@ The daily scan also compares every image's published `:latest`, on both architec
 
 Every pull request to `main` must pass these required checks:
 
-- `publish_image (linux/amd64)` and `publish_image (linux/arm64)`: build, structure-test and Trivy-scan any image whose Dockerfile the pull request changes, and run the guards below.
+- `publish_image (linux/amd64)` and `publish_image (linux/arm64)`, reported by the `pr_gate` job: the pull request builds, structure-tests and Trivy-scans every image whose release inputs it changes (the same inputs that release it after the merge, `scripts/release-inputs.py since`), one leg per image and architecture named `publish_image (<image>, <platform>)`, and runs the guards below. Each required check passes only when every leg of its architecture passed, with one exception: a leg of an image whose newest release on main already failed is built and reported but does not block the merge, so one red image does not hold up every other change while a pull request still cannot turn a green image red.
 - `zizmor`: workflow security analysis. Findings fail the job rather than being uploaded to code scanning, so a finding has to be fixed or explicitly waived to merge.
 - `Secret scanning`: TruffleHog, reporting only credentials it has confirmed are live. If it fires, rotate the credential first; removing the commit does not revoke it.
 - `Analyze (python)`: CodeQL.
@@ -296,7 +298,7 @@ Guards cover what the scanner cannot see. Each runs against the built image befo
 - `scripts/check-apk-sbom-disk.sh` (advisory): the distro's SPDX documents under `/var/lib/db/sbom`, which list the dependencies vendored inside each package. Every entry that names a manifest (a `package.json`, a lockfile, a wheel, Python metadata) must match that file, and the file must exist. Nothing in this repository writes those files, so a finding opens a `publish-advisory` issue instead of blocking the publish; it becomes a gate once a fix here edits apk-owned files.
 - `scripts/check-package-freshness.sh`: no installed apk package may be older than the live repository offers. It needs no CVE database, so it covers content the scanner cannot see. The index is fetched into an empty cache and the comparison runs offline against it, so an index baked into the image cannot make a stale image read as current.
 
-Branch protection matches these by name. Renaming a job's `name:`, or adding a matrix dimension that changes it, blocks every pull request until branch protection is updated to match.
+Branch protection matches these by name. On a pull request only `pr_gate` carries the two `publish_image (<platform>)` names; build legs are named per image and dispatched legs `publish_image (dispatch, <platform>)`, because a second job with a required name could hide a failed check behind a later success. Renaming `pr_gate`'s `name:` blocks every pull request until branch protection is updated to match.
 
 Pinning rules for workflow changes:
 

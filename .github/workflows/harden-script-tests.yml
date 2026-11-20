@@ -10,7 +10,8 @@
 # error paths that a successful build never exercises.
 #
 # The GHCR retention planner's, the release input detector's, the publish
-# reporter's and the package freshness guard's tests run here too. They are hermetic in the same way (the detector's build a throwaway git
+# reporter's, the package freshness guard's and the pull request gate's tests
+# run here too. They are hermetic in the same way (the detector's build a throwaway git
 # repository), and the live retention report runs only on its weekly schedule
 # (ghcr-retention.yml).
 name: Hardening Script Tests
@@ -33,6 +34,8 @@ on:
       - scripts/test_check_package_freshness.py
       - scripts/test_workflow_invariants.py
       - scripts/test_dockerfile_invariants.py
+      - scripts/pr-gate.py
+      - scripts/test_pr_gate.py
       - scripts/testdata/**
       - Dockerfile.*
       - .github/workflows/publish-base-images.yml
@@ -55,6 +58,8 @@ on:
       - scripts/test_check_package_freshness.py
       - scripts/test_workflow_invariants.py
       - scripts/test_dockerfile_invariants.py
+      - scripts/pr-gate.py
+      - scripts/test_pr_gate.py
       - scripts/testdata/**
       - Dockerfile.*
       - .github/workflows/publish-base-images.yml
@@ -118,3 +123,7 @@ jobs:
       # would flag; no build fails when a Dockerfile edit drops that step.
       - name: Dockerfile invariant tests
         run: python3 scripts/test_dockerfile_invariants.py
+
+      # The judge of the pull request's required build checks (pr_gate).
+      - name: Pull request gate tests
+        run: python3 scripts/test_pr_gate.py
