@@ -4,9 +4,11 @@ The change-detection tests build a throwaway git repository in a temporary
 directory, so they need git but no network, Docker or registry.
 """
 
+import atexit
 import importlib.util
 import io
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -97,6 +99,8 @@ def write(repo, path, text):
 def fixture_repo():
     """A repository shaped like this one, every image released at v1.0.0."""
     repo = pathlib.Path(tempfile.mkdtemp())
+    # Removed when the run ends, so repeated runs leave no repositories behind.
+    atexit.register(shutil.rmtree, repo, ignore_errors=True)
     git(repo, "init", "-q")
     git(repo, "config", "user.email", "t@example.invalid")
     git(repo, "config", "user.name", "t")

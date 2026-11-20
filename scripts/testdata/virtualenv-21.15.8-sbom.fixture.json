@@ -1,0 +1,2571 @@
+{
+ "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+ "bomFormat": "CycloneDX",
+ "specVersion": "1.6",
+ "serialNumber": "urn:uuid:be7b5780-86b9-5ac7-94c5-8d4e371144bb",
+ "version": 1,
+ "metadata": {
+  "timestamp": "2026-11-17T15:46:01+00:00",
+  "tools": {
+   "components": [
+    {
+     "type": "application",
+     "bom-ref": "tool:hatch_build.py",
+     "name": "hatch_build.py",
+     "version": "21.15.8"
+    },
+    {
+     "type": "application",
+     "bom-ref": "tool:tasks/sbom_content.py",
+     "name": "sbom_content.py",
+     "version": "21.15.8"
+    },
+    {
+     "type": "platform",
+     "bom-ref": "tool:pkg:generic/cpython@3.15.2",
+     "name": "cpython",
+     "version": "3.15.2",
+     "purl": "pkg:generic/cpython@3.15.2"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/hatch-fancy-pypi-readme@25.1.0",
+     "name": "hatch-fancy-pypi-readme",
+     "version": "25.1.0",
+     "purl": "pkg:pypi/hatch-fancy-pypi-readme@25.1.0"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/hatch-vcs@0.5.0",
+     "name": "hatch-vcs",
+     "version": "0.5.0",
+     "purl": "pkg:pypi/hatch-vcs@0.5.0"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/hatchling@1.33.0",
+     "name": "hatchling",
+     "version": "1.33.0",
+     "purl": "pkg:pypi/hatchling@1.33.0"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/installer@1.1.0",
+     "name": "installer",
+     "version": "1.1.0",
+     "purl": "pkg:pypi/installer@1.1.0"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/packageurl-python@0.17.6",
+     "name": "packageurl-python",
+     "version": "0.17.6",
+     "purl": "pkg:pypi/packageurl-python@0.17.6"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/packaging@26.3",
+     "name": "packaging",
+     "version": "26.3",
+     "purl": "pkg:pypi/packaging@26.3"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/pathspec@1.1.1",
+     "name": "pathspec",
+     "version": "1.1.1",
+     "purl": "pkg:pypi/pathspec@1.1.1"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/pluggy@1.7.0",
+     "name": "pluggy",
+     "version": "1.7.0",
+     "purl": "pkg:pypi/pluggy@1.7.0"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/python-sbom@0.3.1",
+     "name": "python-sbom",
+     "version": "0.3.1",
+     "purl": "pkg:pypi/python-sbom@0.3.1"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/setuptools@84.2.1",
+     "name": "setuptools",
+     "version": "84.2.1",
+     "purl": "pkg:pypi/setuptools@84.2.1"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/setuptools-scm@10.3.4",
+     "name": "setuptools-scm",
+     "version": "10.3.4",
+     "purl": "pkg:pypi/setuptools-scm@10.3.4"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/tomlkit@0.15.2",
+     "name": "tomlkit",
+     "version": "0.15.2",
+     "purl": "pkg:pypi/tomlkit@0.15.2"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/trove-classifiers@2026.9.21.13",
+     "name": "trove-classifiers",
+     "version": "2026.9.21.13",
+     "purl": "pkg:pypi/trove-classifiers@2026.9.21.13"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/vcs-versioning@2.6.0",
+     "name": "vcs-versioning",
+     "version": "2.6.0",
+     "purl": "pkg:pypi/vcs-versioning@2.6.0"
+    },
+    {
+     "type": "library",
+     "bom-ref": "tool:pkg:pypi/zipremove@0.10.0",
+     "name": "zipremove",
+     "version": "0.10.0",
+     "purl": "pkg:pypi/zipremove@0.10.0"
+    }
+   ]
+  },
+  "component": {
+   "type": "application",
+   "bom-ref": "pkg:pypi/virtualenv@21.15.8",
+   "name": "virtualenv",
+   "version": "21.15.8",
+   "purl": "pkg:pypi/virtualenv@21.15.8",
+   "properties": [
+    {
+     "name": "python:requires-python",
+     "value": ">=3.9"
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "distlib<1,>=0.4.3"
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "filelock<5,>=3.24.2; python_version >= '3.10'"
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "filelock<=3.19.1,>=3.19.1; python_version < '3.10'"
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "packaging>=26.3"
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "platformdirs<5,>=4.4"
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "python-discovery>=1.6.1"
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "typing-extensions>=4.16; python_version < '3.11'"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Development Status :: 5 - Production/Stable"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Intended Audience :: Developers"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Operating System :: MacOS :: MacOS X"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Operating System :: Microsoft :: Windows"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Operating System :: POSIX"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3 :: Only"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.9"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.10"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.11"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.12"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.13"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.14"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.15"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: Implementation :: CPython"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: Implementation :: PyPy"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: Software Development :: Libraries"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: Software Development :: Testing"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: Utilities"
+    },
+    {
+     "name": "python:keywords",
+     "value": "environments,isolated,virtual"
+    },
+    {
+     "name": "virtualenv:vcs-commit",
+     "value": "3611142f5e97d5fdbec04a4f7f1f33013249d9a7"
+    }
+   ],
+   "copyright": "Copyright (c) 2020-present The virtualenv developers"
+  },
+  "properties": [
+   {
+    "name": "virtualenv:sbom:scope",
+    "value": "Components are the wheels bundled as data files under src/virtualenv/seed/wheels/embed and the direct runtime dependencies declared in the wheel's core metadata, which carry no version because the installer resolves them."
+   },
+   {
+    "name": "virtualenv:sbom:file",
+    "value": "virtualenv.cdx.json"
+   },
+   {
+    "name": "virtualenv:sbom:repository",
+    "value": "https://github.com/pypa/virtualenv"
+   }
+  ]
+ },
+ "components": [
+  {
+   "type": "library",
+   "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl",
+   "name": "pip",
+   "version": "26.0.1",
+   "purl": "pkg:pypi/pip@26.0.1",
+   "properties": [
+    {
+     "name": "virtualenv:bundled-wheel",
+     "value": "virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.9"
+    },
+    {
+     "name": "python:requires-python",
+     "value": ">=3.9"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Development Status :: 5 - Production/Stable"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Intended Audience :: Developers"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: Software Development :: Build Tools"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3 :: Only"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.9"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.10"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.11"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.12"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.13"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.14"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: Implementation :: CPython"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: Implementation :: PyPy"
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "bdb1b08f4274833d62c1aa29e20907365a2ceb950410df15fc9521bad440122b"
+    }
+   ],
+   "evidence": {
+    "identity": [
+     {
+      "field": "purl",
+      "confidence": 1,
+      "methods": [
+       {
+        "technique": "manifest-analysis",
+        "confidence": 1,
+        "value": "pip-26.0.1.dist-info/METADATA"
+       }
+      ]
+     },
+     {
+      "field": "hash",
+      "confidence": 1,
+      "methods": [
+       {
+        "technique": "hash-comparison",
+        "confidence": 1,
+        "value": "bdb1b08f4274833d62c1aa29e20907365a2ceb950410df15fc9521bad440122b"
+       }
+      ]
+     }
+    ]
+   },
+   "components": [
+    {
+     "type": "file",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#pip/__init__.py",
+     "name": "pip/__init__.py",
+     "hashes": [
+      {
+       "alg": "SHA-256",
+       "content": "dc484a176e7cf006f5e6d981b33803dc1a74376eac271ed5852d80927fea637f"
+      }
+     ],
+     "properties": [
+      {
+       "name": "size",
+       "value": "355"
+      }
+     ]
+    },
+    {
+     "type": "file",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#pip/__main__.py",
+     "name": "pip/__main__.py",
+     "hashes": [
+      {
+       "alg": "SHA-256",
+       "content": "5b36e11d74db484ea0058d7d98d37d9b8b39a3fdfae4b3af4d84a0aa06dd0611"
+      }
+     ],
+     "properties": [
+      {
+       "name": "size",
+       "value": "854"
+      }
+     ]
+    },
+    {
+     "type": "file",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#pip/__pip-runner__.py",
+     "name": "pip/__pip-runner__.py",
+     "hashes": [
+      {
+       "alg": "SHA-256",
+       "content": "24ea04653c2bb6fee345a5c1920490280134e323727c59861f1aa91e2187bcbd"
+      }
+     ],
+     "properties": [
+      {
+       "name": "size",
+       "value": "1450"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/cachecontrol@0.14.4",
+     "name": "CacheControl",
+     "version": "0.14.4",
+     "purl": "pkg:pypi/cachecontrol@0.14.4",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/certifi@2026.1.4",
+     "name": "certifi",
+     "version": "2026.1.4",
+     "purl": "pkg:pypi/certifi@2026.1.4",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/dependency-groups@1.3.1",
+     "name": "dependency-groups",
+     "version": "1.3.1",
+     "purl": "pkg:pypi/dependency-groups@1.3.1",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/distlib@0.4.0",
+     "name": "distlib",
+     "version": "0.4.0",
+     "purl": "pkg:pypi/distlib@0.4.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/distro@1.9.0",
+     "name": "distro",
+     "version": "1.9.0",
+     "purl": "pkg:pypi/distro@1.9.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/idna@3.11",
+     "name": "idna",
+     "version": "3.11",
+     "purl": "pkg:pypi/idna@3.11",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/msgpack@1.1.2",
+     "name": "msgpack",
+     "version": "1.1.2",
+     "purl": "pkg:pypi/msgpack@1.1.2",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/packaging@26.0",
+     "name": "packaging",
+     "version": "26.0",
+     "purl": "pkg:pypi/packaging@26.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/platformdirs@4.5.1",
+     "name": "platformdirs",
+     "version": "4.5.1",
+     "purl": "pkg:pypi/platformdirs@4.5.1",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/pygments@2.19.2",
+     "name": "pygments",
+     "version": "2.19.2",
+     "purl": "pkg:pypi/pygments@2.19.2",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/pyproject-hooks@1.2.0",
+     "name": "pyproject-hooks",
+     "version": "1.2.0",
+     "purl": "pkg:pypi/pyproject-hooks@1.2.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/requests@2.32.5",
+     "name": "requests",
+     "version": "2.32.5",
+     "purl": "pkg:pypi/requests@2.32.5",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/resolvelib@1.2.1",
+     "name": "resolvelib",
+     "version": "1.2.1",
+     "purl": "pkg:pypi/resolvelib@1.2.1",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/rich@14.2.0",
+     "name": "rich",
+     "version": "14.2.0",
+     "purl": "pkg:pypi/rich@14.2.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/setuptools@70.3.0",
+     "name": "setuptools",
+     "version": "70.3.0",
+     "purl": "pkg:pypi/setuptools@70.3.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/tomli-w@1.2.0",
+     "name": "tomli-w",
+     "version": "1.2.0",
+     "purl": "pkg:pypi/tomli-w@1.2.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/tomli@2.3.0",
+     "name": "tomli",
+     "version": "2.3.0",
+     "purl": "pkg:pypi/tomli@2.3.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/truststore@0.10.4",
+     "name": "truststore",
+     "version": "0.10.4",
+     "purl": "pkg:pypi/truststore@0.10.4",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/urllib3@1.26.20",
+     "name": "urllib3",
+     "version": "1.26.20",
+     "purl": "pkg:pypi/urllib3@1.26.20",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl",
+   "name": "pip",
+   "version": "26.3",
+   "purl": "pkg:pypi/pip@26.3",
+   "properties": [
+    {
+     "name": "virtualenv:bundled-wheel",
+     "value": "virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.10"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.11"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.12"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.13"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.14"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.15"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.16"
+    },
+    {
+     "name": "python:requires-python",
+     "value": ">=3.10"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Development Status :: 5 - Production/Stable"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Intended Audience :: Developers"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: Software Development :: Build Tools"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3 :: Only"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.10"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.11"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.12"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.13"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.14"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3.15"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: Implementation :: CPython"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: Implementation :: PyPy"
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13"
+    }
+   ],
+   "evidence": {
+    "identity": [
+     {
+      "field": "purl",
+      "confidence": 1,
+      "methods": [
+       {
+        "technique": "manifest-analysis",
+        "confidence": 1,
+        "value": "pip-26.3.dist-info/METADATA"
+       }
+      ]
+     },
+     {
+      "field": "hash",
+      "confidence": 1,
+      "methods": [
+       {
+        "technique": "hash-comparison",
+        "confidence": 1,
+        "value": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13"
+       }
+      ]
+     }
+    ]
+   },
+   "components": [
+    {
+     "type": "file",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#pip/__init__.py",
+     "name": "pip/__init__.py",
+     "hashes": [
+      {
+       "alg": "SHA-256",
+       "content": "936a248ef2f750c737572ecf9265a1043ca3342459366f77aad38e8a4e4da040"
+      }
+     ],
+     "properties": [
+      {
+       "name": "size",
+       "value": "512"
+      }
+     ]
+    },
+    {
+     "type": "file",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#pip/__main__.py",
+     "name": "pip/__main__.py",
+     "hashes": [
+      {
+       "alg": "SHA-256",
+       "content": "96c6425a67a1d113dd6a601b32f17b2cfdfcc8b24f371d42bc5450a857e8fc4f"
+      }
+     ],
+     "properties": [
+      {
+       "name": "size",
+       "value": "873"
+      }
+     ]
+    },
+    {
+     "type": "file",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#pip/__pip-runner__.py",
+     "name": "pip/__pip-runner__.py",
+     "hashes": [
+      {
+       "alg": "SHA-256",
+       "content": "ef6d0cb7a874ed471ee76bfcd04385fff2586aea0bc3d6fb3dfb3fe41f758ac8"
+      }
+     ],
+     "properties": [
+      {
+       "name": "size",
+       "value": "1451"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/cachecontrol@0.14.4",
+     "name": "CacheControl",
+     "version": "0.14.4",
+     "purl": "pkg:pypi/cachecontrol@0.14.4",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/certifi@2026.10.23",
+     "name": "certifi",
+     "version": "2026.10.23",
+     "purl": "pkg:pypi/certifi@2026.10.23",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/distlib@0.4.4",
+     "name": "distlib",
+     "version": "0.4.4",
+     "purl": "pkg:pypi/distlib@0.4.4",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/distro@1.9.0",
+     "name": "distro",
+     "version": "1.9.0",
+     "purl": "pkg:pypi/distro@1.9.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/idna@3.20",
+     "name": "idna",
+     "version": "3.20",
+     "purl": "pkg:pypi/idna@3.20",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/msgpack@1.2.4",
+     "name": "msgpack",
+     "version": "1.2.4",
+     "purl": "pkg:pypi/msgpack@1.2.4",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/packaging@26.3",
+     "name": "packaging",
+     "version": "26.3",
+     "purl": "pkg:pypi/packaging@26.3",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/platformdirs@4.12.4",
+     "name": "platformdirs",
+     "version": "4.12.4",
+     "purl": "pkg:pypi/platformdirs@4.12.4",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/pygments@2.21.0",
+     "name": "pygments",
+     "version": "2.21.0",
+     "purl": "pkg:pypi/pygments@2.21.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/pyproject-hooks@1.3.3",
+     "name": "pyproject-hooks",
+     "version": "1.3.3",
+     "purl": "pkg:pypi/pyproject-hooks@1.3.3",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/requests@2.34.2",
+     "name": "requests",
+     "version": "2.34.2",
+     "purl": "pkg:pypi/requests@2.34.2",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/resolvelib@1.2.1",
+     "name": "resolvelib",
+     "version": "1.2.1",
+     "purl": "pkg:pypi/resolvelib@1.2.1",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/rich@15.0.0",
+     "name": "rich",
+     "version": "15.0.0",
+     "purl": "pkg:pypi/rich@15.0.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/setuptools@70.3.0",
+     "name": "setuptools",
+     "version": "70.3.0",
+     "purl": "pkg:pypi/setuptools@70.3.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/tomli-w@1.2.0",
+     "name": "tomli-w",
+     "version": "1.2.0",
+     "purl": "pkg:pypi/tomli-w@1.2.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/tomli@2.3.2",
+     "name": "tomli",
+     "version": "2.3.2",
+     "purl": "pkg:pypi/tomli@2.3.2",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/truststore@0.10.5",
+     "name": "truststore",
+     "version": "0.10.5",
+     "purl": "pkg:pypi/truststore@0.10.5",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/urllib3@2.8.0",
+     "name": "urllib3",
+     "version": "2.8.0",
+     "purl": "pkg:pypi/urllib3@2.8.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "pip/_vendor/vendor.txt"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl",
+   "name": "setuptools",
+   "version": "82.0.1",
+   "purl": "pkg:pypi/setuptools@82.0.1",
+   "properties": [
+    {
+     "name": "virtualenv:bundled-wheel",
+     "value": "virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.9"
+    },
+    {
+     "name": "python:requires-python",
+     "value": ">=3.9"
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest!=8.1.*,>=6; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "virtualenv>=13.0.0; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "wheel>=0.44.0; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pip>=19.1; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "packaging>=24.2; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.envs>=2.2; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-xdist>=3; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.path>=3.7.2; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "build[virtualenv]>=1.0.3; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "filelock>=3.4.0; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "ini2toml[lite]>=0.14; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "tomli-w>=1.0.0; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-timeout; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-perf; sys_platform != \"cygwin\" and extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.develop>=7.21; (python_version >= \"3.9\" and sys_platform != \"cygwin\") and extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-home>=0.5; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-subprocess; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pyproject-hooks!=1.1; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.test>=5.5; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinx>=3.5; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.packaging>=9.3; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "rst.linker>=1.9; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "furo; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinx-lint; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.tidelift>=1.4; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pygments-github-lexers==0.0.5; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinx-favicon; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinx-inline-tabs; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinx-reredirects; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinxcontrib-towncrier; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinx-notfound-page<2,>=1; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pyproject-hooks!=1.1; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "towncrier<24.7; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "packaging>=24.2; extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "more_itertools>=8.8; extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.text>=3.7; extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "importlib_metadata>=6; python_version < \"3.10\" and extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "tomli>=2.0.1; python_version < \"3.11\" and extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "wheel>=0.43.0; extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.functools>=4; extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "more_itertools; extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-checkdocs>=2.4; extra == \"check\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-ruff>=0.2.1; sys_platform != \"cygwin\" and extra == \"check\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "ruff>=0.13.0; sys_platform != \"cygwin\" and extra == \"check\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-cov; extra == \"cover\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-enabler>=2.2; extra == \"enabler\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-mypy; extra == \"type\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "mypy==1.18.*; extra == \"type\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "importlib_metadata>=7.0.2; python_version < \"3.10\" and extra == \"type\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.develop>=7.21; sys_platform != \"cygwin\" and extra == \"type\""
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "test"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "doc"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "ssl"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "certs"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "core"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "check"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "cover"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "enabler"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "type"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Development Status :: 5 - Production/Stable"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Intended Audience :: Developers"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3 :: Only"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: Software Development :: Libraries :: Python Modules"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: System :: Archiving :: Packaging"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: System :: Systems Administration"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: Utilities"
+    },
+    {
+     "name": "python:keywords",
+     "value": "CPAN PyPI distutils eggs package management"
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "a59e362652f08dcd477c78bb6e7bd9d80a7995bc73ce773050228a348ce2e5bb"
+    }
+   ],
+   "evidence": {
+    "identity": [
+     {
+      "field": "purl",
+      "confidence": 1,
+      "methods": [
+       {
+        "technique": "manifest-analysis",
+        "confidence": 1,
+        "value": "setuptools-82.0.1.dist-info/METADATA"
+       }
+      ]
+     },
+     {
+      "field": "hash",
+      "confidence": 1,
+      "methods": [
+       {
+        "technique": "hash-comparison",
+        "confidence": 1,
+        "value": "a59e362652f08dcd477c78bb6e7bd9d80a7995bc73ce773050228a348ce2e5bb"
+       }
+      ]
+     }
+    ]
+   },
+   "components": [
+    {
+     "type": "file",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#distutils-precedence.pth",
+     "name": "distutils-precedence.pth",
+     "hashes": [
+      {
+       "alg": "SHA-256",
+       "content": "2638ce9e2500e572a5e0de7faed6661eb569d1b696fcba07b0dd223da5f5d224"
+      }
+     ],
+     "properties": [
+      {
+       "name": "size",
+       "value": "151"
+      }
+     ]
+    },
+    {
+     "type": "file",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#_distutils_hack/__init__.py",
+     "name": "_distutils_hack/__init__.py",
+     "hashes": [
+      {
+       "alg": "SHA-256",
+       "content": "df81e6bcba34ee3e3952f776551fb669143b9490fdd6c4caeb32609f97e985b4"
+      }
+     ],
+     "properties": [
+      {
+       "name": "size",
+       "value": "6755"
+      }
+     ]
+    },
+    {
+     "type": "file",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#_distutils_hack/override.py",
+     "name": "_distutils_hack/override.py",
+     "hashes": [
+      {
+       "alg": "SHA-256",
+       "content": "12efecf8d17a5486780aa774b5b6c0e70b56932d8864f35df1eb7a18bb759b3a"
+      }
+     ],
+     "properties": [
+      {
+       "name": "size",
+       "value": "44"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/autocommand@2.2.2",
+     "name": "autocommand",
+     "version": "2.2.2",
+     "purl": "pkg:pypi/autocommand@2.2.2",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/autocommand-2.2.2.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/backports-tarfile@1.2.0",
+     "name": "backports.tarfile",
+     "version": "1.2.0",
+     "purl": "pkg:pypi/backports-tarfile@1.2.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/backports.tarfile-1.2.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/importlib-metadata@8.7.1",
+     "name": "importlib_metadata",
+     "version": "8.7.1",
+     "purl": "pkg:pypi/importlib-metadata@8.7.1",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/importlib_metadata-8.7.1.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/jaraco-context@6.1.0",
+     "name": "jaraco.context",
+     "version": "6.1.0",
+     "purl": "pkg:pypi/jaraco-context@6.1.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/jaraco_context-6.1.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/jaraco-functools@4.4.0",
+     "name": "jaraco.functools",
+     "version": "4.4.0",
+     "purl": "pkg:pypi/jaraco-functools@4.4.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/jaraco_functools-4.4.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/jaraco-text@4.0.0",
+     "name": "jaraco.text",
+     "version": "4.0.0",
+     "purl": "pkg:pypi/jaraco-text@4.0.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/jaraco.text-4.0.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/more-itertools@10.8.0",
+     "name": "more-itertools",
+     "version": "10.8.0",
+     "purl": "pkg:pypi/more-itertools@10.8.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/more_itertools-10.8.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/packaging@26.0",
+     "name": "packaging",
+     "version": "26.0",
+     "purl": "pkg:pypi/packaging@26.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/packaging-26.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/platformdirs@4.4.0",
+     "name": "platformdirs",
+     "version": "4.4.0",
+     "purl": "pkg:pypi/platformdirs@4.4.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/platformdirs-4.4.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/tomli@2.4.0",
+     "name": "tomli",
+     "version": "2.4.0",
+     "purl": "pkg:pypi/tomli@2.4.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/tomli-2.4.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/wheel@0.46.3",
+     "name": "wheel",
+     "version": "0.46.3",
+     "purl": "pkg:pypi/wheel@0.46.3",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/wheel-0.46.3.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/zipp@3.23.0",
+     "name": "zipp",
+     "version": "3.23.0",
+     "purl": "pkg:pypi/zipp@3.23.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/zipp-3.23.0.dist-info/METADATA"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl",
+   "name": "setuptools",
+   "version": "84.2.1",
+   "purl": "pkg:pypi/setuptools@84.2.1",
+   "properties": [
+    {
+     "name": "virtualenv:bundled-wheel",
+     "value": "virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.10"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.11"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.12"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.13"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.14"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.15"
+    },
+    {
+     "name": "virtualenv:seeded-for-python",
+     "value": "3.16"
+    },
+    {
+     "name": "python:requires-python",
+     "value": ">=3.10"
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest!=8.1.*,>=6; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "virtualenv>=13.0.0; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "wheel>=0.44.0; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pip>=19.1; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "packaging>=26.3; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.envs>=2.2; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-xdist>=3; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.path>=3.7.2; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "build[virtualenv]>=1.0.3; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "filelock>=3.4.0; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "ini2toml[lite]>=0.14; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "tomli-w>=1.0.0; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-timeout; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-perf; sys_platform != \"cygwin\" and extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.develop>=7.21; (python_version >= \"3.9\" and sys_platform != \"cygwin\") and extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-home>=0.5; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-subprocess; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pyproject-hooks!=1.1; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.test>=5.5; extra == \"test\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinx>=3.5; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.packaging>=9.3; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "rst.linker>=1.9; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "furo; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinx-lint; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.tidelift>=1.4; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pygments-github-lexers==0.0.5; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinx-favicon; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinx-inline-tabs; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinx-reredirects; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinxcontrib-towncrier; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "sphinx-notfound-page<2,>=1; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pyproject-hooks!=1.1; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "towncrier<24.7; extra == \"doc\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "packaging>=26.3; extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "more_itertools>=8.8; extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.text>=3.7; extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "importlib_metadata>=6; python_version < \"3.10\" and extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "tomli>=2.0.1; python_version < \"3.11\" and extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "wheel>=0.43.0; extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.functools>=4; extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "more_itertools; extra == \"core\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-checkdocs>=2.14; extra == \"check\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-ruff>=0.2.1; sys_platform != \"cygwin\" and extra == \"check\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "ruff>=0.13.0; sys_platform != \"cygwin\" and extra == \"check\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-cov; extra == \"cover\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-enabler>=3.4; extra == \"enabler\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "pytest-mypy>=1.0.1; platform_python_implementation != \"PyPy\" and extra == \"type\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "mypy==1.18.*; extra == \"type\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "importlib_metadata>=7.0.2; python_version < \"3.10\" and extra == \"type\""
+    },
+    {
+     "name": "python:requires-dist",
+     "value": "jaraco.develop>=7.21; sys_platform != \"cygwin\" and extra == \"type\""
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "test"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "doc"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "ssl"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "certs"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "core"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "check"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "cover"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "enabler"
+    },
+    {
+     "name": "python:provides-extra",
+     "value": "type"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Development Status :: 5 - Production/Stable"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Intended Audience :: Developers"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Programming Language :: Python :: 3 :: Only"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: Software Development :: Libraries :: Python Modules"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: System :: Archiving :: Packaging"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: System :: Systems Administration"
+    },
+    {
+     "name": "python:classifier",
+     "value": "Topic :: Utilities"
+    },
+    {
+     "name": "python:keywords",
+     "value": "CPAN PyPI distutils eggs package management"
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2"
+    }
+   ],
+   "evidence": {
+    "identity": [
+     {
+      "field": "purl",
+      "confidence": 1,
+      "methods": [
+       {
+        "technique": "manifest-analysis",
+        "confidence": 1,
+        "value": "setuptools-84.2.1.dist-info/METADATA"
+       }
+      ]
+     },
+     {
+      "field": "hash",
+      "confidence": 1,
+      "methods": [
+       {
+        "technique": "hash-comparison",
+        "confidence": 1,
+        "value": "ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2"
+       }
+      ]
+     }
+    ]
+   },
+   "components": [
+    {
+     "type": "file",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#distutils-precedence.pth",
+     "name": "distutils-precedence.pth",
+     "hashes": [
+      {
+       "alg": "SHA-256",
+       "content": "2638ce9e2500e572a5e0de7faed6661eb569d1b696fcba07b0dd223da5f5d224"
+      }
+     ],
+     "properties": [
+      {
+       "name": "size",
+       "value": "151"
+      }
+     ]
+    },
+    {
+     "type": "file",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#_distutils_hack/__init__.py",
+     "name": "_distutils_hack/__init__.py",
+     "hashes": [
+      {
+       "alg": "SHA-256",
+       "content": "ced72e54431ecf2d8d7dbd8a1e27724f1b171af3ca1503c304bf11c59a7fe861"
+      }
+     ],
+     "properties": [
+      {
+       "name": "size",
+       "value": "6800"
+      }
+     ]
+    },
+    {
+     "type": "file",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#_distutils_hack/override.py",
+     "name": "_distutils_hack/override.py",
+     "hashes": [
+      {
+       "alg": "SHA-256",
+       "content": "12efecf8d17a5486780aa774b5b6c0e70b56932d8864f35df1eb7a18bb759b3a"
+      }
+     ],
+     "properties": [
+      {
+       "name": "size",
+       "value": "44"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/autocommand@2.2.2",
+     "name": "autocommand",
+     "version": "2.2.2",
+     "purl": "pkg:pypi/autocommand@2.2.2",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/autocommand-2.2.2.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/backports-tarfile@1.2.0",
+     "name": "backports.tarfile",
+     "version": "1.2.0",
+     "purl": "pkg:pypi/backports-tarfile@1.2.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/backports.tarfile-1.2.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/importlib-metadata@8.7.1",
+     "name": "importlib_metadata",
+     "version": "8.7.1",
+     "purl": "pkg:pypi/importlib-metadata@8.7.1",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/importlib_metadata-8.7.1.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/jaraco-context@6.1.0",
+     "name": "jaraco.context",
+     "version": "6.1.0",
+     "purl": "pkg:pypi/jaraco-context@6.1.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/jaraco_context-6.1.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/jaraco-functools@4.4.0",
+     "name": "jaraco.functools",
+     "version": "4.4.0",
+     "purl": "pkg:pypi/jaraco-functools@4.4.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/jaraco_functools-4.4.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/jaraco-text@4.0.0",
+     "name": "jaraco.text",
+     "version": "4.0.0",
+     "purl": "pkg:pypi/jaraco-text@4.0.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/jaraco.text-4.0.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/more-itertools@10.8.0",
+     "name": "more-itertools",
+     "version": "10.8.0",
+     "purl": "pkg:pypi/more-itertools@10.8.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/more_itertools-10.8.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/packaging@26.3",
+     "name": "packaging",
+     "version": "26.3",
+     "purl": "pkg:pypi/packaging@26.3",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/packaging-26.3.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/platformdirs@4.4.0",
+     "name": "platformdirs",
+     "version": "4.4.0",
+     "purl": "pkg:pypi/platformdirs@4.4.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/platformdirs-4.4.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/tomli@2.4.0",
+     "name": "tomli",
+     "version": "2.4.0",
+     "purl": "pkg:pypi/tomli@2.4.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/tomli-2.4.0.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/wheel@0.46.3",
+     "name": "wheel",
+     "version": "0.46.3",
+     "purl": "pkg:pypi/wheel@0.46.3",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/wheel-0.46.3.dist-info/METADATA"
+      }
+     ]
+    },
+    {
+     "type": "library",
+     "bom-ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/zipp@3.23.0",
+     "name": "zipp",
+     "version": "3.23.0",
+     "purl": "pkg:pypi/zipp@3.23.0",
+     "properties": [
+      {
+       "name": "virtualenv:vendored-manifest",
+       "value": "setuptools/_vendor/zipp-3.23.0.dist-info/METADATA"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "requires-dist:distlib<1,>=0.4.3",
+   "name": "distlib",
+   "purl": "pkg:pypi/distlib",
+   "properties": [
+    {
+     "name": "virtualenv:requires-dist",
+     "value": "distlib<1,>=0.4.3"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "requires-dist:filelock<5,>=3.24.2; python_version >= '3.10'",
+   "name": "filelock",
+   "purl": "pkg:pypi/filelock",
+   "properties": [
+    {
+     "name": "virtualenv:requires-dist",
+     "value": "filelock<5,>=3.24.2; python_version >= '3.10'"
+    },
+    {
+     "name": "virtualenv:environment-marker",
+     "value": "python_version >= \"3.10\""
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "requires-dist:filelock<=3.19.1,>=3.19.1; python_version < '3.10'",
+   "name": "filelock",
+   "purl": "pkg:pypi/filelock",
+   "properties": [
+    {
+     "name": "virtualenv:requires-dist",
+     "value": "filelock<=3.19.1,>=3.19.1; python_version < '3.10'"
+    },
+    {
+     "name": "virtualenv:environment-marker",
+     "value": "python_version < \"3.10\""
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "requires-dist:packaging>=26.3",
+   "name": "packaging",
+   "purl": "pkg:pypi/packaging",
+   "properties": [
+    {
+     "name": "virtualenv:requires-dist",
+     "value": "packaging>=26.3"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "requires-dist:platformdirs<5,>=4.4",
+   "name": "platformdirs",
+   "purl": "pkg:pypi/platformdirs",
+   "properties": [
+    {
+     "name": "virtualenv:requires-dist",
+     "value": "platformdirs<5,>=4.4"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "requires-dist:python-discovery>=1.6.1",
+   "name": "python-discovery",
+   "purl": "pkg:pypi/python-discovery",
+   "properties": [
+    {
+     "name": "virtualenv:requires-dist",
+     "value": "python-discovery>=1.6.1"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "requires-dist:typing-extensions>=4.16; python_version < '3.11'",
+   "name": "typing-extensions",
+   "purl": "pkg:pypi/typing-extensions",
+   "properties": [
+    {
+     "name": "virtualenv:requires-dist",
+     "value": "typing-extensions>=4.16; python_version < '3.11'"
+    },
+    {
+     "name": "virtualenv:environment-marker",
+     "value": "python_version < \"3.11\""
+    }
+   ]
+  }
+ ],
+ "dependencies": [
+  {
+   "ref": "pkg:pypi/virtualenv@21.15.8",
+   "dependsOn": [
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl",
+    "requires-dist:distlib<1,>=0.4.3",
+    "requires-dist:filelock<5,>=3.24.2; python_version >= '3.10'",
+    "requires-dist:filelock<=3.19.1,>=3.19.1; python_version < '3.10'",
+    "requires-dist:packaging>=26.3",
+    "requires-dist:platformdirs<5,>=4.4",
+    "requires-dist:python-discovery>=1.6.1",
+    "requires-dist:typing-extensions>=4.16; python_version < '3.11'"
+   ]
+  },
+  {
+   "ref": "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl",
+   "dependsOn": [
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/cachecontrol@0.14.4",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/certifi@2026.1.4",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/dependency-groups@1.3.1",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/distlib@0.4.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/distro@1.9.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/idna@3.11",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/msgpack@1.1.2",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/packaging@26.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/platformdirs@4.5.1",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/pygments@2.19.2",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/pyproject-hooks@1.2.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/requests@2.32.5",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/resolvelib@1.2.1",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/rich@14.2.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/setuptools@70.3.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/tomli-w@1.2.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/tomli@2.3.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/truststore@0.10.4",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.0.1-py3-none-any.whl#vendored/pkg:pypi/urllib3@1.26.20"
+   ]
+  },
+  {
+   "ref": "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl",
+   "dependsOn": [
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/cachecontrol@0.14.4",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/certifi@2026.10.23",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/distlib@0.4.4",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/distro@1.9.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/idna@3.20",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/msgpack@1.2.4",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/packaging@26.3",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/platformdirs@4.12.4",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/pygments@2.21.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/pyproject-hooks@1.3.3",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/requests@2.34.2",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/resolvelib@1.2.1",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/rich@15.0.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/setuptools@70.3.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/tomli-w@1.2.0",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/tomli@2.3.2",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/truststore@0.10.5",
+    "bundled:virtualenv/seed/wheels/embed/pip-26.3-py3-none-any.whl#vendored/pkg:pypi/urllib3@2.8.0"
+   ]
+  },
+  {
+   "ref": "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl",
+   "dependsOn": [
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/autocommand@2.2.2",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/backports-tarfile@1.2.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/importlib-metadata@8.7.1",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/jaraco-context@6.1.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/jaraco-functools@4.4.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/jaraco-text@4.0.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/more-itertools@10.8.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/packaging@26.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/platformdirs@4.4.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/tomli@2.4.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/wheel@0.46.3",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-82.0.1-py3-none-any.whl#vendored/pkg:pypi/zipp@3.23.0"
+   ]
+  },
+  {
+   "ref": "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl",
+   "dependsOn": [
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/autocommand@2.2.2",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/backports-tarfile@1.2.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/importlib-metadata@8.7.1",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/jaraco-context@6.1.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/jaraco-functools@4.4.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/jaraco-text@4.0.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/more-itertools@10.8.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/packaging@26.3",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/platformdirs@4.4.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/tomli@2.4.0",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/wheel@0.46.3",
+    "bundled:virtualenv/seed/wheels/embed/setuptools-84.2.1-py3-none-any.whl#vendored/pkg:pypi/zipp@3.23.0"
+   ]
+  },
+  {
+   "ref": "tool:pkg:pypi/hatch-fancy-pypi-readme@25.1.0",
+   "dependsOn": [
+    "tool:pkg:pypi/hatchling@1.33.0"
+   ]
+  },
+  {
+   "ref": "tool:pkg:pypi/hatch-vcs@0.5.0",
+   "dependsOn": [
+    "tool:pkg:pypi/hatchling@1.33.0",
+    "tool:pkg:pypi/setuptools-scm@10.3.4"
+   ]
+  },
+  {
+   "ref": "tool:pkg:pypi/hatchling@1.33.0",
+   "dependsOn": [
+    "tool:pkg:pypi/packaging@26.3",
+    "tool:pkg:pypi/pathspec@1.1.1",
+    "tool:pkg:pypi/pluggy@1.7.0",
+    "tool:pkg:pypi/tomlkit@0.15.2",
+    "tool:pkg:pypi/trove-classifiers@2026.9.21.13"
+   ]
+  },
+  {
+   "ref": "tool:pkg:pypi/installer@1.1.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "tool:pkg:pypi/packageurl-python@0.17.6",
+   "dependsOn": []
+  },
+  {
+   "ref": "tool:pkg:pypi/packaging@26.3",
+   "dependsOn": []
+  },
+  {
+   "ref": "tool:pkg:pypi/pathspec@1.1.1",
+   "dependsOn": []
+  },
+  {
+   "ref": "tool:pkg:pypi/pluggy@1.7.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "tool:pkg:pypi/python-sbom@0.3.1",
+   "dependsOn": [
+    "tool:pkg:pypi/installer@1.1.0",
+    "tool:pkg:pypi/packageurl-python@0.17.6",
+    "tool:pkg:pypi/packaging@26.3",
+    "tool:pkg:pypi/zipremove@0.10.0"
+   ]
+  },
+  {
+   "ref": "tool:pkg:pypi/setuptools@84.2.1",
+   "dependsOn": []
+  },
+  {
+   "ref": "tool:pkg:pypi/setuptools-scm@10.3.4",
+   "dependsOn": [
+    "tool:pkg:pypi/packaging@26.3",
+    "tool:pkg:pypi/setuptools@84.2.1",
+    "tool:pkg:pypi/vcs-versioning@2.6.0"
+   ]
+  },
+  {
+   "ref": "tool:pkg:pypi/tomlkit@0.15.2",
+   "dependsOn": []
+  },
+  {
+   "ref": "tool:pkg:pypi/trove-classifiers@2026.9.21.13",
+   "dependsOn": []
+  },
+  {
+   "ref": "tool:pkg:pypi/vcs-versioning@2.6.0",
+   "dependsOn": [
+    "tool:pkg:pypi/packaging@26.3"
+   ]
+  },
+  {
+   "ref": "tool:pkg:pypi/zipremove@0.10.0",
+   "dependsOn": []
+  }
+ ],
+ "compositions": [
+  {
+   "aggregate": "incomplete",
+   "dependencies": [
+    "pkg:pypi/virtualenv@21.15.8"
+   ]
+  }
+ ],
+ "formulation": [
+  {
+   "bom-ref": "formula:wheel-build",
+   "workflows": [
+    {
+     "bom-ref": "workflow:wheel-build",
+     "uid": "wheel-build",
+     "name": "build the wheel and this SBOM",
+     "taskTypes": [
+      "build"
+     ],
+     "resourceReferences": [
+      {
+       "ref": "tool:hatch_build.py"
+      },
+      {
+       "ref": "tool:tasks/sbom_content.py"
+      },
+      {
+       "ref": "tool:pkg:generic/cpython@3.15.2"
+      },
+      {
+       "ref": "tool:pkg:pypi/hatch-fancy-pypi-readme@25.1.0"
+      },
+      {
+       "ref": "tool:pkg:pypi/hatch-vcs@0.5.0"
+      },
+      {
+       "ref": "tool:pkg:pypi/hatchling@1.33.0"
+      },
+      {
+       "ref": "tool:pkg:pypi/installer@1.1.0"
+      },
+      {
+       "ref": "tool:pkg:pypi/packageurl-python@0.17.6"
+      },
+      {
+       "ref": "tool:pkg:pypi/packaging@26.3"
+      },
+      {
+       "ref": "tool:pkg:pypi/pathspec@1.1.1"
+      },
+      {
+       "ref": "tool:pkg:pypi/pluggy@1.7.0"
+      },
+      {
+       "ref": "tool:pkg:pypi/python-sbom@0.3.1"
+      },
+      {
+       "ref": "tool:pkg:pypi/setuptools@84.2.1"
+      },
+      {
+       "ref": "tool:pkg:pypi/setuptools-scm@10.3.4"
+      },
+      {
+       "ref": "tool:pkg:pypi/tomlkit@0.15.2"
+      },
+      {
+       "ref": "tool:pkg:pypi/trove-classifiers@2026.9.21.13"
+      },
+      {
+       "ref": "tool:pkg:pypi/vcs-versioning@2.6.0"
+      },
+      {
+       "ref": "tool:pkg:pypi/zipremove@0.10.0"
+      }
+     ],
+     "outputs": [
+      {
+       "type": "artifact",
+       "resource": {
+        "ref": "pkg:pypi/virtualenv@21.15.8"
+       }
+      }
+     ],
+     "inputs": [
+      {
+       "environmentVars": [
+        {
+         "name": "SOURCE_DATE_EPOCH",
+         "value": "1794930361"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

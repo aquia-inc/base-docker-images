@@ -204,9 +204,24 @@ SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 
 # Same world-unpin rationale as the builder stage. This is the mechanism that
 # keeps the out-of-FIPS-boundary libcrypto/libssl patched on every rebuild.
-RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
+# CACHEBUST (set per run by the publish workflow, as for every other image)
+# makes that true: without it this layer could be replayed from the build
+# cache, shipping an old package set that the freshness guard has to judge
+# against an old index. The builder stage above is left cacheable: it only
+# compiles the fixed, validated Module.
+ARG CACHEBUST=unset
+RUN echo "cachebust=${CACHEBUST}" && \
+    sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
     apk update && apk upgrade --no-cache && \
-    apk add --no-cache openssl ca-certificates
+    apk add --no-cache openssl ca-certificates && \
+    # Upgrade by name every package still older than the repository offers (the
+    # publish gate's freshness list): a plain "apk upgrade" can leave a package
+    # pulled in by "apk add" behind, as libpng 1.6.59-r0 did when Wolfi split it.
+    # pipefail comes from the SHELL above.
+    apk update && \
+    apk version -l '<' | tail -n +2 | awk '{print $1}' \
+        | sed -E 's/-[0-9][^-]*-r[0-9]+$//' \
+        | xargs -r apk add --no-cache --upgrade
 
 ENV FIPS_ROOT=/opt/openssl-fips
 ENV OPENSSL_MODULES=${FIPS_ROOT}/ossl-modules \

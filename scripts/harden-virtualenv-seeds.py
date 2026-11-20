@@ -47,17 +47,30 @@ packages a patched build of the identical version - currently urllib3 2.7.0
 against the distro's 2.8.0. No scanner reads inside a .whl, so an image can
 seed a vulnerable pip into every environment while scanning perfectly clean.
 
-The second pass therefore prefers the distro's own wheel of the same project
-whenever one is present and not older. That is deliberately framed as "not
-behind the distro-patched copy of the same artifact" rather than a list of
-names and floors kept here: it is self-healing, and it cannot drift out of
-agreement with what the distro actually ships. Projects with no distro
-counterpart are named in the output rather than passed over silently.
+The second pass therefore seeds the distro's own wheel of the same project
+whenever one is present, whether its version is newer or older than the one
+virtualenv bundled: a newer PyPI pip is not a patched one (virtualenv 21.15.4
+bundles pip 26.3, newer than Wolfi's patched 26.2.2, and keeping it seeded
+PyPI's vendored pkg_resources). No list of names or floors is kept here, so it
+cannot drift out of agreement with what the distro actually ships. Projects
+with no distro counterpart are named in the output rather than passed over
+silently.
+
+Every rewrite ends with the inventory describing the bytes on disk, and the
+build fails unless it does: virtualenv's SBOM entry for a replaced wheel is
+regenerated from that wheel (version, hashes, file and vendored entries), its
+dependency references are read from the document rather than rebuilt (the
+bom-ref scheme changed in virtualenv 21.15.7), and verify_inventory() checks
+SBOM, RECORD and the BUNDLE tables against the wheels before the seeded
+environment itself is tested.
 """
 
 from __future__ import annotations
 
+import ast
 import base64
+import email
+import email.message
 import hashlib
 import json
 import pathlib
@@ -129,6 +142,39 @@ def rewrite_bundle_support(embed: pathlib.Path, replacements: dict[str, str]) ->
         cached.unlink()
 
 
+def is_under(ref: str, refs: set[str]) -> bool:
+    """True for one of refs, or for anything nested under one ("<ref>#...")."""
+    return ref in refs or ref.split("#", 1)[0] in refs
+
+
+def prune_refs(document: dict, stale_refs: set[str]) -> None:
+    """Remove every dependency node, edge and composition entry for stale_refs.
+
+    A component's nested entries (its files and vendored packages) carry refs
+    of the form "<component ref>#<path>", so those go with it.
+    """
+    if "dependencies" in document:
+        dependencies = []
+        for entry in document["dependencies"]:
+            if is_under(entry.get("ref", ""), stale_refs):
+                continue
+            if "dependsOn" in entry:
+                entry["dependsOn"] = [
+                    ref for ref in entry["dependsOn"] if not is_under(ref, stale_refs)
+                ]
+            dependencies.append(entry)
+        document["dependencies"] = dependencies
+
+    # CycloneDX compositions list refs under both keys, and virtualenv's own
+    # SBOM uses "dependencies".
+    for composition in document.get("compositions", []):
+        for key in ("assemblies", "dependencies"):
+            if key in composition:
+                composition[key] = [
+                    ref for ref in composition[key] if not is_under(ref, stale_refs)
+                ]
+
+
 def rewrite_inventory(site_packages: pathlib.Path, replacements: dict[str, str]) -> None:
     """Drop the removed wheels from the shipped CycloneDX SBOM and RECORD.
 
@@ -143,47 +189,43 @@ def rewrite_inventory(site_packages: pathlib.Path, replacements: dict[str, str])
         (removed.split("-", 2)[0], removed.split("-", 2)[1])
         for removed in replacements
     }
-    stale_refs = {f"pkg:pypi/{name}@{version}" for name, version in removed_pairs}
 
     for dist_info in site_packages.glob("virtualenv-*.dist-info"):
         for sbom_path in dist_info.glob("sboms/*.json"):
             document = json.loads(sbom_path.read_text(encoding="utf-8"))
 
-            kept_components = [
+            removed_components = [
+                component
+                for component in document.get("components", [])
+                if (component.get("name"), component.get("version")) in removed_pairs
+            ]
+            if not removed_components:
+                continue
+            document["components"] = [
                 component
                 for component in document.get("components", [])
                 if (component.get("name"), component.get("version")) not in removed_pairs
             ]
-            dropped = len(document.get("components", [])) - len(kept_components)
-            if not dropped:
-                continue
-            document["components"] = kept_components
 
-            # Drop dependency nodes for the removed refs, and any edge to them.
-            dependencies = []
-            for entry in document.get("dependencies", []):
-                if entry.get("ref") in stale_refs:
-                    continue
-                if "dependsOn" in entry:
-                    entry["dependsOn"] = [
-                        ref for ref in entry["dependsOn"] if ref not in stale_refs
-                    ]
-                dependencies.append(entry)
-            if "dependencies" in document:
-                document["dependencies"] = dependencies
-
-            for composition in document.get("compositions", []):
-                if "assemblies" in composition:
-                    composition["assemblies"] = [
-                        ref
-                        for ref in composition["assemblies"]
-                        if ref not in stale_refs
-                    ]
+            # The references to drop are the removed components' own bom-refs,
+            # read from the document rather than rebuilt from a name and
+            # version: virtualenv has changed the scheme before, from
+            # pkg:pypi/<name>@<version> to bundled:<wheel path> in 21.15.7,
+            # and a rebuilt ref silently stops matching when it does.
+            stale_refs = {
+                component["bom-ref"]
+                for component in removed_components
+                if component.get("bom-ref")
+            }
+            prune_refs(document, stale_refs)
 
             sbom_path.write_text(
                 json.dumps(document, indent=2) + "\n", encoding="utf-8"
             )
-            print(f"  {sbom_path.name}: {dropped} component(s) removed")
+            print(
+                f"  {sbom_path.name}: {len(removed_components)} component(s) "
+                "removed with their dependency references"
+            )
 
         record = dist_info / "RECORD"
         if not record.exists():
@@ -202,16 +244,21 @@ def rewrite_inventory(site_packages: pathlib.Path, replacements: dict[str, str])
 def prefer_distro_wheels(embed: pathlib.Path) -> list[str]:
     """Replace each seed wheel with the distro's build of the same project.
 
-    virtualenv bundles wheels from PyPI. The distro ships the same pip version
-    with security backports applied to pip's own vendored tree, so the two
-    differ in content while agreeing on version. The distro build is the one
-    that belongs in the image.
+    virtualenv bundles wheels from PyPI. The distro ships pip with security
+    backports applied to pip's own vendored tree, so its build is the one that
+    belongs in the image - whatever the two version numbers say. A newer PyPI
+    pip is not a patched one: virtualenv 21.15.4 bundles pip 26.3, newer than
+    Wolfi's 26.2.2, and keeping it seeded PyPI's vendored pkg_resources into
+    every environment virtualenv created. The seed is therefore always the
+    distro wheel, newer or older, and the inventory is rewritten to describe
+    it.
 
     Returns the names of the projects that had no distro counterpart, so the
     caller can report them rather than imply they were checked.
     """
     unmatched: list[str] = []
     swapped = 0
+    site_packages = embed.parents[3]
 
     for wheel in sorted(embed.glob("*.whl")):
         name, version = wheel.name.split("-", 2)[:2]
@@ -220,16 +267,10 @@ def prefer_distro_wheels(embed: pathlib.Path) -> list[str]:
             unmatched.append(f"{name} {version}")
             continue
 
-        # Take the newest distro build, and never move backwards.
+        # The newest distro build, if the distro somehow ships more than one.
         candidates.sort(key=lambda path: version_key(path.name.split("-", 2)[1]))
         distro = candidates[-1]
         distro_version = distro.name.split("-", 2)[1]
-        if version_key(distro_version) < version_key(version):
-            print(
-                f"  {name}: distro has {distro_version}, bundled has {version}; "
-                "keeping the bundled copy"
-            )
-            continue
 
         before = wheel.read_bytes()
         after = distro.read_bytes()
@@ -280,11 +321,305 @@ def prefer_distro_wheels(embed: pathlib.Path) -> list[str]:
         init.write_text(source.replace(old_digest, new_digest), encoding="utf-8")
         for cached in embed.glob("__pycache__/*.pyc"):
             cached.unlink()
+
+        # The SBOM and RECORD still describe the wheel virtualenv shipped:
+        # its version, its hashes and the files inside it. They are rewritten
+        # from the bytes now on disk, after reconcile_wheel_interior, so they
+        # describe exactly what is seeded.
+        describe_seed_wheel(site_packages, wheel.name, current)
         swapped += 1
 
     if not swapped:
         print("  no seed wheel needed replacing with a distro build")
     return unmatched
+
+
+HASH_ALGORITHMS = {"SHA-256": "sha256", "SHA-384": "sha384", "SHA-512": "sha512"}
+
+# A vendored requirement line in pip's vendor.txt: "name==version".
+VENDORED_PIN = re.compile(r"^([A-Za-z0-9._-]+)\s*==\s*([^\s;,#]+)")
+
+
+def bundled_wheel_name(component: dict) -> str | None:
+    """The seed wheel file an SBOM component describes, if it describes one."""
+    for prop in component.get("properties", []):
+        if prop.get("name") == "virtualenv:bundled-wheel":
+            return str(prop.get("value", "")).rsplit("/", 1)[-1]
+    return None
+
+
+def wheel_dist_info(archive: zipfile.ZipFile) -> str:
+    names = {name.split("/", 1)[0] for name in archive.namelist()}
+    found = sorted(name for name in names if name.endswith(".dist-info"))
+    if len(found) != 1:
+        sys.exit(f"harden-virtualenv-seeds: expected one .dist-info in the wheel, found {found}")
+    return found[0]
+
+
+def python_properties(metadata: email.message.Message) -> list[dict]:
+    """The python:* properties virtualenv derives from a wheel's METADATA."""
+    properties = []
+    if metadata.get("Requires-Python"):
+        properties.append(
+            {"name": "python:requires-python", "value": metadata["Requires-Python"]})
+    for requirement in metadata.get_all("Requires-Dist") or []:
+        properties.append({"name": "python:requires-dist", "value": requirement})
+    for classifier in metadata.get_all("Classifier") or []:
+        properties.append({"name": "python:classifier", "value": classifier})
+    return properties
+
+
+def vendored_components(archive: zipfile.ZipFile, ref: str, manifest: str) -> list[dict]:
+    """One component per pin in the wheel's vendor.txt, as virtualenv writes them."""
+    try:
+        text = archive.read(manifest).decode("utf-8")
+    except KeyError:
+        sys.exit(
+            f"harden-virtualenv-seeds: the replacement wheel has no {manifest}; "
+            "refusing to leave its vendored inventory describing the old wheel"
+        )
+    components = []
+    for line in text.splitlines():
+        pinned = VENDORED_PIN.match(line.split("#", 1)[0].strip())
+        if not pinned:
+            continue
+        name, version = pinned.groups()
+        purl = f"pkg:pypi/{re.sub(r'[-_.]+', '-', name).lower()}@{version}"
+        components.append({
+            "type": "library",
+            "bom-ref": f"{ref}#vendored/{purl}",
+            "name": name,
+            "version": version,
+            "purl": purl,
+            "externalReferences": [],
+            "properties": [{"name": "virtualenv:vendored-manifest", "value": manifest}],
+            "evidence": {"identity": [{
+                "field": "purl",
+                "confidence": 1,
+                "methods": [{
+                    "technique": "manifest-analysis",
+                    "confidence": 1,
+                    "value": manifest,
+                }],
+            }]},
+        })
+    return sorted(components, key=lambda component: component["purl"])
+
+
+def describe_component(component: dict, old_name: str, wheel: pathlib.Path) -> str:
+    """Rewrite one SBOM component in place so it describes the wheel on disk.
+
+    Every field that names or measures the wheel is regenerated from its
+    bytes: version, bom-ref, purl, the bundled-wheel property, the python:*
+    properties, hashes, identity evidence, and the nested file and vendored
+    components. Fields that describe the project rather than the file
+    (licence, supplier, authors) are kept. The PyPI distribution link is
+    dropped: the bytes are the distro's build, not the file PyPI serves.
+    Returns the new bom-ref.
+    """
+    name, version = wheel.name.split("-", 2)[:2]
+    old_ref = str(component.get("bom-ref", ""))
+    old_version = str(component.get("version", ""))
+    if old_name in old_ref:
+        new_ref = old_ref.replace(old_name, wheel.name)
+    elif old_ref == f"pkg:pypi/{name}@{old_version}":
+        new_ref = f"pkg:pypi/{name}@{version}"
+    else:
+        sys.exit(
+            f"harden-virtualenv-seeds: SBOM entry for {old_name} has bom-ref "
+            f"{old_ref!r}, which names neither the wheel nor pkg:pypi/{name}@"
+            f"{old_version}; refusing to guess how to rename it"
+        )
+
+    payload = wheel.read_bytes()
+    with zipfile.ZipFile(wheel) as archive:
+        dist_info = wheel_dist_info(archive)
+        metadata = email.message_from_bytes(archive.read(f"{dist_info}/METADATA"))
+        files = []
+        for info in archive.infolist():
+            if info.is_dir() or info.filename == f"{dist_info}/RECORD":
+                continue
+            data = archive.read(info.filename)
+            files.append({
+                "type": "file",
+                "bom-ref": f"{new_ref}#{info.filename}",
+                "name": info.filename,
+                "hashes": [{"alg": "SHA-256",
+                            "content": hashlib.sha256(data).hexdigest()}],
+                "properties": [{"name": "size", "value": str(len(data))}],
+            })
+
+        libraries = [
+            nested for nested in component.get("components", [])
+            if nested.get("type") != "file"
+        ]
+        manifests = {
+            prop.get("value")
+            for nested in libraries
+            for prop in nested.get("properties", [])
+            if prop.get("name") == "virtualenv:vendored-manifest"
+        }
+        if libraries and not manifests:
+            sys.exit(
+                f"harden-virtualenv-seeds: {old_name}'s SBOM entry lists vendored "
+                "packages but names no vendored-manifest for them; refusing to "
+                "drop them or to guess where they came from"
+            )
+        if not manifests:
+            vendored = []
+        elif len(manifests) == 1 and next(iter(manifests)).endswith("_vendor/vendor.txt"):
+            vendored = vendored_components(archive, new_ref, next(iter(manifests)))
+        else:
+            sys.exit(
+                f"harden-virtualenv-seeds: {old_name}'s vendored inventory comes "
+                f"from {sorted(manifests)}; only a vendor.txt manifest can be "
+                "regenerated, so refusing to leave it describing the old wheel"
+            )
+
+    component["bom-ref"] = new_ref
+    component["version"] = version
+    if isinstance(component.get("purl"), str):
+        component["purl"] = f"{component['purl'].split('@', 1)[0]}@{version}"
+    if "description" in component and metadata.get("Summary"):
+        component["description"] = metadata["Summary"]
+
+    properties = component.get("properties", [])
+    had_python = any(str(p.get("name", "")).startswith("python:") for p in properties)
+    kept = []
+    for prop in properties:
+        if str(prop.get("name", "")).startswith("python:"):
+            continue
+        if prop.get("name") == "virtualenv:bundled-wheel":
+            prop = {**prop, "value": str(prop["value"]).replace(old_name, wheel.name)}
+        kept.append(prop)
+    if had_python:
+        kept.extend(python_properties(metadata))
+    component["properties"] = kept
+
+    hashes = []
+    for entry in component.get("hashes", []):
+        algorithm = HASH_ALGORITHMS.get(entry.get("alg"))
+        if algorithm is None:
+            sys.exit(
+                f"harden-virtualenv-seeds: SBOM entry for {old_name} carries a "
+                f"{entry.get('alg')} hash this script cannot recompute"
+            )
+        hashes.append({"alg": entry["alg"],
+                       "content": hashlib.new(algorithm, payload).hexdigest()})
+    if "hashes" in component:
+        component["hashes"] = hashes
+
+    digest = hashlib.sha256(payload).hexdigest()
+    for identity in component.get("evidence", {}).get("identity", []):
+        for method in identity.get("methods", []):
+            if method.get("technique") == "hash-comparison":
+                method["value"] = digest
+            elif str(method.get("value", "")).endswith(".dist-info/METADATA"):
+                method["value"] = f"{dist_info}/METADATA"
+
+    if "externalReferences" in component:
+        component["externalReferences"] = [
+            reference for reference in component["externalReferences"]
+            if reference.get("type") != "distribution"
+        ]
+
+    if "components" in component:
+        component["components"] = files + vendored
+    return new_ref
+
+
+def describe_seed_wheel(site_packages: pathlib.Path, old_name: str,
+                        wheel: pathlib.Path) -> None:
+    """Point virtualenv's SBOM and RECORD at the seed wheel now on disk."""
+    for dist_info in site_packages.glob("virtualenv-*.dist-info"):
+        for sbom_path in dist_info.glob("sboms/*.json"):
+            document = json.loads(sbom_path.read_text(encoding="utf-8"))
+            matches = [
+                component for component in document.get("components", [])
+                if bundled_wheel_name(component) == old_name
+            ]
+            if len(matches) != 1:
+                sys.exit(
+                    f"harden-virtualenv-seeds: {sbom_path.name} has "
+                    f"{len(matches)} entries for the seed wheel {old_name}; "
+                    "refusing to leave the inventory describing a replaced wheel"
+                )
+            component = matches[0]
+            old_ref = component["bom-ref"]
+            new_ref = describe_component(component, old_name, wheel)
+            children = [
+                nested["bom-ref"] for nested in component.get("components", [])
+                if nested.get("type") != "file"
+            ]
+
+            # The wheel's own dependency node lists its vendored packages;
+            # every other reference to it moves to the new ref, and refs to
+            # the old wheel's nested entries go with the old wheel.
+            for entry in document.get("dependencies", []):
+                if entry.get("ref") == old_ref:
+                    entry["ref"] = new_ref
+                    entry["dependsOn"] = children
+                elif "dependsOn" in entry:
+                    entry["dependsOn"] = [
+                        new_ref if ref == old_ref else ref
+                        for ref in entry["dependsOn"]
+                        if ref == old_ref or not is_under(ref, {old_ref})
+                    ]
+            for composition in document.get("compositions", []):
+                for key in ("assemblies", "dependencies"):
+                    if key in composition:
+                        composition[key] = [
+                            new_ref if ref == old_ref else ref
+                            for ref in composition[key]
+                            if ref == old_ref or not is_under(ref, {old_ref})
+                        ]
+            sbom_path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+            print(f"  {sbom_path.name}: {old_name} entry now describes {wheel.name}")
+
+        record = dist_info / "RECORD"
+        if record.exists():
+            lines = record.read_text(encoding="utf-8").splitlines()
+            renamed = [
+                line.replace(old_name, wheel.name, 1)
+                if line.split(",", 1)[0].endswith(f"/{old_name}") else line
+                for line in lines
+            ]
+            if renamed != lines:
+                record.write_text("\n".join(renamed) + "\n", encoding="utf-8")
+
+
+def refresh_record(site_packages: pathlib.Path, embed: pathlib.Path) -> None:
+    """Re-measure the RECORD lines of the files this script rewrote.
+
+    Only the seed wheels, embed/__init__.py and the SBOMs are touched. Every
+    other line is left exactly as pip wrote it, including the hashless line
+    for the compiled embed/__init__: this script deletes that file, and it is
+    compiled again the next time virtualenv is imported (the seeded-environment
+    check below does that), so the line describes what ships.
+    """
+    embed_rel = embed.relative_to(site_packages).as_posix()
+    for dist_info in site_packages.glob("virtualenv-*.dist-info"):
+        record = dist_info / "RECORD"
+        if not record.exists():
+            continue
+        lines = record.read_text(encoding="utf-8").splitlines()
+        refreshed = []
+        for line in lines:
+            path = line.split(",", 1)[0]
+            ours = (
+                (path.startswith(f"{embed_rel}/") and path.count("/") == embed_rel.count("/") + 1
+                 and (path.endswith(".whl") or path.endswith("/__init__.py")))
+                or path.startswith(f"{dist_info.name}/sboms/")
+            )
+            if ours:
+                target = site_packages / path
+                if not target.is_file():
+                    continue
+                line = record_line(path, target.read_bytes())
+            refreshed.append(line)
+        if refreshed != lines:
+            record.write_text("\n".join(refreshed) + "\n", encoding="utf-8")
+            print("  RECORD: rewritten files re-measured")
 
 
 def code_version_in_wheel(archive: zipfile.ZipFile, name: str) -> str | None:
@@ -647,6 +982,221 @@ def verify(embed: pathlib.Path, site_packages: pathlib.Path,
           "BUNDLE_SUPPORT, SBOM and RECORD")
 
 
+def bundle_tables(init: pathlib.Path) -> dict[str, dict]:
+    """BUNDLE_SUPPORT and BUNDLE_SHA256 as Python evaluates them.
+
+    Both are annotated assignments of literals in virtualenv's embed
+    __init__.py. A repeated key keeps its last value, exactly as at runtime.
+    """
+    tables: dict[str, dict] = {}
+    for node in ast.parse(init.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.AnnAssign):
+            target, value = node.target, node.value
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target, value = node.targets[0], node.value
+        else:
+            continue
+        if isinstance(target, ast.Name) and target.id in ("BUNDLE_SUPPORT", "BUNDLE_SHA256"):
+            tables[target.id] = ast.literal_eval(value)
+    return tables
+
+
+def sbom_refs(document: dict) -> tuple[set[str], list[str]]:
+    """(every bom-ref defined, every ref the dependency graph uses)."""
+    defined: set[str] = set()
+
+    def walk(components):
+        for component in components or []:
+            if component.get("bom-ref"):
+                defined.add(component["bom-ref"])
+            walk(component.get("components"))
+
+    metadata = document.get("metadata", {})
+    if metadata.get("component", {}).get("bom-ref"):
+        defined.add(metadata["component"]["bom-ref"])
+    tools = metadata.get("tools")
+    if isinstance(tools, dict):
+        walk(tools.get("components"))
+    walk(document.get("components"))
+
+    used: list[str] = []
+    for entry in document.get("dependencies", []):
+        used.append(entry.get("ref", ""))
+        used.extend(entry.get("dependsOn", []))
+    for composition in document.get("compositions", []):
+        used.extend(composition.get("assemblies", []))
+        used.extend(composition.get("dependencies", []))
+    return defined, used
+
+
+def vendored_problems(sbom_name: str, wheel_name: str, component: dict,
+                      archive: zipfile.ZipFile) -> list[str]:
+    """Compare an SBOM entry's vendored packages with the wheel it describes.
+
+    Every non-file nested entry must name the manifest it came from. Entries
+    from a vendor.txt manifest must be exactly the pins that manifest holds
+    in the wheel on disk. Entries from other manifests (setuptools lists its
+    vendored dist-info METADATA files) are not regenerated by this script
+    and are left to virtualenv.
+    """
+    problems = []
+    by_manifest: dict[str, set[str]] = defaultdict(set)
+    for nested in component.get("components", []):
+        if nested.get("type") == "file":
+            continue
+        manifests = [prop.get("value") for prop in nested.get("properties", [])
+                     if prop.get("name") == "virtualenv:vendored-manifest"]
+        if len(manifests) != 1:
+            problems.append(f"{sbom_name}: {wheel_name} vendored entry "
+                            f"{nested.get('name')} names {len(manifests)} manifests")
+            continue
+        by_manifest[str(manifests[0])].add(str(nested.get("purl")))
+    for manifest, purls in sorted(by_manifest.items()):
+        if not manifest.endswith("_vendor/vendor.txt"):
+            continue
+        try:
+            text = archive.read(manifest).decode("utf-8")
+        except KeyError:
+            problems.append(f"{sbom_name}: {wheel_name} vendored entries name {manifest}, "
+                            "which the wheel does not contain")
+            continue
+        expected = set()
+        for line in text.splitlines():
+            pinned = VENDORED_PIN.match(line.split("#", 1)[0].strip())
+            if pinned:
+                name, version = pinned.groups()
+                expected.add(f"pkg:pypi/{re.sub(r'[-_.]+', '-', name).lower()}@{version}")
+        if purls != expected:
+            problems.append(
+                f"{sbom_name}: {wheel_name} vendored entries do not match its {manifest} "
+                f"(only in SBOM: {sorted(purls - expected)}; only in the wheel: "
+                f"{sorted(expected - purls)})")
+    return problems
+
+
+def verify_inventory(embed: pathlib.Path, site_packages: pathlib.Path) -> None:
+    """Fail the build unless virtualenv's inventory describes the seed wheels on disk.
+
+    Checked against the bytes, never against version strings: a version can
+    appear legitimately elsewhere (packaging>=26.3 is a requirement, not pip
+    26.3). For every seed wheel on disk: BUNDLE_SHA256 holds its digest and
+    BUNDLE_SUPPORT names only wheels that exist; each SBOM has exactly one
+    entry for it, with its version and digest, and file entries that match
+    the wheel's members; RECORD lists it with its digest. Every reference in
+    the SBOM's dependency graph and compositions resolves.
+    """
+    problems: list[str] = []
+    wheels = {
+        wheel.name: wheel.read_bytes() for wheel in sorted(embed.glob("*.whl"))
+    }
+    digests = {name: hashlib.sha256(data).hexdigest() for name, data in wheels.items()}
+
+    tables = bundle_tables(embed / "__init__.py")
+    if "BUNDLE_SHA256" in tables:
+        for name, digest in digests.items():
+            if tables["BUNDLE_SHA256"].get(name) != digest:
+                problems.append(f"BUNDLE_SHA256 does not hold the digest of {name}")
+    for per_python in tables.get("BUNDLE_SUPPORT", {}).values():
+        for name in per_python.values():
+            if name not in wheels:
+                problems.append(f"BUNDLE_SUPPORT names {name}, which is not on disk")
+
+    for dist_info in site_packages.glob("virtualenv-*.dist-info"):
+        for sbom_path in dist_info.glob("sboms/*.json"):
+            document = json.loads(sbom_path.read_text(encoding="utf-8"))
+            described: dict[str, list] = defaultdict(list)
+            for component in document.get("components", []):
+                name = bundled_wheel_name(component)
+                if name:
+                    described[name].append(component)
+            for name in sorted(set(described) - set(wheels)):
+                problems.append(f"{sbom_path.name} describes {name}, which is not on disk")
+            # A seed project declared at the top level without naming its wheel
+            # (a plain "pip 26.3" component) is a version scanners would report.
+            seed_projects = {name.split("-", 1)[0].lower() for name in wheels}
+            for component in document.get("components", []):
+                if (bundled_wheel_name(component) is None
+                        and str(component.get("name", "")).lower() in seed_projects
+                        and component.get("version")):
+                    problems.append(f"{sbom_path.name} declares {component.get('name')} "
+                                    f"{component.get('version')} without a seed wheel")
+            for name, data in wheels.items():
+                entries = described.get(name, [])
+                if len(entries) != 1:
+                    problems.append(f"{sbom_path.name} has {len(entries)} entries for {name}")
+                    continue
+                component = entries[0]
+                version = name.split("-", 2)[1]
+                if component.get("version") != version:
+                    problems.append(f"{sbom_path.name}: {name} declared as version "
+                                    f"{component.get('version')}")
+                purl = component.get("purl")
+                if isinstance(purl, str) and not purl.endswith(f"@{version}"):
+                    problems.append(f"{sbom_path.name}: {name} purl {purl} names "
+                                    "another version")
+                sha = [h.get("content") for h in component.get("hashes", [])
+                       if h.get("alg") == "SHA-256"]
+                if sha != [digests[name]]:
+                    problems.append(f"{sbom_path.name}: {name} SHA-256 is not the file's")
+                if "components" not in component:
+                    continue
+                # Every member but the wheel's own RECORD, which cannot list its
+                # own hash. RECORDs of vendored dist-info directories are listed.
+                with zipfile.ZipFile(embed / name) as archive:
+                    own_record = f"{wheel_dist_info(archive)}/RECORD"
+                    members = {
+                        info.filename: hashlib.sha256(archive.read(info.filename)).hexdigest()
+                        for info in archive.infolist()
+                        if not info.is_dir() and info.filename != own_record
+                    }
+                    listed = {
+                        nested.get("name"): (nested.get("hashes") or [{}])[0].get("content")
+                        for nested in component["components"]
+                        if nested.get("type") == "file"
+                    }
+                    if listed != members:
+                        problems.append(f"{sbom_path.name}: {name} file entries do not "
+                                        "match the wheel's contents")
+                    problems.extend(
+                        vendored_problems(sbom_path.name, name, component, archive))
+
+            defined, used = sbom_refs(document)
+            dangling = sorted({ref for ref in used if ref not in defined})
+            if dangling:
+                problems.append(f"{sbom_path.name}: {len(dangling)} dangling reference(s), "
+                                f"first {dangling[0]}")
+
+        record = dist_info / "RECORD"
+        if record.exists():
+            embed_rel = embed.relative_to(site_packages).as_posix()
+            lines = record.read_text(encoding="utf-8").splitlines()
+            listed = {
+                line.split(",", 1)[0].rsplit("/", 1)[-1]: line
+                for line in lines
+                if line.split(",", 1)[0].startswith(f"{embed_rel}/")
+                and line.split(",", 1)[0].endswith(".whl")
+            }
+            for name in sorted(set(listed) - set(wheels)):
+                problems.append(f"RECORD lists {name}, which is not on disk")
+            for name, data in wheels.items():
+                if listed.get(name) != record_line(f"{embed_rel}/{name}", data):
+                    problems.append(f"RECORD does not list {name} with its digest and size")
+            # The other files this script rewrites: embed/__init__.py and the SBOMs.
+            for line in lines:
+                path = line.split(",", 1)[0]
+                if path == f"{embed_rel}/__init__.py" or path.startswith(
+                        f"{dist_info.name}/sboms/"):
+                    target = site_packages / path
+                    if not target.is_file() or line != record_line(path, target.read_bytes()):
+                        problems.append(f"RECORD does not list {path} with its digest and size")
+
+    if problems:
+        sys.exit("harden-virtualenv-seeds: the inventory does not describe the seed "
+                 "wheels on disk:\n  " + "\n  ".join(problems))
+    print(f"  verified: SBOM, RECORD and BUNDLE tables describe the {len(wheels)} "
+          "seed wheel(s) on disk, and every SBOM reference resolves")
+
+
 def main() -> None:
     embed = find_embed()
     site_packages = embed.parents[3]
@@ -666,6 +1216,8 @@ def main() -> None:
     if unmatched:
         print(f"  no distro wheel to compare against: {', '.join(unmatched)}")
 
+    refresh_record(site_packages, embed)
+    verify_inventory(embed, site_packages)
     verify_seeded_environment()
     print("harden-virtualenv-seeds: done")
 

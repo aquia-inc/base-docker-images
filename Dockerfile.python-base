@@ -7,10 +7,21 @@ ARG CACHEBUST=unset
 # behind. Relaxing the exact pins to bare names first lets security updates actually apply.
 # The "=[0-9]" anchor deliberately leaves fuzzy "=~" pins alone. pip is bootstrapped from the
 # retained ensurepip wheel (py3-pip-wheel) into the user dir, so no system pip/_vendor ships.
+# The upgrade-by-name pipeline below sets pipefail inline (busybox ash supports
+# it); hadolint only recognises pipefail set by SHELL, and a SHELL change here
+# would also apply to the later RUNs.
+# hadolint ignore=DL4006,SC3040
 RUN echo "cachebust=${CACHEBUST}" && \
     sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
     apk update && apk upgrade --no-cache && \
-    apk add --no-cache --upgrade python-3.13 py3-pip-wheel
+    apk add --no-cache --upgrade python-3.13 py3-pip-wheel && \
+    # Upgrade by name every package still older than the repository offers (the
+    # publish gate's freshness list): a plain "apk upgrade" can leave a package
+    # pulled in by "apk add" behind, as libpng 1.6.59-r0 did when Wolfi split it.
+    apk update && \
+    set -o pipefail && apk version -l '<' | tail -n +2 | awk '{print $1}' \
+        | sed -E 's/-[0-9][^-]*-r[0-9]+$//' \
+        | xargs -r apk add --no-cache --upgrade
 
 # local install to /home/nonroot/.local/bin
 USER nonroot
@@ -25,8 +36,19 @@ ENV POETRY_HOME=/home/nonroot \
 # version string, so "pip install --upgrade pip" sees 26.2.1 on both sides, finds
 # nothing newer on PyPI, and still replaces the patched copy with the unpatched
 # one. Re-adding pip here silently reintroduces that downgrade.
+#
+# virtualenv is pinned because the hardening below rewrites the seed wheels
+# and the inventory it ships, and both have changed between patch releases,
+# each time landing on main through a daily rebuild with no pull request:
+# 21.14.12 moved the bundled setuptools, 21.15.4 bundled a pip newer than the
+# distro's patched one, 21.15.7 changed the SBOM's bom-refs. Each broke this
+# build. Renovate proposes each release as its own pull request, so the pull
+# request's CI builds and tests this image (structure tests, guards, Trivy)
+# first.
+# renovate: datasource=pypi depName=virtualenv
+ARG VIRTUALENV_VERSION=21.15.9
 RUN python3 -m ensurepip --user --upgrade && \
-    python3 -m pip install --no-cache-dir --upgrade --user -v poetry cryptography virtualenv
+    python3 -m pip install --no-cache-dir --upgrade --user -v poetry cryptography "virtualenv==${VIRTUALENV_VERSION}"
 
 # Raise pip's own bundled dependencies to their fixed versions:
 # msgpack 1.1.2 -> 1.2.1 (GHSA-6v7p-g79w-8964) and pkg_resources removed

@@ -11,6 +11,10 @@ ARG CACHEBUST=unset
 # Relax the exact "pkg=version" pins in /etc/apk/world first so "apk upgrade"
 # actually applies security updates (the solver otherwise honours the pin and
 # no-ops). The "=[0-9]" anchor leaves fuzzy "=~" pins (e.g. maven=~3.9) alone.
+# The upgrade-by-name pipeline below sets pipefail inline (busybox ash supports
+# it); hadolint only recognises pipefail set by SHELL, and a SHELL change here
+# would also apply to the later RUNs - and to every image built FROM this one.
+# hadolint ignore=DL4006,SC3040
 RUN echo "cachebust=${CACHEBUST}" && \
     sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
     apk update && apk upgrade --no-cache && \
@@ -27,7 +31,21 @@ RUN echo "cachebust=${CACHEBUST}" && \
         libcrypt1 \
         git \
         bash \
+        # libpng is named so apk tracks the current package. Wolfi moved the
+        # shared library into a new libpng16-16 subpackage (2026-11-02); the
+        # old libpng-1.6.59-r0 still provides so:libpng16.so.16, so as a mere
+        # dependency of the JDK it was installed and nothing later in the
+        # build moved it. The metapackage pulls whichever soname package is
+        # current, so a later split is followed too.
+        libpng \
         ca-certificates && \
+    # Upgrade by name every package still older than the repository offers (the
+    # publish gate's freshness list): a plain "apk upgrade" can leave a package
+    # pulled in by "apk add" behind, as libpng 1.6.59-r0 did when Wolfi split it.
+    apk update && \
+    set -o pipefail && apk version -l '<' | tail -n +2 | awk '{print $1}' \
+        | sed -E 's/-[0-9][^-]*-r[0-9]+$//' \
+        | xargs -r apk add --no-cache --upgrade && \
     mkdir -p /home/nonroot/.m2 && \
     chown -R nonroot:nonroot /home/nonroot 
 
@@ -37,8 +55,12 @@ ENV MAVEN_HOME=/usr/share/maven
 ENV PATH=/usr/sbin:/usr/bin:/sbin:/bin:$JAVA_HOME/bin:$MAVEN_HOME/bin 
 ENV USER_HOME=/home/nonroot
 
-# Extract Java versions and save to /tmp/versions.txt for automation compatibility
-RUN \
+# Extract Java versions and save to /tmp/versions.txt for automation compatibility.
+# Without pipefail a pipeline reports only its last command's status, so a
+# failing "java -version" piped into awk would still yield a version file. It is
+# set inline rather than by SHELL, which images built FROM this one would inherit.
+# hadolint ignore=DL4006,SC3040
+RUN set -o pipefail && \
     JAVA_VERSION_RAW=$(java -version 2>&1 | awk 'NR==1{ gsub(/"/, "", $3); print $3 }') && \
     JAVA_VERSION_CLEAN=$(echo "$JAVA_VERSION_RAW" | grep -v '^0\.0\.0$' | grep -v '^0$') && \
     JAVA_MAJOR=$(echo "$JAVA_VERSION_CLEAN" | awk -F'.' '{print $1}') && \
