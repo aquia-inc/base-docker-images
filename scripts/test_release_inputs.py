@@ -5,8 +5,11 @@ directory, so they need git but no network, Docker or registry.
 """
 
 import atexit
+import contextlib
 import importlib.util
 import io
+import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -399,11 +402,282 @@ def test_cli_refuses_a_bad_repo_and_an_unknown_flag():
     assert usage.returncode == 2 and usage.stdout == "", usage
 
 
+# ---------------------------------------------------------------------------
+# Pull request selection: every image whose inputs the change touches
+# ---------------------------------------------------------------------------
+
+def head_sha(repo):
+    return subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+
+def since(repo, base):
+    return ri.changed_since(repo, base, log=io.StringIO())
+
+
+def test_a_pull_request_that_changes_a_shared_input_builds_every_image():
+    repo = fixture_repo()
+    base = head_sha(repo)
+    change(repo, ".github/workflows/publish-base-images.yml", "name: publish v2\n")
+    assert since(repo, base) == ["nginx-base", "nodejs-base", "python-base"]
+
+
+def test_a_pull_request_that_changes_one_image_builds_only_that_image():
+    repo = fixture_repo()
+    base = head_sha(repo)
+    change(repo, "nginx.conf", "events { worker_connections 8; }\n")
+    assert since(repo, base) == ["nginx-base"]
+
+
+def test_a_pull_request_that_changes_no_input_builds_nothing():
+    repo = fixture_repo()
+    base = head_sha(repo)
+    change(repo, "README.md", "# readme v2\n")
+    assert since(repo, base) == []
+
+
+def test_pull_request_selection_ignores_release_tags():
+    # An image with no release at all is still not built when the pull request
+    # leaves its inputs alone: the question is what this change touches.
+    repo = fixture_repo()
+    git(repo, "tag", "-d", "release/nodejs-base/v1.0.0")
+    base = head_sha(repo)
+    change(repo, "scripts/harden-pip-vendor.py", "print('v4')\n")
+    assert since(repo, base) == ["python-base"]
+
+
+def test_a_new_image_in_a_pull_request_is_built():
+    repo = fixture_repo()
+    base = head_sha(repo)
+    write(repo, "tests/container-structure/go-base.yaml", "schemaVersion: 2.0.0\n")
+    change(repo, "Dockerfile.go-base", "FROM g\n")
+    assert since(repo, base) == ["go-base"]
+
+
+def test_since_cli_prints_json_and_refuses_anything_but_a_commit_id():
+    repo = fixture_repo()
+    base = head_sha(repo)
+    change(repo, "trivy.yaml", "severity: [HIGH]\n")
+    script = pathlib.Path(__file__).with_name("release-inputs.py")
+    ok = subprocess.run([sys.executable, str(script), "since", base], cwd=repo,
+                        capture_output=True, text=True, check=False)
+    assert ok.returncode == 0, ok
+    assert ok.stdout.strip() == '["nginx-base", "nodejs-base", "python-base"]', ok
+    # A ref name, an option and an abbreviated id are refused before git runs,
+    # so a crafted value can never reach git as an option.
+    for bad in ("HEAD", "--output=/tmp/x", base[:12], base.upper(), base + "\n", ""):
+        refused = subprocess.run([sys.executable, str(script), "since", bad], cwd=repo,
+                                 capture_output=True, text=True, check=False)
+        assert refused.returncode == 1 and refused.stdout == "", (bad, refused)
+    usage = subprocess.run([sys.executable, str(script), "since"], cwd=repo,
+                           capture_output=True, text=True, check=False)
+    assert usage.returncode == 2 and usage.stdout == "", usage
+
+
+def test_a_pull_request_merge_is_judged_against_its_first_parent():
+    # GitHub builds a merge of the pull request into the base branch as it is
+    # NOW; the event payload's base commit can be older. A pull request that
+    # restores what main just changed has no net change against the stale
+    # commit, but it does change the image against the merge's first parent.
+    repo = fixture_repo()
+    stale = head_sha(repo)
+    git(repo, "checkout", "-q", "-b", "topic")
+    git(repo, "checkout", "-q", "-")
+    change(repo, "nginx.conf", "events { worker_connections 9; }\n")  # main moves on
+    git(repo, "checkout", "-q", "topic")
+    git(repo, "merge", "-q", "--no-edit", "-")                        # pull request rebased
+    change(repo, "nginx.conf", "events {}\n")                         # and restores it
+    git(repo, "checkout", "-q", "-")
+    git(repo, "merge", "-q", "--no-ff", "--no-edit", "topic")         # GitHub's merge commit
+    first_parent = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD^1"], check=True,
+                                  capture_output=True, text=True).stdout.strip()
+    assert since(repo, first_parent) == ["nginx-base"]
+    assert since(repo, stale) == []  # why the workflow never uses the payload's base
+
+
+def test_git_pathspec_magic_in_a_copy_source_hides_nothing():
+    # A COPY source is handed to git as a path. Read as a pathspec, ":!x" and
+    # ":(exclude)x" would exclude x and hide a change from both questions.
+    repo = fixture_repo()
+    base = head_sha(repo)
+    change(repo, "Dockerfile.nodejs-base", "FROM y\nCOPY :!Dockerfile.nodejs-base /x\n")
+    assert since(repo, base) == ["nodejs-base"]
+    assert changed(repo) == ["nodejs-base"]
+    repo = fixture_repo()
+    change(repo, "Dockerfile.nginx-base", "FROM z\nCOPY :(exclude).github /x\nCOPY nginx.conf /n\n")
+    base = head_sha(repo)
+    git(repo, "tag", "-f", "release/nginx-base/v1.0.1")
+    change(repo, ".github/workflows/publish-base-images.yml", "name: publish v3\n")
+    assert since(repo, base) == ["nginx-base", "nodejs-base", "python-base"]
+    assert changed(repo) == ["nginx-base", "nodejs-base", "python-base"]
+
+
+def test_copy_sources_docker_normalises_still_select_their_image():
+    # Docker reads "." "./" "a//b" "a/./b" "a/../b" as paths in the context;
+    # so must the selector (git normalises them only without the top magic).
+    for source, changed_path in ((".", "README.md"), ("./", "README.md"),
+                                 ("conf//a", "conf/a"), ("conf/./a", "conf/a"),
+                                 ("conf/../nginx.conf", "nginx.conf")):
+        repo = fixture_repo()
+        write(repo, "conf/a", "a\n")
+        change(repo, "Dockerfile.nodejs-base", f"FROM y\nCOPY {source} /x\n")
+        base = head_sha(repo)
+        git(repo, "tag", "release/nodejs-base/v1.0.1")
+        change(repo, changed_path, "changed for the test\n")
+        assert "nodejs-base" in since(repo, base), source
+        assert "nodejs-base" in changed(repo), source
+
+
+def test_an_absolute_copy_source_selects_or_fails_never_skips():
+    repo = fixture_repo()
+    write(repo, "conf/a", "a\n")
+    change(repo, "Dockerfile.nodejs-base", "FROM y\nCOPY /conf/a /x\n")
+    base = head_sha(repo)
+    change(repo, "conf/a", "b\n")
+    try:
+        selected = since(repo, base)
+    except (RuntimeError, ri.InputError):
+        return
+    assert "nodejs-base" in selected, selected
+
+
+def test_a_glob_source_covers_files_inside_matched_directories():
+    # COPY conf/* copies a matched directory whole, subdirectories included.
+    repo = fixture_repo()
+    write(repo, "conf/sub/f", "1\n")
+    change(repo, "Dockerfile.nodejs-base", "FROM y\nCOPY conf/* /etc/\n")
+    base = head_sha(repo)
+    change(repo, "conf/sub/f", "2\n")
+    assert since(repo, base) == ["nodejs-base"]
+
+
+def test_a_directory_input_covers_every_file_under_it():
+    repo = fixture_repo()
+    base = head_sha(repo)
+    change(repo, ".github/actions/parse-image-context/action.yml", "name: p\n")
+    assert since(repo, base) == ["nginx-base", "nodejs-base", "python-base"]
+
+
+def test_an_image_name_that_is_not_plain_is_refused():
+    # Image names come from file names and end up in job names, GITHUB_ENV
+    # and log lines: refuse anything but a plain name instead of guessing.
+    for bad in ("Dockerfile.x zzz", "Dockerfile.::warning::pwned", "Dockerfile.Upper",
+                "Dockerfile.-x", "Dockerfile.a..b"):
+        repo = fixture_repo()
+        change(repo, bad, "FROM b\n")
+        try:
+            ri.images(repo)
+        except ri.InputError as error:
+            assert "not a plain image name" in str(error), error
+        else:
+            raise AssertionError(f"{bad!r} must be refused")
+
+
+def test_an_image_whose_newest_release_failed_is_red():
+    repo = fixture_repo()
+    git(repo, "tag", "release/nodejs-base/v1.0.1")
+    git(repo, "tag", "release/python-base/v1.0.1")
+    failed = {"release/nodejs-base/v1.0.1", "release/python-base/v1.0.0"}
+    # python-base's failed v1.0.0 was followed by a v1.0.1 that did not fail.
+    assert ri.red_images(repo, failed) == ["nodejs-base"]
+    assert ri.red_images(repo, set()) == []
+
+
+def test_an_image_never_released_is_not_red():
+    repo = fixture_repo()
+    git(repo, "tag", "-d", "release/nginx-base/v1.0.0")
+    assert ri.red_images(repo, {"release/nginx-base/v1.0.0"}) == []
+
+
+REAL_RUN = subprocess.run
+
+
+class FakeGhRealGit(FakeGh):
+    """FakeGh for gh; git still runs for real against the fixture repository."""
+
+    def __call__(self, cmd, **kwargs):
+        if cmd[:1] == ["git"]:
+            return REAL_RUN(cmd, **kwargs)
+        return super().__call__(cmd, **kwargs)
+
+
+def run_main_in(repo, fake, argv):
+    out, cwd = io.StringIO(), os.getcwd()
+    os.chdir(repo)
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            rc = with_fake_gh(fake, lambda: ri.main(argv))
+    finally:
+        os.chdir(cwd)
+    return rc, out.getvalue()
+
+
+def test_red_cli_reads_the_publish_results():
+    repo = fixture_repo()
+    git(repo, "tag", "release/nginx-base/v1.0.1")
+    page = json.dumps({"workflow_runs": [run_record("release/nginx-base/v1.0.1", conclusion="failure"),
+                                         run_record("release/python-base/v1.0.0")]})
+    rc, out = run_main_in(repo, FakeGhRealGit([page]), ["red", "--repo", "o/r"])
+    assert rc == 0 and out.strip() == '["nginx-base"]', (rc, out)
+    # An API failure is an error, never an empty list that would exempt nothing
+    # silently; the workflow then exempts nothing on purpose.
+    rc, out = run_main_in(repo, FakeGhRealGit([""], returncode=1, stderr="HTTP 502"),
+                          ["red", "--repo", "o/r"])
+    assert rc == 1 and out == "", (rc, out)
+    rc, out = run_main_in(repo, FakeGhRealGit([page]), ["red"])
+    assert rc == 2 and out == "", (rc, out)
+
+
+def test_since_refuses_with_its_own_message_before_git_runs():
+    repo = fixture_repo()
+    base = head_sha(repo)
+    script = pathlib.Path(__file__).with_name("release-inputs.py")
+    marker = repo / "written-by-git"
+    for bad in (f"--output={marker}{base}", f"{base}x", f" {base}"):
+        refused = subprocess.run([sys.executable, str(script), "since", bad], cwd=repo,
+                                 capture_output=True, text=True, check=False)
+        assert refused.returncode == 1 and refused.stdout == "", (bad, refused)
+        assert "not a full lowercase commit id" in refused.stderr, (bad, refused.stderr)
+    assert not list(repo.glob("written-by-git*")), "a refused value reached git"
+
+
+def test_a_never_released_image_with_an_unresolvable_copy_still_fails():
+    repo = fixture_repo()
+    git(repo, "tag", "-d", "release/nodejs-base/v1.0.0")
+    change(repo, "Dockerfile.nodejs-base", "FROM y\nCOPY $X /x\n")
+    try:
+        changed(repo)
+    except ri.InputError:
+        pass
+    else:
+        raise AssertionError("an unresolvable COPY must fail even for a never-released image")
+
+
+def test_since_an_unknown_commit_fails_closed():
+    repo = fixture_repo()
+    script = pathlib.Path(__file__).with_name("release-inputs.py")
+    missing = subprocess.run([sys.executable, str(script), "since", "0" * 40], cwd=repo,
+                             capture_output=True, text=True, check=False)
+    assert missing.returncode == 1 and missing.stdout == "", missing
+
+
 if __name__ == "__main__":
     # Runnable without pytest, so CI needs no extra dependency.
+    import traceback
     tests = [(name, fn) for name, fn in sorted(globals().items())
              if name.startswith("test_") and callable(fn)]
+    failed = []
     for name, fn in tests:
-        fn()
-        print(f"ok   {name}")
-    print(f"{len(tests)} passed")
+        try:
+            fn()
+        # SystemExit counts as a failure (an exit inside a test must not end
+        # the run as if it passed); Ctrl-C still stops the run.
+        except (Exception, SystemExit):
+            failed.append(name)
+            print(f"FAIL {name}")
+            traceback.print_exc()
+        else:
+            print(f"ok   {name}")
+    print(f"{len(tests) - len(failed)} passed, {len(failed)} failed")
+    if failed:
+        sys.exit(1)

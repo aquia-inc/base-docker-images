@@ -295,6 +295,216 @@ def test_the_push_step_tags_only_a_plain_next_version():
         assert not [c for c in calls if c.startswith(("tag", "push"))], (bad, calls)
 
 
+# ---------------------------------------------------------------------------
+# Pull requests build every image whose release inputs they change
+# ---------------------------------------------------------------------------
+
+# The checks branch protection requires on main, by exact name.
+REQUIRED_BUILD_CHECKS = ("publish_image (linux/amd64)", "publish_image (linux/arm64)")
+
+
+# Stand-ins for git and python3 in the select step, so its own logic runs:
+# what it reads, what it refuses and what it writes to GITHUB_OUTPUT.
+SELECT_STUBS = """git() {
+  echo "git $*" >> "$CALLS"
+  case "$*" in
+    "rev-parse --verify --quiet HEAD^2") [ "${STUB_MERGE:-1}" = 1 ] ;;
+    "rev-parse HEAD^1") echo "${STUB_PARENT}" ;;
+    *) return 99 ;;
+  esac
+}
+python3() {
+  echo "python3 $*" >> "$CALLS"
+  case "$3" in
+    since) printf '%s\\n' "${STUB_SINCE}"; return "${STUB_SINCE_RC:-0}" ;;
+    red) printf '%s\\n' "${STUB_RED}"; return "${STUB_RED_RC:-0}" ;;
+    *) return 99 ;;
+  esac
+}
+"""
+PARENT = "a" * 40
+
+
+def run_select(script, event="pull_request", **stub):
+    import shutil
+    import subprocess
+    import tempfile
+    jq_dir = str(pathlib.Path(shutil.which("jq")).parent)
+    with tempfile.TemporaryDirectory() as tmp:
+        out, calls = pathlib.Path(tmp) / "out", pathlib.Path(tmp) / "calls"
+        out.write_text("")
+        calls.write_text("")
+        env = {"EVENT_NAME": event, "REPO": "o/r", "GITHUB_OUTPUT": str(out), "CALLS": str(calls),
+               "PATH": f"/usr/bin:/bin:{jq_dir}", "STUB_PARENT": PARENT, **stub}
+        done = subprocess.run(["/bin/bash", "-e", "-c", SELECT_STUBS + script], env=env,
+                              capture_output=True, text=True, timeout=30)
+        values = dict(line.split("=", 1) for line in out.read_text().splitlines() if "=" in line)
+        return done.returncode, values, calls.read_text().splitlines(), done.stdout + done.stderr
+
+
+def test_a_pull_request_builds_every_image_whose_release_inputs_it_changes():
+    # Building only the first changed Dockerfile let #844, which changed all
+    # eight, merge with one image built; a change to a shared input built none.
+    text = WORKFLOW.read_text(encoding="utf-8")
+    found = jobs(text)
+    select = found.get("select_images")
+    assert select is not None, "no select_images job: a pull request must select its images"
+    # The payload's base commit can be older than the commit GitHub merged the
+    # pull request into (measured: 2 of 7 runs); the merge's first parent is not.
+    assert "base.sha" not in select and "BASE_SHA" not in select
+    assert "      images: ${{ steps.select.outputs.images }}" in select
+    assert "      known_red: ${{ steps.select.outputs.known_red }}" in select
+    assert "      actions: read" in select and "continue-on-error" not in select
+    tests = step_block(text, "Selector and gate tests")
+    assert tests is not None and "python3 -B scripts/test_release_inputs.py" in tests
+    assert "python3 -B scripts/test_pr_gate.py" in tests
+    assert select.index("- name: Selector and gate tests") < select.index("- name: Select images")
+    publish = found["publish_image"]
+    assert re.search(r"^    needs: select_images$", publish, re.MULTILINE), "publish_image"
+    assert "        image: ${{ fromJSON(needs.select_images.outputs.images) }}" in publish
+    # The first-changed-Dockerfile pick is gone.
+    assert "head -n 1" not in publish and "^Dockerfile" not in publish
+    detect = step_run_block(text, "Detect image for PR builds")
+    assert detect is not None and "PR_IMAGE" in detect, detect
+
+
+def test_the_selection_diffs_against_the_merge_parent_and_checks_what_it_writes():
+    script = step_run_block(WORKFLOW.read_text(encoding="utf-8"), "Select images")
+    assert script is not None
+    rc, out, calls, log = run_select(script, STUB_SINCE='["nginx-base", "python-base"]',
+                                     STUB_RED='["python-base"]')
+    assert rc == 0, log
+    assert out == {"images": '["nginx-base","python-base"]', "known_red": '["python-base"]'}, out
+    assert f"python3 -B scripts/release-inputs.py since {PARENT}" in calls, calls
+    # Nothing changed: one reporting leg per platform, so the matrix is never empty.
+    rc, out, _, log = run_select(script, STUB_SINCE="[]", STUB_RED="[]")
+    assert rc == 0 and out == {"images": '[""]', "known_red": "[]"}, (out, log)
+    # Not a merge commit: refuse rather than diff against the wrong commit.
+    rc, out, _, _ = run_select(script, STUB_MERGE="0", STUB_SINCE='["a"]', STUB_RED="[]")
+    assert rc != 0 and out == {}, out
+    # The selector failing, or printing anything but a list of plain names, fails
+    # the step before anything reaches GITHUB_OUTPUT.
+    for since_out, since_rc in (('["a"]', 1), ('["a"]\nevil=1', 0), ("hello", 0), ('["A"]', 0),
+                                ("[1]", 0), ('["a", ""]', 0), ('["../x"]', 0), ("", 0),
+                                ('["a"] ["b"]', 0), ('["a\\n"]', 0), ('["a.."]', 0)):
+        rc, out, _, _ = run_select(script, STUB_SINCE=since_out, STUB_SINCE_RC=str(since_rc),
+                                   STUB_RED="[]")
+        assert rc != 0 and out == {}, (since_out, out)
+    # The publish results unreadable: exempt nothing, and say so.
+    rc, out, _, log = run_select(script, STUB_SINCE='["a"]', STUB_RED="", STUB_RED_RC="1")
+    assert rc == 0 and out == {"images": '["a"]', "known_red": "[]"}, out
+    assert "::warning::" in log, log
+    # A malformed list of red images is never trusted to exempt anything.
+    rc, out, _, _ = run_select(script, STUB_SINCE='["a"]', STUB_RED='["a"]\nx=1')
+    assert rc != 0 and out == {}, out
+    # Outside a pull request nothing is read: the image comes from the tag.
+    rc, out, calls, _ = run_select(script, event="push")
+    assert rc == 0 and out == {"images": '[""]', "known_red": "[]"} and calls == [], (out, calls)
+
+
+def test_an_image_name_from_a_pull_request_is_checked_before_it_is_used():
+    # The image list comes from file names in the pull request, and the name is
+    # written to GITHUB_ENV: anything but a plain name must stop the leg.
+    script = step_run_block(WORKFLOW.read_text(encoding="utf-8"), "Detect image for PR builds")
+    import subprocess
+    import tempfile
+    for name, ok in (("python-base", True), ("go-base-1.27", True), ("", True),
+                     ("a\nTAG=x", False), ("../x", False), ("A", False), ("a b", False),
+                     ("-x", False), ("a/b", False), ("a$(id)", False)):
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / "env"
+            out_file = pathlib.Path(tmp) / "out"
+            env_file.write_text("")
+            out_file.write_text("")
+            done = subprocess.run(["/bin/bash", "-e", "-c", script],
+                                  env={"PR_IMAGE": name, "GITHUB_ENV": str(env_file),
+                                       "GITHUB_OUTPUT": str(out_file), "PATH": "/usr/bin:/bin"},
+                                  capture_output=True, text=True, timeout=30)
+            assert (done.returncode == 0) == ok, (name, done.stdout, done.stderr)
+            if not ok:
+                assert env_file.read_text() == "", (name, env_file.read_text())
+            elif name:
+                assert env_file.read_text() == f"TAG=release/{name}/v0.0.0-pr\n"
+                assert out_file.read_text() == "dockerfile_found=true\n"
+            else:
+                assert env_file.read_text() == ""
+                assert out_file.read_text() == "dockerfile_found=false\n"
+
+
+GATE_STUBS = """gh() { echo "gh $*" >> "$CALLS"; echo '{"total_count": 0, "jobs": []}'; return "${STUB_GH_RC:-0}"; }
+python3() { echo "python3 $*" >> "$CALLS"; return "${STUB_GATE_RC:-0}"; }
+"""
+
+
+def run_gate(script, select_result, **stub):
+    import subprocess
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        calls = pathlib.Path(tmp) / "calls"
+        calls.write_text("")
+        env = {"SELECT_RESULT": select_result, "IMAGES": '["a"]', "KNOWN_RED": "[]",
+               "PLATFORM": "linux/amd64", "REPO": "o/r", "RUN_ID": "7", "CALLS": str(calls),
+               "PATH": "/usr/bin:/bin", **stub}
+        done = subprocess.run(["/bin/bash", "-e", "-c", GATE_STUBS + script], env=env, cwd=tmp,
+                              capture_output=True, text=True, timeout=30)
+        return done.returncode, calls.read_text().splitlines()
+
+
+def test_the_required_checks_come_only_from_the_gate():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    found = jobs(text)
+    named = [job for job, block in found.items()
+             if "    name: publish_image (${{ matrix.platform }})" in block.splitlines()]
+    assert named == ["pr_gate"], f"exactly one job carries the required names: {named}"
+    gate = found["pr_gate"]
+    assert "    needs: [select_images, publish_image]" in gate
+    assert "    if: ${{ always() && github.event_name == 'pull_request' }}" in gate
+    assert "        platform: [linux/amd64, linux/arm64]" in gate
+    # One platform's failure must not cancel the other's verdict.
+    assert "      fail-fast: false" in gate
+    assert "      actions: read" in gate and "continue-on-error" not in gate
+    # Pull request legs are named per image and dispatch legs say so: only a
+    # release tag's legs carry the plain names, and no pull request has those.
+    assert ("    name: ${{ github.event_name == 'pull_request' && format('publish_image ({0}, "
+            "{1})', matrix.image || 'no image changed', matrix.platform) || "
+            "(github.event_name == 'push' && github.ref_type == 'tag') && "
+            "format('publish_image ({0})', matrix.platform) || "
+            "format('publish_image (dispatch, {0})', matrix.platform) }}") in found["publish_image"]
+    script = step_run_block(text, "Every build leg passed")
+    assert script is not None
+    assert ('gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs?filter=latest&per_page=100"'
+            ' > jobs.json') in script
+    assert 'python3 -B scripts/pr-gate.py jobs.json "$PLATFORM" "$IMAGES" "$KNOWN_RED"' in script
+    for select in ("failure", "cancelled", "skipped", ""):
+        rc, calls = run_gate(script, select)
+        assert rc != 0 and calls == [], (select, calls)
+    rc, calls = run_gate(script, "success")
+    assert rc == 0 and [c.split()[0] for c in calls] == ["gh", "python3"], calls
+    assert run_gate(script, "success", STUB_GH_RC="1")[0] != 0
+    assert run_gate(script, "success", STUB_GATE_RC="1")[0] != 0
+    for check in REQUIRED_BUILD_CHECKS:
+        platform = check.split("(", 1)[1].rstrip(")")
+        assert platform in gate, check
+
+
+def test_renovate_is_approved_only_when_the_gate_passed():
+    approve = jobs(WORKFLOW.read_text(encoding="utf-8"))["auto_approve_renovate"]
+    assert "    needs: [pr_gate]" in approve
+    assert ("    if: ${{ always() && github.event_name == 'pull_request' && "
+            "github.event.pull_request.user.login == 'renovate[bot]' && "
+            "needs.pr_gate.result == 'success' }}") in approve
+
+
+def test_no_cache_export_can_fail_a_release():
+    # The Actions cache sits at its size cap; a cache write error must not fail
+    # a release leg (the test builds run on release tags too).
+    publish = jobs(WORKFLOW.read_text(encoding="utf-8"))["publish_image"]
+    exports = [line for line in publish.splitlines() if line.strip().startswith("cache-to:")]
+    assert len(exports) == 3, exports
+    for line in exports:
+        assert line.endswith(",ignore-error=true"), line
+
+
 if __name__ == "__main__":
     import traceback
     tests = [(name, fn) for name, fn in sorted(globals().items())

@@ -26,7 +26,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  # For tag pushes, use the actual ref. For PRs, detect from modified Dockerfiles
+  # For tag pushes, use the actual ref. For PRs, each leg's image comes from select_images
   TAG: ${{ github.ref }}
   # The cosign that signs everything here, stated rather than inherited from
   # the installer's default. A verifier must use the same major version: a v2
@@ -36,7 +36,98 @@ env:
   COSIGN_VERSION: "v3.1.4"
 
 jobs:
+  # Which images this run builds. A pull request builds every image whose
+  # release inputs it changes (scripts/release-inputs.py since): the same
+  # derivation that releases them once it merges, so every image a merge
+  # would release is built, tested, guarded and scanned first. Building only
+  # the first changed Dockerfile let #844, which changed all eight, merge with
+  # one image built, and a change to a shared input (the workflow, the guards,
+  # the scanner policy) built none. A tag push or a dispatch builds the one
+  # image its tag names, as before.
+  select_images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read  # each image's newest publish result (release-inputs.py red)
+    outputs:
+      images: ${{ steps.select.outputs.images }}
+      known_red: ${{ steps.select.outputs.known_red }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0  # the diff needs the base commit, the red lookup the release tags
+          persist-credentials: false
+
+      # The selection and the gate decide which images a merge may release
+      # untested, and "Hardening script unit tests" is not a required check:
+      # their own tests run here, so a broken selector fails the required checks.
+      - name: Selector and gate tests
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 -B scripts/test_release_inputs.py
+          python3 -B scripts/test_pr_gate.py
+
+      - name: Select images
+        id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # \A and \z: a whole-string match (jq's $ also matches before a
+          # trailing newline).
+          plain='\A[a-z0-9][a-z0-9._-]{0,63}\z'
+          # Exactly one JSON list of plain image names, printed back on one
+          # line; anything else fails the step before it reaches GITHUB_OUTPUT.
+          names() {
+            printf '%s' "$1" | jq -s -c -e --arg plain "$plain" \
+              'if length == 1 and (.[0] | type == "array" and all(.[]; type == "string" and test($plain) and (contains("..") | not))) then .[0] else error("not one list of image names") end'
+          }
+          images='[""]'
+          red='[]'
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # The checkout is GitHub's merge of the pull request into its base
+            # branch as it is now, and its first parent is that base. The
+            # event payload's base commit can be older (2 of 7 runs measured),
+            # and a pull request restoring what main just changed would then
+            # select nothing, so it is never used.
+            if ! git rev-parse --verify --quiet 'HEAD^2' > /dev/null; then
+              echo "::error::the checkout is not a pull request merge commit"
+              exit 1
+            fi
+            base="$(git rev-parse 'HEAD^1')"
+            found="$(python3 -B scripts/release-inputs.py since "$base")"
+            images="$(names "$found")"
+            # Nothing to build: one leg per architecture that only reports,
+            # so the build matrix is never empty.
+            if [ "$images" = "[]" ]; then
+              images='[""]'
+            fi
+            # Images whose newest release on main already failed: their legs
+            # are built and reported but do not fail pr_gate (owner ruling
+            # 2026-11-20). Unreadable results exempt nothing.
+            if found="$(python3 -B scripts/release-inputs.py red --repo "$REPO")"; then
+              red="$(names "$found")"
+            else
+              echo "::warning::could not read this repository's publish results; no image is exempt from the gate"
+            fi
+          fi
+          echo "Images: ${images}; newest release already failed: ${red}"
+          {
+            echo "images=${images}"
+            echo "known_red=${red}"
+          } >> "$GITHUB_OUTPUT"
+
   publish_image:
+    needs: select_images
     # Pinned so the check name does not depend on the shape of the matrix.
     #
     # GitHub composes a matrix job's display name from EVERY matrix value, so
@@ -48,9 +139,15 @@ jobs:
     # while reporting all checks green, which is the hard way to notice.
     #
     # Naming the job explicitly decouples the required contexts from the matrix
-    # dimensions, so a future dimension cannot break the gate again. Keep this
-    # string identical to the required status checks on main.
-    name: publish_image (${{ matrix.platform }})
+    # dimensions, so a future dimension cannot break the gate again.
+    #
+    # A release tag builds one image, so its legs keep the plain names. A pull
+    # request builds one leg per changed image and architecture, named per
+    # image, and the required names come from pr_gate alone. A dispatch says
+    # so in its name: dispatched on a pull request's branch, plain names would
+    # land on the pull request's head and could hide a failed gate behind a
+    # later success.
+    name: ${{ github.event_name == 'pull_request' && format('publish_image ({0}, {1})', matrix.image || 'no image changed', matrix.platform) || (github.event_name == 'push' && github.ref_type == 'tag') && format('publish_image ({0})', matrix.platform) || format('publish_image (dispatch, {0})', matrix.platform) }}
     # Each architecture builds on a runner of its own architecture. Emulating
     # arm64 on an amd64 runner was expensive in a way that is easy to miss:
     # measured across recent publishes, the arm64 leg took 2918-4454s for
@@ -75,6 +172,9 @@ jobs:
       # manifest is composed from both digests.
       fail-fast: false
       matrix:
+        # "" outside a pull request: the image comes from the tag.
+        image: ${{ fromJSON(needs.select_images.outputs.images) }}
+        platform: [linux/amd64, linux/arm64]
         include:
           - platform: linux/amd64
             runner: ubuntu-latest
@@ -106,23 +206,30 @@ jobs:
       - name: Detect image for PR builds
         id: detect_image
         if: github.event_name == 'pull_request'
+        env:
+          # One image select_images chose for this leg, or "" for none.
+          PR_IMAGE: ${{ matrix.image }}
         run: |
-          modified_dockerfile=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^Dockerfile\." | head -n 1)
-          if [ -n "$modified_dockerfile" ]; then
-            detected_image="${modified_dockerfile#Dockerfile.}"
-            detected_tag="release/${detected_image}/v0.0.0-pr"
-            echo "TAG=$detected_tag" >> "$GITHUB_ENV"
-            echo "dockerfile_found=true" >> "$GITHUB_OUTPUT"
-            echo "Detected image from PR: $detected_image, using tag: $detected_tag"
-          else
+          # The name comes from a file name in the pull request and is written
+          # to GITHUB_ENV: anything but a plain image name stops the leg.
+          if [ -z "$PR_IMAGE" ]; then
             echo "dockerfile_found=false" >> "$GITHUB_OUTPUT"
-            echo "No Dockerfile changes detected in PR, will exit early"
+            echo "No release input of any image changed in this pull request; nothing to build"
+            exit 0
           fi
+          if ! [[ "$PR_IMAGE" =~ ^[a-z0-9][a-z0-9._-]{0,63}$ ]] || [[ "$PR_IMAGE" == *..* ]]; then
+            echo "::error::not a plain image name: '${PR_IMAGE}'"
+            exit 1
+          fi
+          detected_tag="release/${PR_IMAGE}/v0.0.0-pr"
+          echo "TAG=$detected_tag" >> "$GITHUB_ENV"
+          echo "dockerfile_found=true" >> "$GITHUB_OUTPUT"
+          echo "Building ${PR_IMAGE}: a release input of it changed in this pull request (tag ${detected_tag})"
 
-      - name: Exit early if no Dockerfile changes in PR
+      - name: Exit early if no image changed in PR
         if: github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found != 'true'
         run: |
-          echo "No Dockerfile changes detected in PR, exiting."
+          echo "No release input of any image changed in this pull request, exiting."
           exit 0
 
       - name: Parse image context
@@ -140,10 +247,11 @@ jobs:
           IMAGE_BASE_NAME: ${{ steps.context.outputs.image-base-name }}
           PR_DOCKERFILE_FOUND: ${{ steps.detect_image.outputs.dockerfile_found }}
         run: |
-          # Pull requests: build only when the PR actually changed a Dockerfile
-          # (detect_image sets this). dockerfile_changed is the authoritative build
-          # gate - the expensive build/test/scan steps below are conditioned on it,
-          # so a PR that changed no Dockerfile no-ops instead of building a fallback.
+          # Pull requests: build only when select_images chose an image for this
+          # leg (detect_image sets this). dockerfile_changed is the authoritative
+          # build gate - the expensive build/test/scan steps below are conditioned
+          # on it, so a PR that changed no image input no-ops instead of building
+          # a fallback.
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             if [[ "$PR_DOCKERFILE_FOUND" == "true" ]]; then
               echo "dockerfile_changed=true" >> "$GITHUB_OUTPUT"
@@ -168,7 +276,7 @@ jobs:
       - name: Exit early if Dockerfile unchanged
         if: steps.dockerfile_check.outputs.dockerfile_changed != 'true'
         run: |
-          echo "Did not detect any modified Dockerfiles in this commit, exiting."
+          echo "No image to build for this leg, exiting."
           exit 0
 
       - name: Setup Docker environment
@@ -204,7 +312,7 @@ jobs:
             CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }}
           tags: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
-          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }},ignore-error=true
 
       - name: Wait before retrying the test build for ${{ matrix.platform }}
         if: steps.build_test.outcome == 'failure'
@@ -226,7 +334,7 @@ jobs:
             CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }}
           tags: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
-          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }},ignore-error=true
 
       - name: Output Docker Image Size for ${{ matrix.platform }}
         if: steps.dockerfile_check.outputs.dockerfile_changed == 'true'
@@ -674,7 +782,10 @@ jobs:
           outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
-          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
+          # The Actions cache sits at its size cap (10.73 of 10 GB measured): a
+          # cache write error must not fail a release leg whose image was already
+          # built and gated.
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }},ignore-error=true
 
       # Previously the install script was piped straight from syft's main
       # branch, so whatever that branch held ran in this job, which can push
@@ -1072,6 +1183,56 @@ jobs:
         run: |
           echo "SHA256 digest for ${{ steps.context.outputs.image-name }}: ${{ steps.docker_build.outputs.digest }}"
 
+  # The two checks branch protection requires on main. A pull request's build
+  # legs are named per image, so these report for them: each passes only when
+  # the selection succeeded and every leg of its platform succeeded, except
+  # that a leg of an image whose newest release on main already failed may fail
+  # (built and reported, not gating; owner ruling 2026-11-20). scripts/pr-gate.py
+  # decides from this run's job listing. A tag push does not run it.
+  pr_gate:
+    name: publish_image (${{ matrix.platform }})
+    needs: [select_images, publish_image]
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # the gate script
+      actions: read   # this run's job results
+    strategy:
+      # Each required check reports its own verdict: one platform's failure
+      # must not cancel the other's.
+      fail-fast: false
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Every build leg passed
+        env:
+          SELECT_RESULT: ${{ needs.select_images.result }}
+          IMAGES: ${{ needs.select_images.outputs.images }}
+          KNOWN_RED: ${{ needs.select_images.outputs.known_red }}
+          PLATFORM: ${{ matrix.platform }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ "$SELECT_RESULT" != "success" ]; then
+            echo "::error::select_images ended '${SELECT_RESULT}': no build leg can be judged"
+            exit 1
+          fi
+          # filter=latest: each job's newest attempt, so a re-run leg counts.
+          gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs?filter=latest&per_page=100" > jobs.json
+          python3 -B scripts/pr-gate.py jobs.json "$PLATFORM" "$IMAGES" "$KNOWN_RED"
+
   create_release:
     runs-on: ubuntu-latest
     needs: publish_image
@@ -1389,9 +1550,9 @@ jobs:
             body+=$'\n\n**Public Verification (No authentication required):**'
             body+=$'\n```bash'
             body+=$'\n# Install cosign v3 (https://docs.sigstore.dev/cosign/installation); a v2 client cannot see these signatures and reports "no signatures found"'
-            body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:%s | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-latest}")
+            body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "^https://github.com/%s/.github/workflows/publish-base-images.yml@refs/tags/release/" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:%s | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-latest}")
             body+=$'\n'
-            body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-arm64:%s | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_ARM64:-latest}")
+            body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "^https://github.com/%s/.github/workflows/publish-base-images.yml@refs/tags/release/" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-arm64:%s | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_ARM64:-latest}")
             body+=$'\n```'
           else
             # Non-language base images: best practices + examples
@@ -1435,9 +1596,9 @@ jobs:
           base_practices+=$'\n\n**Public Verification (No authentication required):**'
           base_practices+=$'\n```bash'
           base_practices+=$'\n# Install cosign v3 (https://docs.sigstore.dev/cosign/installation); a v2 client cannot see these signatures and reports "no signatures found"'
-          base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
+          base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "^https://github.com/%s/.github/workflows/publish-base-images.yml@refs/tags/release/" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
           base_practices+=$'\n'
-          base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-arm64:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
+          base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "^https://github.com/%s/.github/workflows/publish-base-images.yml@refs/tags/release/" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-arm64:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
           base_practices+=$'\n```'
             body+="$base_practices"
           fi
@@ -1782,11 +1943,13 @@ jobs:
           python3 scripts/publish-report.py publish --repo "$REPO" --tag "$TAG" \
             --run-id "$RUN_ID" --run-url "$RUN_URL" --outcome "$outcome" --gate-dir gate-reports
 
-  # Auto-approve renovate PRs after successful builds
+  # Auto-approve renovate PRs once the required checks passed. pr_gate is the
+  # judge: a leg of an image already red on main may fail without blocking, so
+  # this follows the gate, not the legs (always(), or a failed leg would skip it).
   auto_approve_renovate:
     runs-on: ubuntu-latest
-    needs: [publish_image]
-    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'renovate[bot]'
+    needs: [pr_gate]
+    if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.user.login == 'renovate[bot]' && needs.pr_gate.result == 'success' }}
     permissions:
       pull-requests: write
     steps:
