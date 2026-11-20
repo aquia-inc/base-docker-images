@@ -9,8 +9,8 @@
 # misbehaves against the real distro wheel; these tests cover the logic and the
 # error paths that a successful build never exercises.
 #
-# The GHCR retention planner's, the release input detector's and the publish
-# reporter's tests run here too. They are hermetic in the same way (the detector's build a throwaway git
+# The GHCR retention planner's, the release input detector's, the publish
+# reporter's and the package freshness guard's tests run here too. They are hermetic in the same way (the detector's build a throwaway git
 # repository), and the live retention report runs only on its weekly schedule
 # (ghcr-retention.yml).
 name: Hardening Script Tests
@@ -29,6 +29,14 @@ on:
       - scripts/test_ghcr_retention.py
       - scripts/test_release_inputs.py
       - scripts/test_publish_report.py
+      - scripts/check-package-freshness.sh
+      - scripts/test_check_package_freshness.py
+      - scripts/test_workflow_invariants.py
+      - scripts/test_dockerfile_invariants.py
+      - scripts/testdata/**
+      - Dockerfile.*
+      - .github/workflows/publish-base-images.yml
+      - .github/workflows/create-release-tag.yml
       - .github/workflows/harden-script-tests.yml
   push:
     branches: [main]
@@ -43,6 +51,14 @@ on:
       - scripts/test_ghcr_retention.py
       - scripts/test_release_inputs.py
       - scripts/test_publish_report.py
+      - scripts/check-package-freshness.sh
+      - scripts/test_check_package_freshness.py
+      - scripts/test_workflow_invariants.py
+      - scripts/test_dockerfile_invariants.py
+      - scripts/testdata/**
+      - Dockerfile.*
+      - .github/workflows/publish-base-images.yml
+      - .github/workflows/create-release-tag.yml
       - .github/workflows/harden-script-tests.yml
   workflow_dispatch:
 
@@ -61,7 +77,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -86,3 +102,19 @@ jobs:
 
       - name: Publish failure and stale latest reporting tests
         run: python3 scripts/test_publish_report.py
+
+      # Drives check-package-freshness.sh against a docker stand-in and real
+      # APKINDEX archives, so the runner's own tar and awk read them.
+      - name: Package freshness guard tests
+        run: python3 scripts/test_check_package_freshness.py
+
+      # Rules of the publish and release-tag workflows that GitHub enforces
+      # only at run time (per-image concurrency) or not at all (which version
+      # a release tag may carry).
+      - name: Publish workflow invariant tests
+        run: python3 scripts/test_workflow_invariants.py
+
+      # Every image's final stage upgrades by name what the freshness gate
+      # would flag; no build fails when a Dockerfile edit drops that step.
+      - name: Dockerfile invariant tests
+        run: python3 scripts/test_dockerfile_invariants.py

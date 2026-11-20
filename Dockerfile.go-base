@@ -6,10 +6,21 @@ ARG CACHEBUST=unset
 # chainguard/go:latest, which tracks the newest Go and silently moved to 1.27).
 # Relax the exact /etc/apk/world pins first so "apk upgrade" actually applies security
 # updates (the "=[0-9]" anchor leaves fuzzy "=~" pins alone).
+# The upgrade-by-name pipeline below sets pipefail inline (busybox ash supports
+# it); hadolint only recognises pipefail set by SHELL, and a SHELL change here
+# would also apply to the later RUNs.
+# hadolint ignore=DL4006,SC3040
 RUN echo "cachebust=${CACHEBUST}" && \
     sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
     apk update && apk upgrade --no-cache && \
-    apk add --no-cache go-1.26
+    apk add --no-cache go-1.26 && \
+    # Upgrade by name every package still older than the repository offers (the
+    # publish gate's freshness list): a plain "apk upgrade" can leave a package
+    # pulled in by "apk add" behind, as libpng 1.6.59-r0 did when Wolfi split it.
+    apk update && \
+    set -o pipefail && apk version -l '<' | tail -n +2 | awk '{print $1}' \
+        | sed -E 's/-[0-9][^-]*-r[0-9]+$//' \
+        | xargs -r apk add --no-cache --upgrade
 
 USER nonroot
 WORKDIR /workspace

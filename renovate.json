@@ -4,7 +4,8 @@
     "config:recommended",
     "docker:pinDigests",
     "default:automergeDigest",
-    "customManagers:githubActionsVersions"
+    "customManagers:githubActionsVersions",
+    "customManagers:dockerfileVersions"
   ],
   "pre-commit": {"enabled": true},
   "ignorePaths": [
@@ -81,6 +82,14 @@
       "matchPackageNames": ["zizmorcore/zizmor-action", "ghcr.io/zizmorcore/zizmor"],
       "groupName": "zizmor",
       "groupSlug": "zizmor"
+    },
+    {
+      "description": "virtualenv is pinned in Dockerfile.python-base because the image build rewrites the seed-wheel inventory virtualenv ships, and that format has changed inside a patch series (21.15.7 moved its SBOM bom-refs). Its own group keeps each release in a pull request that changes only that Dockerfile, so the pull request's CI builds and tests python-base (structure tests, guards, Trivy) before it can merge. The minimum release age gives a compromised release time to be pulled before it is proposed.",
+      "matchDatasources": ["pypi"],
+      "matchPackageNames": ["virtualenv"],
+      "groupName": "virtualenv",
+      "groupSlug": "virtualenv",
+      "minimumReleaseAge": "3 days"
     }
   ]
 }

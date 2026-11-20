@@ -31,7 +31,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false  # read-only job (git diff against release tags); no push here
@@ -83,7 +83,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           # The tag push authenticates with a repository deploy key rather than
@@ -125,18 +125,41 @@ jobs:
 
           echo "current_semver=$semver" >> "$GITHUB_OUTPUT"
 
+      # Computed here rather than by a third-party action. The one used before
+      # was a Docker action whose Docker Hub image tag could change under its
+      # pinned commit, and its output became the release tag pushed with the
+      # deploy key. The input must be a plain X.Y.Z, so a malformed tag can
+      # never become a release; 10# keeps a leading zero from being octal, and
+      # at most 9 digits per part keeps the arithmetic from wrapping.
       - name: Calculate next version
         id: next_version
-        uses: WyriHaximus/github-action-next-semvers@d079934efaf011a4cf8912d4637097fe35d32b93 # v1
-        with:
-          version: ${{ steps.latest_tag.outputs.current_semver }}
+        env:
+          CURRENT: ${{ steps.latest_tag.outputs.current_semver }}
+        run: |
+          if ! [[ "$CURRENT" =~ ^([0-9]{1,9})\.([0-9]{1,9})\.([0-9]{1,9})$ ]]; then
+            echo "::error::current version '$CURRENT' is not X.Y.Z; refusing to compute a release tag"
+            exit 1
+          fi
+          major=$((10#${BASH_REMATCH[1]}))
+          minor=$((10#${BASH_REMATCH[2]}))
+          patch=$((10#${BASH_REMATCH[3]}))
+          {
+            echo "patch=${major}.${minor}.$((patch + 1))"
+            echo "minor=${major}.$((minor + 1)).0"
+            echo "major=$((major + 1)).0.0"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Display version information
+        env:
+          CURRENT: ${{ steps.latest_tag.outputs.current_semver }}
+          NEXT_PATCH: ${{ steps.next_version.outputs.patch }}
+          NEXT_MINOR: ${{ steps.next_version.outputs.minor }}
+          NEXT_MAJOR: ${{ steps.next_version.outputs.major }}
         run: |
-          echo "Current version: ${{ steps.latest_tag.outputs.current_semver }}"
-          echo "Next patch version: ${{ steps.next_version.outputs.patch }}"
-          echo "Next minor version: ${{ steps.next_version.outputs.minor }}"
-          echo "Next major version: ${{ steps.next_version.outputs.major }}"
+          echo "Current version: ${CURRENT}"
+          echo "Next patch version: ${NEXT_PATCH}"
+          echo "Next minor version: ${NEXT_MINOR}"
+          echo "Next major version: ${NEXT_MAJOR}"
 
       - name: Create and push release tag
         if: github.event.ref == 'refs/heads/main'
@@ -165,6 +188,14 @@ jobs:
           # Configure git for bot user
           git config user.email "aquia-base-images-bot@users.noreply.github.com"
           git config user.name "Aquia Base Images Bot"
+
+          # The tag is built from the next_version output alone. Checked here
+          # again, so a version step that was skipped or allowed to fail can
+          # never push release/<image>/v or a tag that is not X.Y.Z.
+          if ! [[ "$NEXT_PATCH" =~ ^[0-9]{1,10}\.[0-9]{1,10}\.[0-9]{1,10}$ ]]; then
+            echo "::error::next version '${NEXT_PATCH}' is not X.Y.Z; refusing to push a release tag"
+            exit 1
+          fi
 
           # Create new tag with next patch version
           new_tag="release/${IMAGE_NAME}/v${NEXT_PATCH}"
