@@ -46,7 +46,7 @@ ENV POETRY_HOME=/home/nonroot \
 # request's CI builds and tests this image (structure tests, guards, Trivy)
 # first.
 # renovate: datasource=pypi depName=virtualenv
-ARG VIRTUALENV_VERSION=21.15.9
+ARG VIRTUALENV_VERSION=21.15.13
 RUN python3 -m ensurepip --user --upgrade && \
     python3 -m pip install --no-cache-dir --upgrade --user -v poetry cryptography "virtualenv==${VIRTUALENV_VERSION}"
 
