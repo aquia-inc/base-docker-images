@@ -8,7 +8,7 @@
 # consumer's RUN steps and `docker run` fail with the reason and the
 # replacement image. It has no OS packages, so it scans clean.
 
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:be019c1c74fe69204a42c4e10bc4d886a49bf5403ffa74374ef7baa408fc9a26 AS build
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:5172a213d2bba8b1c9ca11957db65562b52b0f9844583a0347318ea5fd8e3aa5 AS build
 
 # hadolint ignore=DL3018
 RUN apk add --no-cache build-base
